@@ -1,22 +1,32 @@
 # import necessary python packages
 import numpy as np
-from matplotlib import pyplot as plt
-import datetime
 import pandas as pd
+import datetime
 import os
 
+from matplotlib import pyplot as plt
 from pymongo import MongoClient
-
 from astropy.io import fits
 from astropy import wcs
+from scipy import stats
 #from astropy import coordinates as coord
 #from astropy.io import votable
 
 #------------------------------------------------------------------------------------------------------------
 
-# Path locations
+# Setup path locations
 
 plot_dir = './plots'
+if not os.path.isdir(plot_dir):
+    os.mkdir(plot_dir)
+
+ann_dir = './annfiles'
+if not os.path.isdir(ann_dir):
+    os.mkdir(ann_dir)
+
+dat_dir = './datfiles'
+if not os.path.isdir(dat_dir):
+    os.mkdir(dat_dir)
 
 
 def getWCSObj(subject):
@@ -96,6 +106,44 @@ def plot_classification_counts(df):
 
     return None
 
+def find_ir_peak(x,y,srcid):
+
+    xmin = 1.
+    xmax = IMG_HEIGHT
+    ymin = 1.
+    ymax = IMG_WIDTH
+
+    # Perform a kernel density estimate on the data:
+    
+    X, Y = np.mgrid[xmin:xmax, ymin:ymax]
+    positions = np.vstack([X.ravel(), Y.ravel()])
+    values = np.vstack([x, y])
+    kernel = stats.gaussian_kde(values)
+    Z = np.reshape(kernel(positions).T, X.shape)
+
+    # Find the peak
+
+    xpeak = X[Z==Z.max()][0]
+    ypeak = Y[Z==Z.max()][0]
+
+    # Plot the results:
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    ax.imshow(np.rot90(Z), cmap=plt.cm.hot_r,extent=[xmin, xmax, ymin, ymax])
+    ax.plot(x, y, 'go', markersize=3)
+    ax.set_xlim([xmin, xmax])
+    ax.set_ylim([ymin, ymax])
+    ax.set_title(srcid)
+    ax.text(10,400,r'$x=%i,y=%i$'%(xpeak,ypeak))
+    ax.plot([xpeak],[ypeak],'c*',markersize=12)
+    fig.show()
+    
+    # Save hard copy of the figure
+    fig.savefig('%s/%s_ir_peak.png' % (plot_dir,srcid))
+
+    return xpeak,ypeak
 
 #------------------------------------------------------------------------------------------------------------
 
@@ -144,6 +192,7 @@ anonymous_count = dfc._id.count() - dfc.user_name.count()
 total_count = dfc.user_name.count()
 anonymous_percent = float(anonymous_count)/total_count * 100
 
+'''
 print ' '
 print 'RGZ data as of %s' % most_recent_date.strftime("%H:%M:%S%Z %b %d, %Y")
 print '---------------------------------'
@@ -153,6 +202,7 @@ print 'Total distinct users    : %i' % n_users
 print ' '
 print 'Percent of classifications by anonymous users: %.1f (%i/%i)' % (anonymous_percent,anonymous_count,total_count)
 print ' '
+'''
 
 
 # Make some plots
@@ -163,13 +213,16 @@ plot_classification_counts(dfs)
 
 # Get an array of the number of radio components associated with each source
 
-consensus_file = open('rgz_consensus.dat', 'w')
+consensus_file = open('rgz_consensus.txt', 'w')
 #compfile = open('RGZBETA-components.dat','w')
 #print >> compfile,'{0:10} {1:7} {2:7} {3:11} {4:7} {5:11}'.format('#SRC_ID   ','N_TOTAL','N_RADIO','N_RADIO_MED','   N_IR','   N_IR_MED')
 
 #------------------------------------------------------------------------------------------------------------------------
 #---START: loop through images/subjects
-for item in list(subjects.find().limit(1)):
+
+N = 0
+for item in list(subjects.find({'classification_count':{'$gt':0}})):
+
   #print item
   #print '------------------------'
   Nclass = item["classification_count"]	# number of classifications made per image
@@ -179,7 +232,7 @@ for item in list(subjects.find().limit(1)):
 
   srcid = item["metadata"]["source"]	# determine the image source id
 
-  classfile2 = open('datfiles/RGZBETA2-%s-classifications.txt' % srcid, 'w')
+  classfile2 = open('%s/RGZBETA2-%s-classifications.txt' % (dat_dir,srcid), 'w')
 
  
   # Create kvis annotation file
@@ -187,7 +240,7 @@ for item in list(subjects.find().limit(1)):
   print >> consensus_file, srcid, Nclass
   print >> consensus_file, '-----------'
   '''
-  annfile = open('annfiles/%s.ann' % srcid, 'w')		# kvis annotation file
+  annfile = open('%s/%s.ann' % (ann_dir,srcid), 'w')		# kvis annotation file
   print >> annfile, '#KARMA annotation file'
   print >> annfile, 'COORD W'
   print >> annfile, 'PA STANDARD'
@@ -217,39 +270,37 @@ for item in list(subjects.find().limit(1)):
  
     radio_comp = []
     ir_comp = []
-    # loop over users who classified
-    print 'Working on source: %s, %i users' % (srcid,Nusers)
+
+    # Loop over users who classified the source
+    #print 'Working on source: %s, %i users' % (srcid,Nusers)
     Nuser_id = 0			# User id number
 
     #---------------------------------------------------------------------------------------------------------------------
     #---START: loop through the users who classified the image
     for classification in list(user_classifications):
       compid = 0				# Component id per image
-      rclass = classification["annotations"][:-2]   # For now, analyze only the first set of continuous regions selected. 
+      rclass = classification["annotations"]   # For now, analyze only the first set of continuous regions selected. 
                                                  # Note that last two fields in annotations are timestamp and user_agent
       print >> consensus_file, rclass
       Nuser_id += 1			# increase the number of users who classified by 1.
 
-      print classification['_id'],classification['subject_ids']
-
       #-------------------------------------------------------------------------------------------------------------------
       #---START: loop through the keys in the annotation array, making sure that a classification has been made
       for ann in rclass:
-        for badkey in ["started_at", "finished_at","user_agent","lang"]:	# Metadata for annotations
-          if ann.has_key(badkey):
-              continue
+
+        if ann.has_key('started_at') or ann.has_key('finished_at') or ann.has_key('user_agent') or ann.has_key('lang'):
+            continue
    
         Nradio = 0					# counter for the number of radio components per classification
         Nir = 0						# counter for the number of IR components per classification
 
-        radiokey = ann.has_key('radio')
-        radio_nocontours = True if (radiokey and ann['radio'] == 'No Contours') else False
-
-        if (radiokey and not radio_nocontours):			# get the radio annotations
+        if (ann.has_key('radio') and ann['radio'] != 'No Contours'):			# get the radio annotations
             radio = ann["radio"]
             Nradio = len(radio)				# count the number of radio components per classification
+            '''
             print 'RADIO:'
             print radio
+            '''
 
             compid = compid + 1				# we have a radio source - all components will be id with this number
 
@@ -284,9 +335,9 @@ for item in list(subjects.find().limit(1)):
                 # CIRCLE [coord type] <x_cent> <y_cent> <radius> 
                 # coords1 = wcsObj.wcs_pix2world([[xULC,yULC]], 0)[0]	# convert ULC pixels to RA and DEC (degrees)
                 # xBRC = xULC + width				# x pixel position in the FITS image for the BRC of the box
-		        # 				# surrounding the radio blobe.
+		        # 				# surrounding the radio blob.
                 # yBRC = yULC - height			# y pixel position in the FITS image for the BRC of the box
-		        # 				# surrounding the radio blobe.
+		        # 				# surrounding the radio blob.
                 # coords2 = wcsObj.wcs_pix2world([[xBRC,yBRC]], 0)[0] # convert BRC pixels to RA and DEC (degrees)
                 # # write to annotation file
                 # print >> annfile, 'COLOUR BLUE'
@@ -305,8 +356,10 @@ for item in list(subjects.find().limit(1)):
                 ir = ann["ir"]
                 Nir = 1 #len(ir)				# number of IR counterparts.  NOTE: for beta this is 1 but
 		        				# future Galaxy Zoo: Radio releases this will be changed.
+                '''
                 print 'IR:'
                 print ir
+                '''
                 #exit()
                 #jj = 0
                 for ii in ir:
@@ -323,6 +376,8 @@ for item in list(subjects.find().limit(1)):
                     #coords3 = wcsObj.wcs_pix2world([[xir,yir]], 0)[0] # convert IR pixel location to RA and DEC (degrees)
                     # write to annotation file
                     print >> classfile2, Nuser_id, compid, 'IR', float(ir_marking['x']), float(ir_marking['y'])
+                    ir_x.append(float(ir_marking['x']))
+                    ir_y.append(float(ir_marking['y']))
 
             else:	# user did not classify an infrared source
                 Nir = 0
@@ -335,12 +390,10 @@ for item in list(subjects.find().limit(1)):
             Nradio = 0
             Nir = 0
             # there should always be a radio source, bug in program if we reach this part.
-            if not radiokey:
-                print ''
+            if not ann.has_key('radio'):
                 print >> classfile2,'%i No radio source - error in processing on image %s' % (Nuser_id, srcid)
-            if radio_nocontours:
-                print ''
-                print >> classfile2,'%i No radio source as labeled by user for image %s' % (Nuser_id,srcid)
+            elif ann['radio'] == 'No Contours':
+                print >> classfile2,'%i No radio source labeled by user for image %s' % (Nuser_id,srcid)
         
         radio_comp.append( Nradio )			# add the number of radio components per user source to array.
         ir_comp.append( Nir )				# add the number of IR counterparts per user soruce to array.
@@ -351,15 +404,33 @@ for item in list(subjects.find().limit(1)):
     print 'Number of users who classified subject does not equal classification count?'
 #    print 'exiting....'
     
+  # Use a 2-D Gaussian kernel to find the center of the IR sources
 
+  '''
+  if len(ir_x) > 2:
+    xpeak,ypeak = find_ir_peak(ir_x,ir_y,srcid)
+  '''
 
   # calculate the median number of components for both IR and radio for each object in image.
-  #radio_med = np.median(radio_comp)				# median number of radio components
-  #Ncomp_radio = np.size(np.where(radio_comp == radio_med))	# number of classifications = median number
-  #ir_med = np.median(ir_comp)					# median number of infrared components
-  #Ncomp_ir = np.size(np.where(ir_comp == ir_med))		# number of classifications = median number
+  radio_med = np.median(radio_comp)				# median number of radio components
+  Ncomp_radio = np.size(np.where(radio_comp == radio_med))	# number of classifications = median number
+  ir_med = np.median(ir_comp)					# median number of infrared components
+  Ncomp_ir = np.size(np.where(ir_comp == ir_med))		# number of classifications = median number
 
-#  print >> compfile,'{0:10} {1:7d} {2:7d} {3:11.1f} {4:7d} {5:11.1f}'.format(srcid,len(radio_comp),Ncomp_radio,radio_med,Ncomp_ir,ir_med)
+  '''
+  print ' '
+  print 'Source.....................................................................................: %s' % srcid
+  print 'Number of users who classified the object..................................................: %d' % len(radio_comp)
+  print '................'
+  print 'Number of users who classified the radio source with the median value of radio components..: %d' % Ncomp_radio
+  print 'Median number of radio components per user.................................................: %f' % radio_med
+  print 'Number of users who classified the IR source with the median value of IR components........: %d' % Ncomp_ir
+  print 'Median number of IR components per user....................................................: %f' % ir_med
+  '''
+  N += 1
+  if not N % 100:
+      print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
+
 #  annfile.close()
   classfile2.close()
 
