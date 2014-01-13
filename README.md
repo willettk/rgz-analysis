@@ -13,5 +13,6 @@ To set up the pipeline, you will need a download of the database from the Amazon
 Once the database is downloaded, the pipeline can be run by:
 
 - run a ```mongod``` session on your local machine
-- run ```mongoimport``` on all three BSON collection files (radio_classifications, radio_subjects, radio_users)
+- run ```mongorestore``` on all three BSON collection files (radio_classifications, radio_subjects, radio_users). Example:
+    ```mongorestore --db ouroboros --drop --collection radio_users radio_2014-01-05/radio_users.bson```
 - run ```python rgz.py```
