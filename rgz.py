@@ -151,9 +151,9 @@ def plot_image(x,y,srcid,X,Y,Z,all_radio,radio_unique):
     # Plot the KDE map
     ax.imshow(np.rot90(Z), cmap=plt.cm.hot_r,extent=[xmin, xmax, ymin, ymax])
     # Plot the individual sources
-    ax.plot(x, y, 'go', markersize=3)
+    ax.plot(x, y, 'go', markersize=4)
 
-    ax.text(10,400,r'$x=%i,y=%i$'%(xpeak,ypeak))
+    ax.text(270,40,r'IR peak: $(%i,%i)$'%(xpeak,ypeak),color='k',fontsize=14)
     ax.plot([xpeak],[ypeak],'c*',markersize=12)
 
     # Plot the radio counts
@@ -168,7 +168,8 @@ def plot_image(x,y,srcid,X,Y,Z,all_radio,radio_unique):
             t = ' and R'.join([str(d[x]) for x in ckeys])
         else:
             t = d[ckeys[0]]
-        ax.text(150,400-idx*20,'%3i votes: R%s' % (c[ckeys],t))
+        singular = 's' if c[ckeys] != 1 else ''
+        ax.text(150,400-idx*20,'%3i vote%s: R%s' % (c[ckeys],singular,t))
 
     # Rectangle showing the radio box size
 
@@ -189,7 +190,7 @@ def plot_image(x,y,srcid,X,Y,Z,all_radio,radio_unique):
         ax.text(x0-15,y0-15,'R%s' % component_number)
 
     ax.set_xlim([xmin, xmax])
-    ax.set_ylim([ymin, ymax])
+    ax.set_ylim([ymax, ymin])
     ax.set_title(srcid)
     fig.show()
     
@@ -366,7 +367,6 @@ def find_consensus(sub,classifications,verbose=False):
     for rr in rlist[1:]:
         if rr not in radio_unique:
             radio_unique.append(rr)
-    
     
     if len(ir_x) > 2:
         xpeak,ypeak,Z = find_ir_peak(ir_x,ir_y,srcid)
