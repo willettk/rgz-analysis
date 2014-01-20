@@ -4,6 +4,8 @@ import pandas as pd
 import datetime
 import os
 
+from scipy.ndimage.filters import maximum_filter
+from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
 from collections import Counter
 from matplotlib import pyplot as plt
 from pymongo import MongoClient
@@ -20,6 +22,8 @@ from scipy import stats
 plot_dir = './plots'
 if not os.path.isdir(plot_dir):
     os.mkdir(plot_dir)
+
+csv_dir = '.'
 
 ann_dir = './annfiles'
 if not os.path.isdir(ann_dir):
@@ -57,6 +61,32 @@ def getWCSObj(subject):
     w = wcs.WCS(hdulist[0].header)
 
     return w
+
+def plot_npeaks():
+
+    # Read in data
+
+    with open('%s/npeaks_ir.csv' % csv_dir,'rb') as f:
+        npeaks = [int(line.rstrip()) for line in f]
+    
+    # Plot the distribution of the total number of IR sources per image
+
+    fig = plt.figure(figsize=(8,7))
+    ax1 = fig.add_subplot(111)
+
+    h = plt.hist(npeaks,bins=np.arange(np.max(npeaks)+1),axes=ax1)
+
+    ax1.set_title('RGZ source distribution')
+    ax1.set_xlabel('Number of IR peaks per image')
+    ax1.set_ylabel('Count')
+
+    fig.show()
+    fig.tight_layout()
+
+    # Save hard copy of the figure
+    fig.savefig('%s/ir_peaks_histogram.png' % plot_dir)
+
+    return None
 
 def plot_user_counts(df):
     
@@ -134,9 +164,21 @@ def find_ir_peak(x,y,srcid):
     kernel = stats.gaussian_kde(values)
     Z = np.reshape(kernel(positions).T, X.shape)
 
-    return X,Y,Z
+    # Find the number of peaks
+    # http://stackoverflow.com/questions/3684484/peak-detection-in-a-2d-array
 
-def plot_image(x,y,srcid,X,Y,Z,all_radio,radio_unique):
+    #neighborhood = generate_binary_structure(2,2)
+    neighborhood = np.ones((10,10))
+    local_max = maximum_filter(Z, footprint=neighborhood)==Z
+    background = (Z==0)
+    eroded_background = binary_erosion(background, structure=neighborhood, border_value=1)
+    detected_peaks = local_max - eroded_background
+
+    npeaks = detected_peaks.sum()
+    
+    return X,Y,Z,npeaks
+
+def plot_image(x,y,srcid,X,Y,Z,npeaks,all_radio,radio_unique):
 
     # Find the peak
 
@@ -154,6 +196,7 @@ def plot_image(x,y,srcid,X,Y,Z,all_radio,radio_unique):
     ax.plot(x, y, 'go', markersize=4)
 
     ax.text(270,40,r'IR peak: $(%i,%i)$'%(xpeak,ypeak),color='k',fontsize=14)
+    ax.text(270,70,r'$N_{peaks}$ = %i' % npeaks,color='k',fontsize=14)
     ax.plot([xpeak],[ypeak],'c*',markersize=12)
 
     # Plot the radio counts
@@ -185,14 +228,14 @@ def plot_image(x,y,srcid,X,Y,Z,all_radio,radio_unique):
         xmax_index = '%.6f' % float(ru[1])
         component_number = d[xmax_index]
         number_votes = box_counts[xmax_index]
-        rectangle = plt.Rectangle((x0,y0), x1-x0, y1-y0, fill=False, linewidth=number_votes/5., edgecolor = 'k')
+        rectangle = plt.Rectangle((x0,y0), x1-x0, y1-y0, fill=False, linewidth=number_votes/5., edgecolor = 'c')
         ax.add_patch(rectangle)
         ax.text(x0-15,y0-15,'R%s' % component_number)
 
     ax.set_xlim([xmin, xmax])
     ax.set_ylim([ymax, ymin])
     ax.set_title(srcid)
-    fig.show()
+    #fig.show()
     
     # Save hard copy of the figure
     fig.savefig('%s/%s_ir_peak.png' % (plot_dir,srcid))
@@ -264,40 +307,23 @@ def find_consensus(sub,classifications,verbose=False):
                     '''
                 
                     compid += 1				# we have a radio source - all components will be id with this number
-                
 
                     list_radio = []
-
 
                     #---------------------------------------------------------------------------------------------------------------
                     #---STAR: loop through number of radio components in user classification
                     for rr in radio:
                         radio_marking = radio[rr]
                         
-                        # NOTE: JPG images begin at (0,0) in the upper right of the image.  FITS images begin at (1,1) in 
-                        #       the lower left of the image.  I have added 1.0 to the x and y values of the annotation.
-                        #       The pixels in the JPG image increaser to the right for x and down for y.
-                        xULC = 1.0 + float(radio_marking["xmin"])	# x pixel position in the JPG file for the ULC of the box surrounding the radio blob.  Usually the 3 sigma contour.
-                        yULC = 1.0 + float(radio_marking["ymax"])	# y pixel position in the JPG file for the ULC of the box surrounding the radio blob.  Usually the 3 sigma contour.
-                        yULC = (IMG_HEIGHT - yULC)		        	# transfer the pixel value to increase upwards in y in JPG pixels.
-                        width = float(radio_marking["xmax"]) - float(radio_marking['xmin'])	    # width of the box surrounding the radio blob in JPG pixels.
-                        height = float(radio_marking["ymax"]) - float(radio_marking['ymin'])	# height of the box surrounding the radio blob in JPG pixels.
-                
-                        # convert the pixels into FITS image pixels
-                        xULC = xULC/xjpg2fits			# x pixel position in the FITS image for the ULC of the box surrounding the radio blob.
-                        yULC = yULC/yjpg2fits			# y pixel position in the FITS image for the ULC of the box surrounding the radio blob.
-                        width = width/xjpg2fits			# width of the box surround the radio blob in FITS pixels.
-                        height = height/yjpg2fits	    # height of the box surrounding the radio blob in FITS pixels.
-
                         # Find the location and size of the radio box in pixels
                         
                         list_radio.append('%.6f' % float(radio_marking['xmax']))
                         all_radio_markings.append(radio_marking)
 
-                        print >> classfile2, Nuser_id, compid,'RADIO', xULC, yULC, width, height#, coords1[0],coords1[1]
+                        print >> classfile2, Nuser_id, compid,'RADIO', radio_marking['xmin'], radio_marking['xmax'], radio_marking['ymin'], radio_marking['ymax']
 
-                
                     all_radio.append(tuple(sorted(list_radio)))
+
                     #---END: loop through number of radio components in user classification
                     #---------------------------------------------------------------------------------------------------------------
                 
@@ -317,15 +343,6 @@ def find_consensus(sub,classifications,verbose=False):
                         for ii in ir:
                             ir_marking = ir[ii]
                         
-                            #if jj == 0: yir = 1.0 + float(ir_marking)	# y pixel location in the JPG image for the IR source.
-                            #if jj == 1: xir = 1.0 + float(ir_marking)	# x pixel location in the JPG image for the IR source.
-                            #jj = jj+1
-                     
-                            # convert the pixels into FITS image pixels
-                            #xir = xir/xjpg2fits				# x pixel location in FITS image for IR source.
-                            #yir = (IMG_HEIGHT - yir)/xjpg2fits		# y pixel location in FITS image for IR source.
-                
-                            #coords3 = wcsObj.wcs_pix2world([[xir,yir]], 0)[0] # convert IR pixel location to RA and DEC (degrees)
                             # write to annotation file
                             print >> classfile2, Nuser_id, compid, 'IR', float(ir_marking['x']), float(ir_marking['y'])
                             ir_x.append(float(ir_marking['x']))
@@ -358,8 +375,6 @@ def find_consensus(sub,classifications,verbose=False):
     else:   # Nclass != Nusers
         print 'Number of users who classified subject (%i) does not equal classification count (%i).' % (Nusers,Nclass)
       
-    # Use a 2-D Gaussian kernel to find the center of the IR sources
-
     # Process the radio markings into unique components
 
     rlist = [(rr['xmin'],rr['xmax'],rr['ymin'],rr['ymax']) for rr in all_radio_markings]
@@ -368,9 +383,13 @@ def find_consensus(sub,classifications,verbose=False):
         if rr not in radio_unique:
             radio_unique.append(rr)
     
+    # Use a 2-D Gaussian kernel to find the center of the IR sources and plot the analysis images
+
     if len(ir_x) > 2:
-        xpeak,ypeak,Z = find_ir_peak(ir_x,ir_y,srcid)
-        plot_image(ir_x,ir_y,srcid,xpeak,ypeak,Z,all_radio,radio_unique)
+        xpeak,ypeak,Z,npeaks = find_ir_peak(ir_x,ir_y,srcid)
+        plot_image(ir_x,ir_y,srcid,xpeak,ypeak,Z,npeaks,all_radio,radio_unique)
+    else:
+        npeaks = len(ir_x)
     
     # calculate the median number of components for both IR and radio for each object in image.
     radio_med = np.median(radio_comp)				# median number of radio components
@@ -391,7 +410,7 @@ def find_consensus(sub,classifications,verbose=False):
 
     classfile2.close()
 
-    return all_radio
+    return npeaks
 
 def load_rgz_data():
 
@@ -452,18 +471,21 @@ def overall_stats(subjects,classifications,users, verbose=True):
 def run_full_sample(subjects,classifications):
 
     N = 0
-    for sub in list(subjects.find({'classification_count':{'$gt':0}}))[:100]:
-    
-        Nclass = sub["classification_count"]	# number of classifications made per image
-        if Nclass > 0:			# if no classifications move to next image
-            find_consensus(sub,classifications)
-    
-        N += 1
+    with open('%s/npeaks_ir.csv' % csv_dir,'wb') as f:
+        for sub in list(subjects.find({'classification_count':{'$gt':0}})):
         
-        # Check progress by printing to screen every 100 classifications
-        if not N % 100:
-            print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
+            Nclass = sub["classification_count"]	# number of classifications made per image
+            if Nclass > 0:			# if no classifications move to next image
+                npeak = find_consensus(sub,classifications)
+                print >> f, npeak
 
+            N += 1
+            
+            # Check progress by printing to screen every 100 classifications
+            if not N % 100:
+                print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
+    
+    
     return None
 
 # If program is called from the command line, process the full dataset
@@ -472,3 +494,5 @@ if __name__ == '__main__':
 
     subjects,classifications,users = load_rgz_data()
     run_full_sample(subjects,classifications)
+    plot_npeaks()
+
