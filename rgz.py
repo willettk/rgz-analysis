@@ -12,6 +12,7 @@ from pymongo import MongoClient
 from astropy.io import fits
 from astropy import wcs
 from scipy import stats
+from scipy.linalg.basic import LinAlgError
 #from astropy import coordinates as coord
 #from astropy.io import votable
 
@@ -128,7 +129,7 @@ def plot_user_counts(df):
 
 def plot_classification_counts(df):
     
-    # Plot the total number of classifiations per subject in the data
+    # Plot the total number of classifications per subject in the data
 
     fig = plt.figure(figsize=(8,6))
     ax1 = fig.add_subplot(111)
@@ -283,10 +284,11 @@ def find_consensus(sub,classifications,verbose=False):
         #---------------------------------------------------------------------------------------------------------------------
         #---START: loop through the users who classified the image
         for classification in list(user_classifications):
-            compid = 0				# Component id per image
-            rclass = classification["annotations"]   # For now, analyze only the first set of continuous regions selected. 
-                                                     # Note that last two fields in annotations are timestamp and user_agent
-            Nuser_id += 1			# increase the number of users who classified by 1.
+            compid = 0				                # Component id per image
+            rclass = classification["annotations"]  # For now, analyze only the first set of continuous regions selected. 
+                                                    # Note that last two fields in annotations are timestamp and user_agent
+
+            Nuser_id += 1			                # Increase the number of users who classified by 1.
             
             #-------------------------------------------------------------------------------------------------------------------
             #---START: loop through the keys in the annotation array, making sure that a classification has been made
@@ -378,16 +380,20 @@ def find_consensus(sub,classifications,verbose=False):
     # Process the radio markings into unique components
 
     rlist = [(rr['xmin'],rr['xmax'],rr['ymin'],rr['ymax']) for rr in all_radio_markings]
-    radio_unique = [rlist[0]]
-    for rr in rlist[1:]:
-        if rr not in radio_unique:
-            radio_unique.append(rr)
+    if len(all_radio_markings) > 1:
+        radio_unique = [rlist[0]]
+        for rr in rlist[1:]:
+            if rr not in radio_unique:
+                radio_unique.append(rr)
     
     # Use a 2-D Gaussian kernel to find the center of the IR sources and plot the analysis images
 
     if len(ir_x) > 2:
-        xpeak,ypeak,Z,npeaks = find_ir_peak(ir_x,ir_y,srcid)
-        plot_image(ir_x,ir_y,srcid,xpeak,ypeak,Z,npeaks,all_radio,radio_unique)
+        try:
+            xpeak,ypeak,Z,npeaks = find_ir_peak(ir_x,ir_y,srcid)
+            plot_image(ir_x,ir_y,srcid,xpeak,ypeak,Z,npeaks,all_radio,radio_unique)
+        except LinAlgError:
+            npeaks = len(ir_x)
     else:
         npeaks = len(ir_x)
     
@@ -442,7 +448,7 @@ def overall_stats(subjects,classifications,users, verbose=True):
     n_users = users.count()
     
     # Find the most recent classification in this data dump
-    mrc = db.radio_classifications.find().sort([("updated_at", -1)]).limit(1)
+    mrc = classifications.find().sort([("updated_at", -1)]).limit(1)
     most_recent_date = [x for x in mrc][0]['updated_at']
     
     # Find number of anonymous classifications
@@ -468,11 +474,11 @@ def overall_stats(subjects,classifications,users, verbose=True):
 
     return None
 
-def run_full_sample(subjects,classifications):
+def run_full_sample(subjects,classifications,n_subjects=1000):
 
     N = 0
     with open('%s/npeaks_ir.csv' % csv_dir,'wb') as f:
-        for sub in list(subjects.find({'classification_count':{'$gt':0}})):
+        for sub in list(subjects.find({'classification_count':{'$gt':0}}))[:n_subjects]:
         
             Nclass = sub["classification_count"]	# number of classifications made per image
             if Nclass > 0:			# if no classifications move to next image
