@@ -20,7 +20,7 @@ from scipy.linalg.basic import LinAlgError
 
 # Setup path locations
 
-plot_dir = './plots'
+plot_dir = '../plots'
 if not os.path.isdir(plot_dir):
     os.mkdir(plot_dir)
 
@@ -135,17 +135,17 @@ def plot_classification_counts(df):
     ax1 = fig.add_subplot(111)
 
     # Eliminate N=0 counts and tutorial image
-    df_good = df[(df.classification_count < 1e4) & (df.classification_count > 0)]
+    df_good = df[(df.classification_count < 50) & (df.classification_count > 0)]
 
-    h = df_good.classification_count.hist(ax=ax1,bins=30,grid=False)
+    h = df_good.classification_count.hist(ax=ax1,bins=50,grid=False)
 
     h.set_xlabel('Classifications per subject')
     h.set_ylabel('Number of classifications')
 
-    n_zero = (df.classification_count > 0).sum()
+    n_nonzero = (df.classification_count > 0).sum()
     xlim = h.get_xlim()
     ylim = h.get_ylim()
-    h.text(0.7*xlim[1],0.9*ylim[1],r'$N_{zero} = %i$'%n_zero,fontsize=20)
+    h.text(0.7*xlim[1],0.9*ylim[1],r'$N_{non-zero} = %i$'%n_nonzero,fontsize=20)
 
     fig.show()
     fig.tight_layout()
@@ -239,7 +239,7 @@ def plot_image(x,y,srcid,X,Y,Z,npeaks,all_radio,radio_unique):
     #fig.show()
     
     # Save hard copy of the figure
-    fig.savefig('%s/%s_ir_peak.png' % (plot_dir,srcid))
+    fig.savefig('%s/ir_peaks/%s_ir_peak.png' % (plot_dir,srcid))
 
     return None
     
