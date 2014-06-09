@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import datetime
 import os
+import urllib
+import cStringIO
 
 from scipy.ndimage.filters import maximum_filter
 from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
@@ -14,6 +16,7 @@ from astropy import wcs
 from scipy import stats
 from scipy import optimize
 from scipy.linalg.basic import LinAlgError
+from PIL import Image
 #from astropy import coordinates as coord
 #from astropy.io import votable
 
@@ -21,23 +24,26 @@ from scipy.linalg.basic import LinAlgError
 
 # Setup path locations
 
-plot_dir = '../plots'
+plot_dir = '../plots/expert'
 if not os.path.isdir(plot_dir):
     os.mkdir(plot_dir)
 
 csv_dir = '.'
 
-ann_dir = './annfiles'
+ann_dir = './annfiles/expert'
 if not os.path.isdir(ann_dir):
     os.mkdir(ann_dir)
 
-dat_dir = './datfiles'
+dat_dir = './datfiles/expert'
 if not os.path.isdir(dat_dir):
     os.mkdir(dat_dir)
+
+rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 
 # Set constants
 beta_release_date = datetime.datetime(2013, 10, 20, 12, 0, 0, 0)	# date of beta release (YYY,MM,DD,HH,MM,SS,MS)
 main_release_date = datetime.datetime(2013, 12, 17, 0, 0, 0, 0)
+docr_expert_date = datetime.datetime(2014, 06, 07, 17, 43, 0, 0)
 
 IMG_HEIGHT = 424.0			# number of pixels in the JPG image along the y axis
 IMG_WIDTH = 424.0			# number of pixels in the JPG image along the x axis
@@ -68,7 +74,7 @@ def plot_npeaks():
 
     # Read in data
 
-    with open('%s/npeaks_ir.csv' % csv_dir,'rb') as f:
+    with open('%s/npeaks_ir_expert.csv' % csv_dir,'rb') as f:
         npeaks = [int(line.rstrip()) for line in f]
     
     # Plot the distribution of the total number of IR sources per image
@@ -82,11 +88,13 @@ def plot_npeaks():
     ax1.set_xlabel('Number of IR peaks per image')
     ax1.set_ylabel('Count')
 
-    fig.show()
+    #fig.show()
     fig.tight_layout()
 
     # Save hard copy of the figure
-    fig.savefig('%s/ir_peaks_histogram.png' % plot_dir)
+    fig.savefig('%s/ir_peaks_histogram_expert.png' % plot_dir)
+
+    plt.close()
 
     return None
 
@@ -338,93 +346,112 @@ def find_ir_peak(x,y,srcid):
     
     return X,Y,Z,npeaks
 
-def plot_image(x,y,srcid,X,Y,Z,npeaks,all_radio,radio_unique):
+def plot_image(x,y,npeaks,sub,all_radio,radio_unique,no_radio=False):
 
+    '''
     # Find the peak
 
     xpeak = X[Z==Z.max()][0]
     ypeak = Y[Z==Z.max()][0]
+    '''
 
     # Plot the infrared results
     
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    fig = plt.figure(1,(12,4))
+    ax = fig.add_subplot(133)
 
+    '''
     # Plot the KDE map
     ax.imshow(np.rot90(Z), cmap=plt.cm.hot_r,extent=[xmin, xmax, ymin, ymax])
     # Plot the individual sources
     ax.plot(x, y, 'go', markersize=4)
+    '''
 
-    ax.text(270,40,r'IR peak: $(%i,%i)$'%(xpeak,ypeak),color='k',fontsize=14)
+    ax.text(270,40,r'IR peak: $(%i,%i)$'%(x,y),color='k',fontsize=14)
     ax.text(270,70,r'$N_{peaks}$ = %i' % npeaks,color='k',fontsize=14)
-    ax.plot([xpeak],[ypeak],'c*',markersize=12)
+    if npeaks > 0:
+        ax.plot(x,y,'c*',markersize=12)
 
     # Plot the radio counts
 
-    radio_flattened = [item for sublist in all_radio for item in sublist]
-    uniques = set(radio_flattened)
-    d = dict(zip(uniques,np.arange(len(uniques))))
-    c = Counter(all_radio)
+    if not no_radio:
+        radio_flattened = [item for sublist in all_radio for item in sublist]
+        uniques = set(radio_flattened)
+        d = dict(zip(uniques,np.arange(len(uniques))))
+        c = Counter(all_radio)
 
-    for idx,ckeys in enumerate(c.keys()):
-        if len(ckeys) > 1:
-            t = ' and R'.join([str(d[x]) for x in ckeys])
-        else:
-            t = d[ckeys[0]]
-        singular = 's' if c[ckeys] != 1 else ''
-        ax.text(150,400-idx*20,'%3i vote%s: R%s' % (c[ckeys],singular,t))
+        for idx,ckeys in enumerate(c.keys()):
+            if len(ckeys) > 1:
+                t = ' and R'.join([str(d[x]) for x in ckeys])
+            else:
+                t = d[ckeys[0]]
+            singular = 's' if c[ckeys] != 1 else ''
+            ax.text(150,400-idx*20,'%3i vote%s: R%s' % (c[ckeys],singular,t))
 
-    # Rectangle showing the radio box size
+        # Rectangle showing the radio box size
 
-    radio_ir_scaling_factor = 435./132
+        radio_ir_scaling_factor = 435./132
 
-    box_counts = Counter(radio_flattened)
-    for ru in radio_unique:
+        box_counts = Counter(radio_flattened)
+        for ru in radio_unique:
 
-        x0,x1,y0,y1 = [float(ru_) * radio_ir_scaling_factor for ru_ in ru]
+            x0,x1,y0,y1 = [float(ru_) * radio_ir_scaling_factor for ru_ in ru]
 
-        # Assume xmax matching is still good
+            # Assume xmax matching is still good
 
-        xmax_index = '%.6f' % float(ru[1])
-        component_number = d[xmax_index]
-        number_votes = box_counts[xmax_index]
-        rectangle = plt.Rectangle((x0,y0), x1-x0, y1-y0, fill=False, linewidth=number_votes/5., edgecolor = 'c')
-        ax.add_patch(rectangle)
-        ax.text(x0-15,y0-15,'R%s' % component_number)
+            xmax_index = '%.6f' % float(ru[1])
+            component_number = d[xmax_index]
+            number_votes = box_counts[xmax_index]
+            rectangle = plt.Rectangle((x0,y0), x1-x0, y1-y0, fill=False, linewidth=number_votes/5., edgecolor = 'c')
+            ax.add_patch(rectangle)
+            ax.text(x0-15,y0-15,'R%s' % component_number)
+    else:
+        ax.text(270,100,'No radio components',color='k',fontsize=14)
 
     ax.set_xlim([xmin, xmax])
     ax.set_ylim([ymax, ymin])
-    ax.set_title(srcid)
+    ax.set_title('%s (%s)' % (sub['metadata']['source'],sub['zooniverse_id']))
     #fig.show()
-    
+
+    # Display IR and radio images
+
+    url_standard = sub['location']['standard']
+    im_standard = Image.open(cStringIO.StringIO(urllib.urlopen(url_standard).read()))
+    ax2 = fig.add_subplot(131)
+    ax2.imshow(im_standard,origin='upper')
+
+    url_radio = sub['location']['radio']
+    im_radio = Image.open(cStringIO.StringIO(urllib.urlopen(url_radio).read()))
+    ax3 = fig.add_subplot(132)
+    ax3.imshow(im_radio,origin='upper')
+
     # Save hard copy of the figure
-    fig.savefig('%s/ir_peaks/%s_ir_peak.png' % (plot_dir,srcid))
+    fig.savefig('%s/ir_peaks/%s_ir_peak.png' % (plot_dir,sub['zooniverse_id']))
 
     # Close figure after it's done; otherwise mpl complains about having thousands of stuff open
-    plt.clf()
+    plt.close()
 
     return None
     
-def find_consensus(sub,classifications,verbose=False,completed_only=False):
+def find_consensus(sub,classifications,verbose=False):
     
     Nclass = sub["classification_count"]	# number of classifications made per image
     srcid = sub["metadata"]["source"]	# determine the image source id
 
-    if completed_only:
-        dat_dir = '../datfiles/completed_20'
-    
-    classfile2 = open('%s/RGZBETA2-%s-classifications.txt' % (dat_dir,srcid), 'w')
+    dat_dir = '../datfiles/expert'
     
     imgid = sub["_id"]			# grab the ObjectId corresponding for this image 
 
     # locate all the classifications of this image by user
-    user_classifications = classifications.find({"subject_ids": imgid, "updated_at": {"$gt": main_release_date}})
+    user_classifications = classifications.find({"subject_ids": imgid, "updated_at": {"$gt": docr_expert_date},"user_name":"xDocR"})
     # count the number of users who classified this object
-    Nusers = classifications.find({"subject_ids": imgid, "updated_at": {"$gt": main_release_date}}).count()
+    Nusers = classifications.find({"subject_ids": imgid, "updated_at": {"$gt": docr_expert_date},"user_name":"xDocR"}).count()
 
     # loop over the number of classifications
-    if Nclass == Nusers:			# the number of classifications should equal the number of users who classified
+    if Nusers is not None:			# the number of classifications should equal the number of users who classified
 
+        classfile2 = open('%s/RGZBETA2-%s-classifications.txt' % (dat_dir,srcid), 'w')
+    
         # initialise coordinate variables
         radio_ra = []
         radio_dec = []
@@ -478,7 +505,7 @@ def find_consensus(sub,classifications,verbose=False,completed_only=False):
                     list_radio = []
 
                     #---------------------------------------------------------------------------------------------------------------
-                    #---STAR: loop through number of radio components in user classification
+                    #---START: loop through number of radio components in user classification
                     for rr in radio:
                         radio_marking = radio[rr]
                         
@@ -539,48 +566,49 @@ def find_consensus(sub,classifications,verbose=False,completed_only=False):
         #---END: loop through the users who classified the image
         #---------------------------------------------------------------------------------------------------------------------
         
-    else:   # Nclass != Nusers
-        print 'Number of users who classified subject (%i) does not equal classification count (%i).' % (Nusers,Nclass)
-      
-    # Process the radio markings into unique components
+        # Process the radio markings into unique components
 
-    rlist = [(rr['xmin'],rr['xmax'],rr['ymin'],rr['ymax']) for rr in all_radio_markings]
-    if len(all_radio_markings) > 1:
-        radio_unique = [rlist[0]]
-        for rr in rlist[1:]:
-            if rr not in radio_unique:
-                radio_unique.append(rr)
-    
-    # Use a 2-D Gaussian kernel to find the center of the IR sources and plot the analysis images
+        rlist = [(rr['xmin'],rr['xmax'],rr['ymin'],rr['ymax']) for rr in all_radio_markings]
+        if len(rlist) > 0:
+            radio_unique = [rlist[0]]
+            if len(all_radio_markings) > 1:
+                for rr in rlist[1:]:
+                    if rr not in radio_unique:
+                        radio_unique.append(rr)
+            nr = False
+        else:
+            nr = True
+            radio_unique = [(0,0,0,0)]
 
-    if len(ir_x) > 2:
-        try:
-            xpeak,ypeak,Z,npeaks = find_ir_peak(ir_x,ir_y,srcid)
-            plot_image(ir_x,ir_y,srcid,xpeak,ypeak,Z,npeaks,all_radio,radio_unique)
-        except LinAlgError:
-            npeaks = len(ir_x)
-    else:
+        # Plot analysis images
+
         npeaks = len(ir_x)
-    
-    # calculate the median number of components for both IR and radio for each object in image.
-    radio_med = np.median(radio_comp)				# median number of radio components
-    Ncomp_radio = np.size(np.where(radio_comp == radio_med))	# number of classifications = median number
-    ir_med = np.median(ir_comp)					# median number of infrared components
-    Ncomp_ir = np.size(np.where(ir_comp == ir_med))		# number of classifications = median number
-    
-    if verbose:
-        print ' '
-        print 'Source.....................................................................................: %s' % srcid
-        print 'Number of users who classified the object..................................................: %d' % len(radio_comp)
-        print '................'
-        print 'Number of users who classified the radio source with the median value of radio components..: %d' % Ncomp_radio
-        print 'Median number of radio components per user.................................................: %f' % radio_med
-        print 'Number of users who classified the IR source with the median value of IR components........: %d' % Ncomp_ir
-        print 'Median number of IR components per user....................................................: %f' % ir_med
-        print ' '
+        if npeaks == 0:
+            ir_x,ir_y = [0],[0]
+        plot_image(ir_x[0],ir_y[0],npeaks,sub,all_radio,radio_unique,no_radio = nr)
+        
+        # calculate the median number of components for both IR and radio for each object in image.
+        radio_med = np.median(radio_comp)				# median number of radio components
+        Ncomp_radio = np.size(np.where(radio_comp == radio_med))	# number of classifications = median number
+        ir_med = np.median(ir_comp)					# median number of infrared components
+        Ncomp_ir = np.size(np.where(ir_comp == ir_med))		# number of classifications = median number
+        
+        if verbose:
+            print ' '
+            print 'Source.....................................................................................: %s' % srcid
+            print 'Number of users who classified the object..................................................: %d' % len(radio_comp)
+            print '................'
+            print 'Number of users who classified the radio source with the median value of radio components..: %d' % Ncomp_radio
+            print 'Median number of radio components per user.................................................: %f' % radio_med
+            print 'Number of users who classified the IR source with the median value of IR components........: %d' % Ncomp_ir
+            print 'Median number of IR components per user....................................................: %f' % ir_med
+            print ' '
 
-    classfile2.close()
+        classfile2.close()
 
+    else:
+        print 'Expert did not classify subject %s.' % sub['zooniverse_id']
+      
     return npeaks
 
 def load_rgz_data():
@@ -640,11 +668,13 @@ def overall_stats(subjects,classifications,users, verbose=True):
 
     return None
 
-def run_full_sample(subjects,classifications,n_subjects=1000):
+def run_expert_sample(subjects,classifications):
+
+    curated_zid = open('%s/expert/expert_zooniverse_ids.txt' % rgz_dir).read().splitlines()
 
     N = 0
-    with open('%s/npeaks_ir.csv' % csv_dir,'wb') as f:
-        for sub in list(subjects.find({'classification_count':{'$gt':0}}).limit(n_subjects)):
+    with open('%s/npeaks_ir_expert.csv' % csv_dir,'wb') as f:
+        for sub in list(subjects.find({'zooniverse_id':{'$in':curated_zid},'classification_count':{'$gt':0}})):
         
             Nclass = sub["classification_count"]	# number of classifications made per image
             if Nclass > 0:			# if no classifications move to next image
@@ -653,27 +683,10 @@ def run_full_sample(subjects,classifications,n_subjects=1000):
 
             N += 1
             
-            # Check progress by printing to screen every 100 classifications
-            if not N % 100:
+            # Check progress by printing to screen every 10 classifications
+            if not N % 10:
                 print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
     
-    
-    return None
-
-def run_completed_sample(subjects,classifications):
-
-    N = 0
-    with open('%s/npeaks_ir_completed.csv' % csv_dir,'wb') as f:
-        for sub in list(subjects.find({'classification_count':20})):
-        
-            npeak = find_consensus(sub,classifications,completed_only=True)
-            print >> f, npeak
-
-            N += 1
-            
-            # Check progress by printing to screen every 100 classifications
-            if not N % 100:
-                print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
     
     return None
 
@@ -682,6 +695,6 @@ def run_completed_sample(subjects,classifications):
 if __name__ == '__main__':
 
     subjects,classifications,users = load_rgz_data()
-    run_full_sample(subjects,classifications)
+    run_expert_sample(subjects,classifications)
     plot_npeaks()
 
