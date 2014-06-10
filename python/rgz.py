@@ -24,26 +24,24 @@ from PIL import Image
 
 # Setup path locations
 
-plot_dir = '../plots/expert'
+rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
+csv_dir = '%s/csv' % rgz_dir
+
+plot_dir = '../plots/expert' % expert_user
 if not os.path.isdir(plot_dir):
     os.mkdir(plot_dir)
 
-csv_dir = '.'
+ir_peaks_plot_dir = '%s/ir_peaks' % plot_dir
+if not os.path.isdir(ir_peaks_plot_dir):
+    os.mkdir(ir_peaks_plot_dir)
 
-ann_dir = './annfiles/expert'
-if not os.path.isdir(ann_dir):
-    os.mkdir(ann_dir)
-
-dat_dir = './datfiles/expert'
+dat_dir = '../datfiles/expert' % expert_user
 if not os.path.isdir(dat_dir):
     os.mkdir(dat_dir)
-
-rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 
 # Set constants
 beta_release_date = datetime.datetime(2013, 10, 20, 12, 0, 0, 0)	# date of beta release (YYY,MM,DD,HH,MM,SS,MS)
 main_release_date = datetime.datetime(2013, 12, 17, 0, 0, 0, 0)
-docr_expert_date = datetime.datetime(2014, 06, 07, 17, 43, 0, 0)
 
 IMG_HEIGHT = 424.0			# number of pixels in the JPG image along the y axis
 IMG_WIDTH = 424.0			# number of pixels in the JPG image along the x axis
@@ -58,23 +56,12 @@ ymax = IMG_WIDTH
 
 xjpg2fits = float(IMG_WIDTH/FITS_WIDTH)		# map the JPG pixels to the FITS pixels in x
 yjpg2fits = float(IMG_HEIGHT/FITS_HEIGHT)	# map the JPG pixels to the FITS pixels in y
-    
-def getWCSObj(subject):
 
-    # Determine the WCS object based on RGZ subject
-
-    src = subject["metadata"]["source"]
-    path = "./IMGS/%s.fits" % src
-    hdulist = fits.open(path)
-    w = wcs.WCS(hdulist[0].header)
-
-    return w
-
-def plot_npeaks():
+def plot_npeaks(expert_user):
 
     # Read in data
 
-    with open('%s/npeaks_ir_expert.csv' % csv_dir,'rb') as f:
+    with open('%s/npeaks_ir_expert_%s.csv' % (csv_dir,expert_user),'rb') as f:
         npeaks = [int(line.rstrip()) for line in f]
     
     # Plot the distribution of the total number of IR sources per image
@@ -92,233 +79,9 @@ def plot_npeaks():
     fig.tight_layout()
 
     # Save hard copy of the figure
-    fig.savefig('%s/ir_peaks_histogram_expert.png' % plot_dir)
+    fig.savefig('%s/%s/ir_peaks_histogram_expert_%s.png' % (plot_dir,expert_user,expert_user))
 
     plt.close()
-
-    return None
-
-def powerlaw_fit(xdata,ydata,epsilon=1e-3,pinit=[3.0,-1.0]):
-
-    logx = np.log10(xdata+1)
-    logy = np.log10(ydata)
-    logyerr = 1./np.sqrt(logy+epsilon)
-
-    # Line fitting function
-
-    fitfunc = lambda p,x: p[0] + p[1]*x
-    errfunc = lambda p,x,y,err: (y - fitfunc(p,x)) / err
-
-    out = optimize.leastsq(errfunc,pinit,args=(logx,logy,logyerr),full_output=1)
-
-    pfinal,covar = out[0],out[1]
-    amp,index = 10.0**pfinal[0],pfinal[1]
-    if covar is not None:
-        amperr,indexerr = np.sqrt(covar[1][1])*amp,np.sqrt(covar[0][0])
-    else:
-        amperr,indexerr = 0.,0.
-
-    return amp,amperr,index,indexerr
-
-def plot_empirical_distribution_function(dfc):
-    
-    # Plot the empirical distribution function (eg, how many users contribute to the total amount of work)
-    # for the RGZ data
-
-    fig = plt.figure(figsize=(8,7))
-    ax1 = fig.add_subplot(111)
-
-    volunteers = pd.value_counts(dfc.user_name)
-
-    # Calculate number of anonymous users and include in data
-
-    anonymous_count = dfc._id.count() - dfc.user_name.count()
-    volunteers = volunteers.set_value("anonymous", anonymous_count)
-    volunteers.sort(ascending=False)
-
-    vnorm = volunteers/volunteers.sum()
-    cdf = []
-    running_total = 0.
-    for v in vnorm:
-        running_total += v
-        cdf.append(running_total)
-
-    ax1.plot(np.arange(len(volunteers))+1,cdf)
-
-    ax1.set_title('Empirical distribution of work in RGZ')
-    ax1.set_xlabel('Number of volunteers')
-    ax1.set_ylabel('Percent of total classifications')
-    ax1.set_xscale('log')
-    ax1.set_ylim(0,1)
-
-    varr = (100,1000)
-    for v in varr:
-        ax1.plot([1,v],[cdf[v]]*2,'k--')
-        ax1.plot([v]*2,[0,cdf[v]],'k--')
-
-    ax1.text(1.3,cdf[0],'Anon.',ha='left',fontsize=8)
-    ax1.text(100,cdf[100],'Anon. + 100',ha='right',va='baseline',fontsize=8)
-    ax1.text(1000,cdf[1000],'Anon. + 1000',ha='right',va='bottom',fontsize=8)
-
-    ax1.text(0.95,0.30,'Anonymous users have done %2i%% of the total work.' % (cdf[0]*100.),ha='right',fontsize=12,transform=ax1.transAxes)
-    ax1.text(0.95,0.25,'The top  100 logged-in users have done %2i%% of the total work.' % ((cdf[100] - cdf[0])*100.),ha='right',fontsize=12,transform=ax1.transAxes)
-    ax1.text(0.95,0.20,'The top 1000 logged-in users have done %2i%% of the total work.' % ((cdf[1000] - cdf[0])*100.),ha='right',fontsize=12,transform=ax1.transAxes)
-
-    fig.show()
-    fig.set_tight_layout(True)
-
-    # Save hard copy of the figure
-    fig.savefig('%s/distribution_of_work.png' % plot_dir)
-
-    return None
-
-def plot_zipf(dfc):
-
-
-    # This can (and should) absolutely be re-factored to use the example in zipf.py. Way too slow
-
-
-
-
-
-    # Plotting user classifications in a more specific way as requested by Heinz Andernach,
-    # to see if it corresponds to Zipf's Law or Lotka's Law
-
-    fig = plt.figure(figsize=(8,8))
-    ax1 = fig.add_subplot(111)
-
-    # Note: does not include anonymous users
-    volunteers = pd.value_counts(dfc.user_name)
-    volunteers.sort(ascending=False)
-
-    xpoints = pd.Series(volunteers.values.ravel()).unique() 
-    ypoints = [(volunteers >= x).sum() for x in xpoints]
-    ypoints = np.array(ypoints)
-
-    ax1.loglog(xpoints,ypoints,'ro')
-
-    # Fitting results to broken power law
-
-    brk = -50
-
-    xdata1 = xpoints[brk:]
-    ydata1 = ypoints[brk:]
-    amp1,amperr1,index1,indexerr1 = powerlaw_fit(xdata1,ydata1)
-
-    xdata2 = xpoints[:brk]
-    ydata2 = ypoints[:brk]
-    amp2,amperr2,index2,indexerr2 = powerlaw_fit(xdata2,ydata2)
-
-    print 'Fit 1: index = %5.2f, amp = %5.2f' % (index1,amp1)
-    print 'Fit 2: index = %5.2f, amp = %5.2f' % (index2,amp2)
-
-    # Overplot the fits
-
-    xplot = np.arange(xpoints.max() - 1)+1
-    ax1.plot(xplot,amp1 * (xplot**index1),'k--')
-    ax1.plot(xplot,amp2 * (xplot**index2),'k--')
-    ax1.text(0.98,0.9,r'$\alpha_1 =$ %4.1f $\pm$ %3.1f' % (index1,indexerr1),ha='right',fontsize=12,transform=ax1.transAxes)
-    ax1.text(0.98,0.8,r'$\alpha_2 =$ %4.1f $\pm$ %3.1f' % (index2,indexerr2),ha='right',fontsize=12,transform=ax1.transAxes)
-
-    ax1.set_title("Zipf's Law in Radio Galaxy Zoo?")
-    ax1.set_xlabel('Number of classifications')
-    ax1.set_ylabel('Number of volunteers with '+r'$\geq N$'+' classifications')
-
-    fig.show()
-    fig.set_tight_layout(True)
-
-    # Save hard copy of the figure
-    fig.savefig('%s/zipf_plot.png' % plot_dir)
-
-    return None
-
-def plot_user_counts(dfc):
-    
-    # Plot the total number of classifications per volunteer in the data
-
-    fig = plt.figure(figsize=(8,8))
-    ax1 = fig.add_subplot(211)
-
-    volunteers = pd.value_counts(dfc.user_name)
-
-    # Calculate number of anonymous users and include in data
-
-    anonymous_count = dfc._id.count() - dfc.user_name.count()
-    volunteers = volunteers.set_value("anonymous", anonymous_count)
-    volunteers.sort(ascending=False)
-
-    vcplot = volunteers.plot(ax=ax1,use_index=True,marker='.',color='red')
-
-    # Fitting results to broken power law
-
-    brk = 1000
-
-    xdata1 = np.arange(brk)
-    ydata1 = volunteers[:brk]
-    amp1,amperr1,index1,indexerr1 = powerlaw_fit(xdata1,ydata1)
-
-    xdata2 = np.arange(len(volunteers)-brk) + brk
-    ydata2 = volunteers[brk:]
-    amp2,amperr2,index2,indexerr2 = powerlaw_fit(xdata2,ydata2)
-
-    # Overplot the fits
-
-    xplot = np.arange(len(volunteers))
-    ax1.plot(xplot,amp1 * (xplot**index1),'k--')
-    ax1.plot(xplot,amp2 * (xplot**index2),'k--')
-    ax1.text(0.98,0.9,r'$\alpha_1 =$ %4.1f $\pm$ %3.1f' % (index1,indexerr1),ha='right',fontsize=12,transform=ax1.transAxes)
-    ax1.text(0.98,0.8,r'$\alpha_2 =$ %4.1f $\pm$ %3.1f' % (index2,indexerr2),ha='right',fontsize=12,transform=ax1.transAxes)
-
-    vcplot.set_title('RGZ volunteer distribution')
-    vcplot.set_xlabel('Volunteer')
-    vcplot.set_ylabel('Number of classifications')
-    vcplot.set_ylim((1,1e5))
-    vcplot.set_xscale('log')
-    vcplot.set_yscale('log')
-
-    ax2 = fig.add_subplot(212)
-
-    vchist = volunteers[1:].hist(ax=ax2,bins=50,bottom=0.1)
-
-    vchist.set_ylabel('Classifications per volunteer')
-    vchist.set_xlabel('Number of classifications')
-    vchist.set_yscale('log')
-
-    ax2.text(0.95,0.9,'Also %i anonymous classifications' % volunteers[0],ha='right',fontsize=12,transform=ax2.transAxes)
-
-    fig.show()
-    fig.set_tight_layout(True)
-
-    # Save hard copy of the figure
-    fig.savefig('%s/classifications_per_user.png' % plot_dir)
-
-    return None
-
-def plot_classification_counts(dfs):
-    
-    # Plot the total number of classifications per subject in the data
-
-    fig = plt.figure(figsize=(8,6))
-    ax1 = fig.add_subplot(111)
-
-    # Eliminate N=0 counts and tutorial image
-    dfs_good = dfs[(dfs.classification_count < 50) & (dfs.classification_count > 0)]
-
-    h = dfs_good.classification_count.hist(ax=ax1,bins=50,grid=False)
-
-    h.set_xlabel('Classifications per subject')
-    h.set_ylabel('Number of classifications')
-
-    n_nonzero = (dfs.classification_count > 0).sum()
-    xlim = h.get_xlim()
-    ylim = h.get_ylim()
-    h.text(0.7*xlim[1],0.9*ylim[1],r'$N_{non-zero} = %i$' % n_nonzero,fontsize=20)
-
-    fig.show()
-    fig.tight_layout()
-
-    # Save hard copy of the figure
-    fig.savefig('%s/classifications_per_subject.png' % plot_dir)
 
     return None
 
@@ -358,7 +121,7 @@ def plot_image(x,y,npeaks,sub,all_radio,radio_unique,no_radio=False):
     # Plot the infrared results
     
     fig = plt.figure(1,(12,4))
-    ax = fig.add_subplot(133)
+    ax = fig.add_subplot(133,aspect='equal')
 
     '''
     # Plot the KDE map
@@ -370,7 +133,7 @@ def plot_image(x,y,npeaks,sub,all_radio,radio_unique,no_radio=False):
     ax.text(270,40,r'IR peak: $(%i,%i)$'%(x,y),color='k',fontsize=14)
     ax.text(270,70,r'$N_{peaks}$ = %i' % npeaks,color='k',fontsize=14)
     if npeaks > 0:
-        ax.plot(x,y,'c*',markersize=12)
+        ax.plot(x,y,'r*',markersize=12)
 
     # Plot the radio counts
 
@@ -402,7 +165,7 @@ def plot_image(x,y,npeaks,sub,all_radio,radio_unique,no_radio=False):
             xmax_index = '%.6f' % float(ru[1])
             component_number = d[xmax_index]
             number_votes = box_counts[xmax_index]
-            rectangle = plt.Rectangle((x0,y0), x1-x0, y1-y0, fill=False, linewidth=number_votes/5., edgecolor = 'c')
+            rectangle = plt.Rectangle((x0,y0), x1-x0, y1-y0, fill=False, linewidth=number_votes/2., edgecolor = 'b')
             ax.add_patch(rectangle)
             ax.text(x0-15,y0-15,'R%s' % component_number)
     else:
@@ -433,19 +196,17 @@ def plot_image(x,y,npeaks,sub,all_radio,radio_unique,no_radio=False):
 
     return None
     
-def find_consensus(sub,classifications,verbose=False):
+def find_consensus(sub,classifications,expert_user,expert_dates,verbose=False):
     
     Nclass = sub["classification_count"]	# number of classifications made per image
     srcid = sub["metadata"]["source"]	# determine the image source id
 
-    dat_dir = '../datfiles/expert'
-    
     imgid = sub["_id"]			# grab the ObjectId corresponding for this image 
 
     # locate all the classifications of this image by user
-    user_classifications = classifications.find({"subject_ids": imgid, "updated_at": {"$gt": docr_expert_date},"user_name":"xDocR"})
+    user_classifications = classifications.find({"subject_ids": imgid, "updated_at": {"$gt": expert_dates[0],"$lt":expert_dates[1]},"user_name":expert_user})
     # count the number of users who classified this object
-    Nusers = classifications.find({"subject_ids": imgid, "updated_at": {"$gt": docr_expert_date},"user_name":"xDocR"}).count()
+    Nusers = classifications.find({"subject_ids": imgid, "updated_at": {"$gt": expert_dates[0],"$lt":expert_dates[1]},"user_name":expert_user}).count()
 
     # loop over the number of classifications
     if Nusers is not None:			# the number of classifications should equal the number of users who classified
@@ -607,7 +368,7 @@ def find_consensus(sub,classifications,verbose=False):
         classfile2.close()
 
     else:
-        print 'Expert did not classify subject %s.' % sub['zooniverse_id']
+        print 'Expert (s) did not classify subject %s.' % (expert_user,sub['zooniverse_id'])
       
     return npeaks
 
@@ -626,59 +387,17 @@ def load_rgz_data():
 
     return subjects,classifications,users
 
-def overall_stats(subjects,classifications,users, verbose=True):
+def run_expert_sample(subjects,classifications,expert_user,expert_dates):
 
-    # Retrieve RGZ data, convert into data frames
-    batch_classifications = classifications.find({"updated_at": {"$gt": main_release_date}})
-    batch_subjects = subjects.find()
-    
-    dfc = pd.DataFrame( list(batch_classifications) )
-    dfs = pd.DataFrame( list(batch_subjects) )
-    
-    # Get some quick statistics on the dataset so far
-    n_subjects = subjects.count()		# determine the number of images in the data set
-    n_classifications = classifications.find({"updated_at": {"$gt": main_release_date}}).count() # total number of classifications
-    n_users = users.count()
-    
-    # Find the most recent classification in this data dump
-    mrc = classifications.find().sort([("updated_at", -1)]).limit(1)
-    most_recent_date = [x for x in mrc][0]['updated_at']
-    
-    # Find number of anonymous classifications
-    total_count = dfc._id.count()
-    loggedin_count = dfc.user_name.count()
-    anonymous_count = total_count - loggedin_count
-    anonymous_percent = float(anonymous_count)/total_count * 100
-    
-    if verbose:
-        print ' '
-        print 'RGZ data as of %s' % most_recent_date.strftime("%H:%M:%S%Z %b %d, %Y")
-        print '---------------------------------'
-        print 'Total classifications   : %i' % n_classifications
-        print 'Total distinct subjects : %i' % n_subjects
-        print 'Total distinct users    : %i' % n_users
-        print ' '
-        print 'Percent of classifications by anonymous users: %.1f (%i,%i)' % (anonymous_percent,anonymous_count,loggedin_count)
-        print ' '
-    
-    # Make some plots
-    
-    plot_user_counts(dfc)
-    plot_classification_counts(dfs)
-
-    return None
-
-def run_expert_sample(subjects,classifications):
-
-    curated_zid = open('%s/expert/expert_zooniverse_ids.txt' % rgz_dir).read().splitlines()
+    expert_zid = open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir).read().splitlines()
 
     N = 0
-    with open('%s/npeaks_ir_expert.csv' % csv_dir,'wb') as f:
-        for sub in list(subjects.find({'zooniverse_id':{'$in':curated_zid},'classification_count':{'$gt':0}})):
+    with open('%s/npeaks_ir_expert_%s.csv' % (csv_dir,expert_user),'wb') as f:
+        for sub in list(subjects.find({'zooniverse_id':{'$in':expert_zid},'classification_count':{'$gt':0}})):
         
             Nclass = sub["classification_count"]	# number of classifications made per image
             if Nclass > 0:			# if no classifications move to next image
-                npeak = find_consensus(sub,classifications)
+                npeak = find_consensus(sub,classifications,expert_user,expert_dates)
                 print >> f, npeak
 
             N += 1
@@ -694,7 +413,15 @@ def run_expert_sample(subjects,classifications):
 
 if __name__ == '__main__':
 
+    # Larry Rudnick
+    expert_user = 'xDocR'
+    expert_dates = (datetime.datetime(2014, 06, 07, 17, 43, 0, 0),datetime.datetime(2014, 06, 07, 18, 30, 0, 0))
+
+    # Kyle Willett
+    # expert_user = 'KWillett'
+    # expert_dates = (datetime.datetime(2014, 06, 9, 04, 00, 0, 0),datetime.datetime(2014, 06, 9, 04, 45, 0, 0))
+
     subjects,classifications,users = load_rgz_data()
-    run_expert_sample(subjects,classifications)
-    plot_npeaks()
+    run_expert_sample(subjects,classifications,expert_user,expert_dates)
+    plot_npeaks(expert_user)
 
