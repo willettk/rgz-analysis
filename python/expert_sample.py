@@ -7,15 +7,16 @@ import webbrowser
 import itertools
 import numpy as np
 from numpy.random import random
+from random import shuffle
 
-curated_zid = open('%s/expert/expert_zooniverse_ids.txt' % rgz_dir).read().splitlines()
+rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
+curated_zid = open('%s/expert/expert_curated_zooniverse_ids.txt' % rgz_dir).read().splitlines()
     
 # Select equal number of random galaxies
 
 # Note - Chris Snyder recommends chunking it into 25 or so at once. Not sure if the browser will like preloading and caching 100 subjects all at once.
 # Formal max limit from the API is 100 subjects
 
-rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 n_random = 100 - len(curated_zid)
 
 subjects,classifications,users = rgz.load_rgz_data()
@@ -35,10 +36,15 @@ for r in random_numbers:
 
 # Combine the list, randomize their order
 
+'''
 rgz_chain = itertools.chain(*zip(curated_zid,random_zid))
 result = list(rgz_chain)
+'''
 
-with open('%s/expert_urls.txt' % rgz_dir,'wb') as f:
+result = curated_zid + random_zid
+shuffle(result)
+
+with open('%s/expert_urls_test.txt' % rgz_dir,'wb') as f:
     for i in np.arange(4):
         url_str = 'http://radio.galaxyzoo.org/?subjects='
         for r in result[i::4]:
