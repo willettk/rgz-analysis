@@ -1,12 +1,17 @@
 [
     { 
-        "expert_user" : "KWillett",
-        "started_at" : "2014-06-09T04:00:00.000Z",
-        "ended_at"   : "2014-06-09T04:45:00.000Z"
+        "expert_user" : "enno.middelberg",
+        "started_at" : "2014-06-11T09:30:00.000Z",
+        "ended_at"   : "2014-06-11T10:20:00.000Z"
     },
     { 
         "expert_user" : "xDocR",
-        "started_at" : "2014-06-07T17:43:00.000Z",
-        "ended_at"   : "2014-06-07T18:30:00.000Z"
+        "started_at" : "2014-06-10T22:15:00.000Z",
+        "ended_at"   : "2014-06-10T23:00:00.000Z"
+    },
+    { 
+        "expert_user" : "vrooje",
+        "started_at" : "2014-06-10T19:30:00.000Z",
+        "ended_at"   : "2014-06-10T21:45:00.000Z"
     }
 ]
