@@ -22,7 +22,7 @@ from PIL import Image
 rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 csv_dir = '%s/csv' % rgz_dir
 
-plot_dir = '../plots/expert' 
+plot_dir = '../plots/expert'
 if not os.path.isdir(plot_dir):
     os.mkdir(plot_dir)
 
@@ -47,6 +47,18 @@ ymax = IMG_WIDTH
 
 xjpg2fits = float(IMG_WIDTH/FITS_WIDTH)		# map the JPG pixels to the FITS pixels in x
 yjpg2fits = float(IMG_HEIGHT/FITS_HEIGHT)	# map the JPG pixels to the FITS pixels in y
+
+def make_subdirs(expert_user):
+
+    plot_dir = '../plots/expert/%s/ir_peaks' % expert_user
+    if not os.path.isdir(plot_dir):
+        os.makedirs(plot_dir)
+    
+    dat_dir = '../datfiles/expert/%s'% expert_user
+    if not os.path.isdir(dat_dir):
+        os.makedirs(dat_dir)
+
+    return None
 
 def plot_npeaks(expert_user):
 
@@ -370,7 +382,7 @@ def load_rgz_data():
     # mongod client must be running locally
     
     client = MongoClient('localhost', 27017)
-    db = client['ouroboros'] 
+    db = client['radio'] 
     
     subjects = db['radio_subjects'] 		# subjects = images
     classifications = db['radio_classifications']	# classifications = classifications of each subject per user
@@ -390,7 +402,7 @@ def load_expert_parameters():
 
 def run_expert_sample(subjects,classifications,expert_user,expert_dates):
 
-    expert_zid = open('%s/expert/old/expert_all_zooniverse_ids.txt' % rgz_dir).read().splitlines()
+    expert_zid = open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir).read().splitlines()
 
     N = 0
     with open('%s/npeaks_ir_expert_%s.csv' % (csv_dir,expert_user),'wb') as f:
@@ -410,6 +422,21 @@ def run_expert_sample(subjects,classifications,expert_user,expert_dates):
     
     return None
 
+'''
+########################################
+TO DO
+
+Find a way to automatically check whether classifications matched for a particular object among the expert sample.
+
+Maybe by reading the .dat files?
+
+########################################
+
+def compare_expert_consensus():
+
+
+'''
+
 # If program is called from the command line, process the full dataset
 
 if __name__ == '__main__':
@@ -420,6 +447,8 @@ if __name__ == '__main__':
 
         expert_user = ex['expert_user']
         expert_dates = (parse(ex['started_at']),parse(ex['ended_at']))
+
+        make_subdirs(expert_user)
 
         print 'Running expert classifications for %s\n' % expert_user
 
