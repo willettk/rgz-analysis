@@ -7,14 +7,14 @@ from matplotlib import rc
 
 subjects,classifications,users = rgz.load_rgz_data()
 
-# Try for range of users
+# Try for range of top users
 
 top_users = ('antikodon','planetari7','pamelaann','WizardHowl','JeanTate','Dolorous Edd','DocR','xDocR','KWillett')
 
 fig = plt.figure(1,(8,7))
 fig.clf()
 
-javascript_fix_date = datetime.datetime(2014, 6, 1, 0, 0, 0, 0)
+javascript_fix_date = datetime.datetime(2014, 3, 24, 0, 0, 0, 0)
 
 for idx,tu in enumerate(top_users):
     batch = classifications.find({'user_name':tu,'subjects.zooniverse_id':{'$exists':'true'},'created_at':{'$gt':javascript_fix_date}},{'created_at':1,'subjects.zooniverse_id':1})
@@ -26,13 +26,13 @@ for idx,tu in enumerate(top_users):
         dlist.append(cc['created_at'])
     
     d = {'created_at':dlist,'zooniverse_id':zlist}
-    dfa = pd.DataFrame(d) # 41901 classifications
+    dfa = pd.DataFrame(d) 
     
     dups = dfa.duplicated(cols='zooniverse_id')
     dup_counts = dfa[dups]['zooniverse_id'].value_counts()
     dup2_zid = dup_counts[dup_counts == 1].index
     
-    dfa_2dups = dfa[dfa['zooniverse_id'].isin(dup2_zid)] # 5338 classifications
+    dfa_2dups = dfa[dfa['zooniverse_id'].isin(dup2_zid)] 
     
     # Sort on zooniverse_id
     
@@ -56,5 +56,4 @@ for idx,tu in enumerate(top_users):
 fig.set_tight_layout(True)
 plt.savefig('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/plots/dups_since_jun07.png')
 plt.clf()
-
 
