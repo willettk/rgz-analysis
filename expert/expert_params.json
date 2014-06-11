@@ -1,0 +1,12 @@
+[
+    { 
+        "expert_user" : "KWillett",
+        "started_at" : "2014-06-09T04:00:00.000Z",
+        "ended_at"   : "2014-06-09T04:45:00.000Z"
+    },
+    { 
+        "expert_user" : "xDocR",
+        "started_at" : "2014-06-07T17:43:00.000Z",
+        "ended_at"   : "2014-06-07T18:30:00.000Z"
+    }
+]
