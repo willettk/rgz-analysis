@@ -1,24 +1,19 @@
 # import necessary python packages
 import numpy as np
-import pandas as pd
 import datetime
 import os
 import urllib
 import cStringIO
+import json
 
 from scipy.ndimage.filters import maximum_filter
 from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
-from collections import Counter
+from dateutil.parser import parse
 from matplotlib import pyplot as plt
+from collections import Counter
 from pymongo import MongoClient
-from astropy.io import fits
-from astropy import wcs
 from scipy import stats
-from scipy import optimize
-from scipy.linalg.basic import LinAlgError
 from PIL import Image
-#from astropy import coordinates as coord
-#from astropy.io import votable
 
 #------------------------------------------------------------------------------------------------------------
 
@@ -27,15 +22,11 @@ from PIL import Image
 rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 csv_dir = '%s/csv' % rgz_dir
 
-plot_dir = '../plots/expert' % expert_user
+plot_dir = '../plots/expert' 
 if not os.path.isdir(plot_dir):
     os.mkdir(plot_dir)
 
-ir_peaks_plot_dir = '%s/ir_peaks' % plot_dir
-if not os.path.isdir(ir_peaks_plot_dir):
-    os.mkdir(ir_peaks_plot_dir)
-
-dat_dir = '../datfiles/expert' % expert_user
+dat_dir = '../datfiles/expert'
 if not os.path.isdir(dat_dir):
     os.mkdir(dat_dir)
 
@@ -189,7 +180,7 @@ def plot_image(x,y,npeaks,sub,all_radio,radio_unique,no_radio=False):
     ax3.imshow(im_radio,origin='upper')
 
     # Save hard copy of the figure
-    fig.savefig('%s/ir_peaks/%s_ir_peak.png' % (plot_dir,sub['zooniverse_id']))
+    fig.savefig('%s/%s/ir_peaks/%s_ir_peak.png' % (plot_dir,expert_user,sub['zooniverse_id']))
 
     # Close figure after it's done; otherwise mpl complains about having thousands of stuff open
     plt.close()
@@ -211,7 +202,7 @@ def find_consensus(sub,classifications,expert_user,expert_dates,verbose=False):
     # loop over the number of classifications
     if Nusers is not None:			# the number of classifications should equal the number of users who classified
 
-        classfile2 = open('%s/RGZBETA2-%s-classifications.txt' % (dat_dir,srcid), 'w')
+        classfile2 = open('%s/%s/RGZBETA2-%s-classifications.txt' % (dat_dir,expert_user,srcid), 'w')
     
         # initialise coordinate variables
         radio_ra = []
@@ -387,9 +378,19 @@ def load_rgz_data():
 
     return subjects,classifications,users
 
+def load_expert_parameters():
+
+    expert_path = '%s/expert' % rgz_dir
+
+    # Note all times should be in UTC (Zulu)
+    json_data = open('%s/expert_params.json' % expert_path).read() 
+    experts = json.loads(json_data)
+
+    return experts
+
 def run_expert_sample(subjects,classifications,expert_user,expert_dates):
 
-    expert_zid = open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir).read().splitlines()
+    expert_zid = open('%s/expert/old/expert_all_zooniverse_ids.txt' % rgz_dir).read().splitlines()
 
     N = 0
     with open('%s/npeaks_ir_expert_%s.csv' % (csv_dir,expert_user),'wb') as f:
@@ -413,15 +414,15 @@ def run_expert_sample(subjects,classifications,expert_user,expert_dates):
 
 if __name__ == '__main__':
 
-    # Larry Rudnick
-    expert_user = 'xDocR'
-    expert_dates = (datetime.datetime(2014, 06, 07, 17, 43, 0, 0),datetime.datetime(2014, 06, 07, 18, 30, 0, 0))
-
-    # Kyle Willett
-    # expert_user = 'KWillett'
-    # expert_dates = (datetime.datetime(2014, 06, 9, 04, 00, 0, 0),datetime.datetime(2014, 06, 9, 04, 45, 0, 0))
-
     subjects,classifications,users = load_rgz_data()
-    run_expert_sample(subjects,classifications,expert_user,expert_dates)
-    plot_npeaks(expert_user)
+    experts = load_expert_parameters()
+    for ex in experts:
+
+        expert_user = ex['expert_user']
+        expert_dates = (parse(ex['started_at']),parse(ex['ended_at']))
+
+        print 'Running expert classifications for %s\n' % expert_user
+
+        run_expert_sample(subjects,classifications,expert_user,expert_dates)
+        plot_npeaks(expert_user)
 
