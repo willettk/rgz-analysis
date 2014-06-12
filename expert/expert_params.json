@@ -13,5 +13,10 @@
         "expert_user" : "vrooje",
         "started_at" : "2014-06-10T19:30:00.000Z",
         "ended_at"   : "2014-06-10T21:45:00.000Z"
+    },
+    { 
+        "expert_user" : "KWillett",
+        "started_at" : "2014-06-12T03:00:00.000Z",
+        "ended_at"   : "2014-06-12T03:30:00.000Z"
     }
 ]
