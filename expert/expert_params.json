@@ -1,5 +1,35 @@
 [
     { 
+        "expert_user" : "42jkb",
+        "started_at"  : "2014-06-11T01:20:00.000Z",
+        "ended_at"    : "2014-06-13T03:05:00.000Z"
+    },
+    { 
+        "expert_user" : "ivywong",
+        "started_at"  : "2014-06-13T01:50:00.000Z",
+        "ended_at"    : "2014-06-13T17:06:00.000Z"
+    },
+    { 
+        "expert_user" : "stasmanian",
+        "started_at" : "2014-06-12T06:00:00.000Z",
+        "ended_at"   : "2014-06-13T00:30:00.000Z"
+    },
+    { 
+        "expert_user" : "klmasters",
+        "started_at" : "2014-06-12T17:00:00.000Z",
+        "ended_at"   : "2014-06-12T23:59:00.000Z"
+    },
+    { 
+        "expert_user" : "Kevin",
+        "started_at" : "2014-06-12T17:00:00.000Z",
+        "ended_at"   : "2014-06-12T19:00:00.000Z"
+    },
+    { 
+        "expert_user" : "akapinska",
+        "started_at" : "2014-06-12T07:00:00.000Z",
+        "ended_at"   : "2014-06-12T12:00:00.000Z"
+    },
+    { 
         "expert_user" : "enno.middelberg",
         "started_at" : "2014-06-11T09:30:00.000Z",
         "ended_at"   : "2014-06-11T10:20:00.000Z"
