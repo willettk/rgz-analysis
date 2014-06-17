@@ -2,6 +2,7 @@
 
 # Data files
 *.dat
+datfiles/FIRST*txt
 
 # C extensions
 *.so
