@@ -556,6 +556,9 @@ def compare_expert_consensus():
     fig.show()
     fig.tight_layout()
 
+    # Now analyzing the radio components. Order can definitely change, even when associated with a single IR source. 
+
+    # Sort first? Sort first on second column, then radio? That would make sure everything agrees...
 
     
     '''
