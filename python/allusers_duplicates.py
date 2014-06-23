@@ -9,7 +9,7 @@ javascript_fix_date = datetime.datetime(2014, 3, 24, 0, 0, 0, 0)
 
 # Search for duplicates among all users
 
-recent_date = datetime.datetime(2014, 6, 6, 0, 0, 0, 0)
+recent_date = datetime.datetime(2014, 6, 12, 0, 0, 0, 0)
 user_list = []
 for c in classifications.find({'user_name':{'$exists':'true'},'created_at':{'$gt':recent_date}},{'user_name':1}):
     user_list.append(c['user_name'])
@@ -46,6 +46,7 @@ for idx,tu in enumerate(unique_users):
         td_log = np.log10(np.abs(td*1e-9).astype(float) + 1)
         
         print '%30s had %5i duplicates out of %5i classifications; avg. gap was %5.3f seconds' % (tu,len(dup2_zid),len(dfa),np.mean(td)*1e-9)
+        print dup2_zid
 
     else:
         count_nodups += 1
@@ -53,6 +54,7 @@ for idx,tu in enumerate(unique_users):
 
     # Was the annotation on the duplicate classification the same?
 
+    '''
     if len(dup2_zid) == 1:
         dfa_2dups = dfa[dfa['zooniverse_id'].isin(dup2_zid)] 
         
@@ -60,10 +62,11 @@ for idx,tu in enumerate(unique_users):
         
         a1 = dfa_2dups.sort(columns='zooniverse_id')['annotations'][::2]
         a2 = dfa_2dups.sort(columns='zooniverse_id')['annotations'][1::2]
-        if a1 != a2:
+        if (a1 != a2).all():
             print a1,a2
         
         print '%30s annotation is different: %s, %s' % (tu,a1,a2)
+    '''
 
 
 
