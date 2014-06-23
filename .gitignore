@@ -2,7 +2,7 @@
 
 # Data files
 *.dat
-datfiles/RGZ*txt
+RGZBETA2*txt
 
 # C extensions
 *.so
