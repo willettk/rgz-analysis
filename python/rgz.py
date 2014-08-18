@@ -570,7 +570,7 @@ def compare_expert_consensus():
 
     klmasters only shows up for 25 of them (as expected)        Galaxies done in timeframe:
     vrooje is only in 74 (rest are blank)                       109                                 - Missed last set - asked her to redo it
-    Kevin appears in 0                                          139                                   - Missed all of them - asked him what happened
+    Kevin appears in 0                                          139                                 - Missed all of them - asked him what happened
 
 
     '''

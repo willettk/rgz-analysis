@@ -639,8 +639,160 @@ def compare_expert_consensus():
 
     '''
 
-    
+    return ir_array
 
+def compare_volunteer_consensus(subjects,classifications,users):
+
+    # Just looks at the total number of IR sources per subject as measured by volunteers. 
+    # Should be able to get this by querying MongoDB directly.
+
+    with open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir,'rb') as f:
+        zooniverse_ids = [line.rstrip() for line in f]
+
+    ir_array = []
+    zid_array = []
+    usernames_array = []
+
+    experts = load_expert_parameters()
+    expert_usernames = [x['expert_user'] for x in experts]
+
+    bad_keys = ('finished_at','started_at','user_agent','lang')
+
+    for zid in zooniverse_ids:
+        ir_temp = []
+        username_temp = []
+        subject_id = subjects.find_one({'zooniverse_id':zid})['_id']
+        clist = classifications.find({'subject_ids.0':subject_id})
+
+        zid_array.append(zid)
+
+        for c in clist:
+
+            usernames_bad = expert_usernames
+
+            # Need to remove both duplicates and experts
+            try:
+                user_name = c['user_name']
+                username_temp.append(user_name)
+
+                if (user_name not in usernames_bad) and \
+                    (users.find_one({'name':user_name})['projects']['52afdb804d69636532000001']['classification_count'] > 10):
+
+                    # Hate the way annotations are stored. 
+
+                    # Need to remove counts both for metadata and where there's a glitch recording; 
+                    # lots of records have a spurious "No Sources" and "No Contours", possibly due to reset
+
+                    annotations = c['annotations']
+                    na = len(annotations)
+                    for a in annotations:
+                        if a.keys()[0] in bad_keys:
+                            na -= 1
+                        if 'ir' in a.keys():
+                            if a['ir'] is 'No Sources' and a['radio'] is 'No Contours':
+                                na -= 1
+
+                    ir_temp.append(na)
+
+                    # Records only the FIRST time someone with a particular username classifies it. Not ideal. 
+                    usernames_bad.append(user_name)
+
+            # Anonymous users
+            except KeyError:
+                pass
+                '''
+                username_temp.append('Anonymous')
+
+                annotations = c['annotations']
+                na = len(annotations)
+                for a in annotations:
+                    if a.keys()[0] in bad_keys:
+                        na -= 1
+                    if 'ir' in a.keys():
+                        if a['ir'] is 'No Sources' and a['radio'] is 'No Contours':
+                            na -= 1
+
+                ir_temp.append(na)
+                '''
+
+        #print zid,ir_temp
+        ir_array.append(ir_temp)
+        usernames_array.append(username_temp)
+        
+    i_nozeros = []
+    for ii,zz,uu in zip(ir_array,zid_array,usernames_array):
+        if len(ii) > 0:
+            i_nozeros.append(ii)
+        '''
+        else:
+            print 'No non-expert classifications for %s' % zz,uu
+        '''
+
+    c = [Counter(i) for i in i_nozeros]
+
+    fig = plt.figure(2,(15,4))
+    fig.clf()
+    ax = fig.add_subplot(111)
+
+    larr = []
+    varr = []
+    sdi_arr = []
+    for idx,cc in enumerate(c):
+        l,v = zip(*cc.items())
+        larr.append(list(l))
+        varr.append(list(v))
+        if len(l) > 1:
+            sdi_arr.append(sdi(cc)/np.log(len(l)))
+        else:
+            sdi_arr.append(sdi(cc))
+
+    iarr = []
+    sarr = []
+    for idx,(l,s) in enumerate(zip(larr,sdi_arr)):
+        iarr.append(np.zeros(len(l),dtype=int)+idx)
+        sarr.append(np.zeros(len(l),dtype=float)+s)
+
+    iarr = list_flatten(iarr)
+    larr = list_flatten(larr)
+    varr = list_flatten(varr)
+    sarr = list_flatten(sarr)
+
+    zipped = zip(sarr,larr,iarr,varr)
+    zipped.sort()
+    sarr,larr,iarr,varr = zip(*zipped)
+
+    ikeys = list(OrderedDict.fromkeys(iarr))
+    inew = [ikeys.index(ii) for ii in iarr]
+
+    sc = ax.scatter(inew,larr,c=sarr,s=((np.array(varr)+5)**2),cmap = cm.RdBu_r,vmin=0.,vmax =1.0)
+    cbar = plt.colorbar(sc)
+    cbar.set_label('Normalized Shannon entropy')
+
+    ax.set_xlim(-1,len(c)+1)
+    ax.set_title('RGZ volunteer classifications')
+    ax.set_xlabel('Galaxy')
+    ax.set_ylabel('Number of IR sources')
+    ax.set_aspect('auto')
+
+    lnp = np.array(larr)
+    inp = np.array(inew)
+
+    # Draw black lines between dots
+    for i in inp:
+        if (inp == i).sum() > 1:
+            lmin = np.min(lnp[inp == i])
+            lmax = np.max(lnp[inp == i])
+
+            ax.plot([i,i],[lmin,lmax],color='black')
+
+    fig.show()
+    #fig.tight_layout()
+
+    return None
+
+def expert_vs_volunteer():
+
+    # Direct comparison of the expert vs. volunteer classifications for all galaxies?
 
     return None
 
