@@ -1,5 +1,9 @@
 *.py[cod]
 
+# Data files
+*.dat
+RGZBETA2*txt
+
 # C extensions
 *.so
 

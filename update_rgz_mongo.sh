@@ -11,9 +11,9 @@ echo 'Starting mongod'
 mongod --fork --logpath log/mongodb.log
 
 echo 'Restoring files'
-mongorestore --db ouroboros --drop --collection radio_users $1'radio_users.bson'
-mongorestore --db ouroboros --drop --collection radio_subjects $1'radio_subjects.bson'
-mongorestore --db ouroboros --drop --collection radio_classifications $1'radio_classifications.bson'
+mongorestore --db radio --drop --collection radio_users $1'radio_users.bson'
+mongorestore --db radio --drop --collection radio_subjects $1'radio_subjects.bson'
+mongorestore --db radio --drop --collection radio_classifications $1'radio_classifications.bson'
 
 echo 'Killing the mongod process'
 

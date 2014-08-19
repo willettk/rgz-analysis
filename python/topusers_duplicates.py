@@ -7,9 +7,9 @@ from matplotlib import rc
 
 subjects,classifications,users = rgz.load_rgz_data()
 
-# Try for range of users
+# Try for range of top users
 
-top_users = ('antikodon','planetari7','pamelaann','WizardHowl','JeanTate','Dolorous Edd','DocR','akapinska','KWillett')
+top_users = ('antikodon','planetari7','pamelaann','WizardHowl','JeanTate','Dolorous Edd','DocR','xDocR','KWillett')
 
 fig = plt.figure(1,(8,7))
 fig.clf()
@@ -26,13 +26,13 @@ for idx,tu in enumerate(top_users):
         dlist.append(cc['created_at'])
     
     d = {'created_at':dlist,'zooniverse_id':zlist}
-    dfa = pd.DataFrame(d) # 41901 classifications
+    dfa = pd.DataFrame(d) 
     
     dups = dfa.duplicated(cols='zooniverse_id')
     dup_counts = dfa[dups]['zooniverse_id'].value_counts()
     dup2_zid = dup_counts[dup_counts == 1].index
     
-    dfa_2dups = dfa[dfa['zooniverse_id'].isin(dup2_zid)] # 5338 classifications
+    dfa_2dups = dfa[dfa['zooniverse_id'].isin(dup2_zid)] 
     
     # Sort on zooniverse_id
     
@@ -54,17 +54,6 @@ for idx,tu in enumerate(top_users):
     print '%s\n' % tu
 
 fig.set_tight_layout(True)
-plt.savefig('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/plots/dups_twice.png')
+plt.savefig('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/plots/dups_since_jun07.png')
 plt.clf()
-
-
-# Second question: what percentage of the current classifications actually are duplicates?
-
-class_loggedin_postfix = classifications.find({'user_name':{'$exists':'true'},'subjects.zooniverse_id':{'$exists':'true'},'created_at':{'$gt':javascript_fix_date}})
-
-xcount = 0
-for c in class_loggedin_postfix:
-    x = classifications.find_one({'user_name':c['user_name'],'subjects.zooniverse_id':c['subjects'][0]['zooniverse_id'],'created_at':{'$gt':javascript_fix_date}})
-    if x is not None:
-        xcount += 1
 
