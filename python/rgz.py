@@ -25,13 +25,13 @@ plot_dir = '../plots'
 if not os.path.isdir(plot_dir):
     os.mkdir(plot_dir)
 
-csv_dir = '.'
+csv_dir = '../csv'
 
-ann_dir = './annfiles'
+ann_dir = '../annfiles'
 if not os.path.isdir(ann_dir):
     os.mkdir(ann_dir)
 
-dat_dir = './datfiles'
+dat_dir = '../datfiles'
 if not os.path.isdir(dat_dir):
     os.mkdir(dat_dir)
 
@@ -338,7 +338,7 @@ def find_ir_peak(x,y,srcid):
     
     return X,Y,Z,npeaks
 
-def plot_image(x,y,srcid,X,Y,Z,npeaks,all_radio,radio_unique):
+def plot_image(x,y,srcid,zid,X,Y,Z,npeaks,all_radio,radio_unique):
 
     # Find the peak
 
@@ -357,6 +357,7 @@ def plot_image(x,y,srcid,X,Y,Z,npeaks,all_radio,radio_unique):
 
     ax.text(270,40,r'IR peak: $(%i,%i)$'%(xpeak,ypeak),color='k',fontsize=14)
     ax.text(270,70,r'$N_{peaks}$ = %i' % npeaks,color='k',fontsize=14)
+    ax.text(270,100,r'$N_{IR}$ = %i' % len(x),color='k',fontsize=14)
     ax.plot([xpeak],[ypeak],'c*',markersize=12)
 
     # Plot the radio counts
@@ -394,14 +395,14 @@ def plot_image(x,y,srcid,X,Y,Z,npeaks,all_radio,radio_unique):
 
     ax.set_xlim([xmin, xmax])
     ax.set_ylim([ymax, ymin])
-    ax.set_title(srcid)
+    ax.set_title('%s\n%s' % (zid,srcid))
     #fig.show()
     
     # Save hard copy of the figure
-    fig.savefig('%s/ir_peaks/%s_ir_peak.png' % (plot_dir,srcid))
+    fig.savefig('%s/ir_peaks/radio1/%s_ir_peak.png' % (plot_dir,srcid))
 
     # Close figure after it's done; otherwise mpl complains about having thousands of stuff open
-    plt.clf()
+    plt.close()
 
     return None
     
@@ -409,10 +410,12 @@ def find_consensus(sub,classifications,verbose=False,completed_only=False):
     
     Nclass = sub["classification_count"]	# number of classifications made per image
     srcid = sub["metadata"]["source"]	# determine the image source id
+    zid = sub["zooniverse_id"]	# determine the image source id
 
+    '''
     if completed_only:
         dat_dir = '../datfiles/completed_20'
-    
+    '''
     classfile2 = open('%s/RGZBETA2-%s-classifications.txt' % (dat_dir,srcid), 'w')
     
     imgid = sub["_id"]			# grab the ObjectId corresponding for this image 
@@ -556,11 +559,13 @@ def find_consensus(sub,classifications,verbose=False,completed_only=False):
     if len(ir_x) > 2:
         try:
             xpeak,ypeak,Z,npeaks = find_ir_peak(ir_x,ir_y,srcid)
-            plot_image(ir_x,ir_y,srcid,xpeak,ypeak,Z,npeaks,all_radio,radio_unique)
+            plot_image(ir_x,ir_y,srcid,zid,xpeak,ypeak,Z,npeaks,all_radio,radio_unique)
         except LinAlgError:
             npeaks = len(ir_x)
+            print 'LinAlgError - only %i non-unique IR peaks labeled for %s' % (npeaks,srcid)
     else:
         npeaks = len(ir_x)
+        print 'Only %i IR peaks labeled for %s' % (npeaks,srcid)
     
     # calculate the median number of components for both IR and radio for each object in image.
     radio_med = np.median(radio_comp)				# median number of radio components
@@ -590,7 +595,7 @@ def load_rgz_data():
     # mongod client must be running locally
     
     client = MongoClient('localhost', 27017)
-    db = client['ouroboros'] 
+    db = client['radio'] 
     
     subjects = db['radio_subjects'] 		# subjects = images
     classifications = db['radio_classifications']	# classifications = classifications of each subject per user
@@ -640,34 +645,32 @@ def overall_stats(subjects,classifications,users, verbose=True):
 
     return None
 
-def run_full_sample(subjects,classifications,n_subjects=1000):
+def histogram_experts(subjects,classifications,users):
+
+
+
+def run_sample(subjects,classifications,n_subjects=1000,completed=False):
 
     N = 0
-    with open('%s/npeaks_ir.csv' % csv_dir,'wb') as f:
-        for sub in list(subjects.find({'classification_count':{'$gt':0}}).limit(n_subjects)):
+
+    if completed:
+        suffix = '_completed'
+        class_lim = {'state':'complete'}
+    else:
+        suffix = ''
+        class_lim = {'classification_count':{'$gt':0}}
+
+    # Look at just the newly retired ones (single-contour, 5 classifications)
+    suffix = '_radio1'
+    class_lim = {'state':'complete','metadata.contour_count':1,'classification_count':5}
+
+    with open('%s/npeaks_ir%s.csv' % (csv_dir,suffix),'wb') as f:
+        for sub in list(subjects.find(class_lim).limit(n_subjects)):
         
             Nclass = sub["classification_count"]	# number of classifications made per image
-            if Nclass > 0:			# if no classifications move to next image
-                npeak = find_consensus(sub,classifications)
+            if Nclass > 0:			                # if no classifications move to next image (shouldn't happen)
+                npeak = find_consensus(sub,classifications,completed_only=completed)
                 print >> f, npeak
-
-            N += 1
-            
-            # Check progress by printing to screen every 100 classifications
-            if not N % 100:
-                print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
-    
-    
-    return None
-
-def run_completed_sample(subjects,classifications):
-
-    N = 0
-    with open('%s/npeaks_ir_completed.csv' % csv_dir,'wb') as f:
-        for sub in list(subjects.find({'classification_count':20})):
-        
-            npeak = find_consensus(sub,classifications,completed_only=True)
-            print >> f, npeak
 
             N += 1
             
@@ -682,6 +685,6 @@ def run_completed_sample(subjects,classifications):
 if __name__ == '__main__':
 
     subjects,classifications,users = load_rgz_data()
-    run_full_sample(subjects,classifications)
+    run_sample(subjects,classifications)
     plot_npeaks()
 
