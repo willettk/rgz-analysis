@@ -645,10 +645,6 @@ def overall_stats(subjects,classifications,users, verbose=True):
 
     return None
 
-def histogram_experts(subjects,classifications,users):
-
-
-
 def run_sample(subjects,classifications,n_subjects=1000,completed=False):
 
     N = 0
