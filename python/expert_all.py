@@ -3,7 +3,6 @@ import numpy as np
 import datetime
 import os,sys
 import urllib
-import cStringIO
 import json
 
 from scipy.ndimage.filters import maximum_filter
@@ -18,6 +17,10 @@ from PIL import Image
 from collections import OrderedDict
 from scipy.linalg.basic import LinAlgError
 
+import matplotlib.patches as patches
+from matplotlib.path import Path
+import requests
+from StringIO import StringIO
 #------------------------------------------------------------------------------------------------------------
 
 # Setup path locations
@@ -25,11 +28,11 @@ from scipy.linalg.basic import LinAlgError
 rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 csv_dir = '%s/csv' % rgz_dir
 
-plot_dir = '../plots/expert'
+plot_dir = '%s/plots/expert' % rgz_dir
 if not os.path.isdir(plot_dir):
     os.mkdir(plot_dir)
 
-dat_dir = '../datfiles/expert/expert_all'
+dat_dir = '%s/datfiles/expert/expert_all' % rgz_dir
 if not os.path.isdir(dat_dir):
     os.mkdir(dat_dir)
 
@@ -50,6 +53,10 @@ ymax = IMG_WIDTH
 
 xjpg2fits = float(IMG_WIDTH/FITS_WIDTH)		# map the JPG pixels to the FITS pixels in x
 yjpg2fits = float(IMG_HEIGHT/FITS_HEIGHT)	# map the JPG pixels to the FITS pixels in y
+
+bad_keys = ('finished_at','started_at','user_agent','lang')
+
+plt.ion()
 
 def list_flatten(x):
     result = []
@@ -181,11 +188,39 @@ def plot_image(ir_x,ir_y,sub,X,Y,Z,npeaks,all_radio,radio_unique,volunteers=Fals
         else:
             t = d[c_xval[0]]
         singular = 's' if n != 1 else ''
-        ax3.text(450,400-idx*25,'%3i vote%s: R%s' % (n,singular,t),fontsize=11)
+        ax3.text(550,400-idx*25,'%3i vote%s: R%s' % (n,singular,t),fontsize=11)
+
+    # Download contour data
+
+    r = requests.get(sub['location']['contours'])
+    contours = r.json()
+    
+    sf_x = 500./contours['width']
+    sf_y = 500./contours['height']
+
+    verts_all = []
+    codes_all = []
+    components = contours['contours']
+    
+    for comp in components:
+    
+        for idx,level in enumerate(comp):
+            verts = [((p['x'])*sf_x,(p['y']-1)*sf_y) for p in level['arr']]
+            
+            codes = np.ones(len(verts),int) * Path.LINETO
+            codes[0] = Path.MOVETO
+        
+            verts_all.extend(verts)
+            codes_all.extend(codes)
+    
+    path = Path(verts_all, codes_all)
+    patch_black = patches.PathPatch(path, facecolor = 'none', edgecolor='black', lw=1)
+
+    # Scaling factor for FITS to radio files
+
+    radio_ir_scaling_factor = 500./132
 
     # Rectangle showing the radio box size
-
-    radio_ir_scaling_factor = 435./132
 
     box_counts = Counter(radio_flattened)
     for ru in radio_unique:
@@ -201,8 +236,8 @@ def plot_image(ir_x,ir_y,sub,X,Y,Z,npeaks,all_radio,radio_unique,volunteers=Fals
         ax3.add_patch(rectangle)
         ax3.text(x0-15,y0-15,'R%s' % component_number)
 
-    ax3.set_xlim([xmin, xmax])
-    ax3.set_ylim([ymax, ymin])
+    ax3.set_xlim([0, 500])
+    ax3.set_ylim([500, 0])
     ax3.set_title('%s \n %s' % (sub['zooniverse_id'],sub['metadata']['source']))
     ax3.set_aspect('equal')
 
@@ -212,6 +247,7 @@ def plot_image(ir_x,ir_y,sub,X,Y,Z,npeaks,all_radio,radio_unique,volunteers=Fals
     im_standard = Image.open(cStringIO.StringIO(urllib.urlopen(url_standard).read()))
     ax1 = fig.add_subplot(141)
     ax1.imshow(im_standard,origin='upper')
+    ax1.add_patch(patch_black)
     ax1.set_title('WISE')
 
     url_radio = sub['location']['radio']
@@ -219,6 +255,11 @@ def plot_image(ir_x,ir_y,sub,X,Y,Z,npeaks,all_radio,radio_unique,volunteers=Fals
     ax2 = fig.add_subplot(142)
     ax2.imshow(im_radio,origin='upper')
     ax2.set_title('FIRST')
+
+    if volunteers:
+        ax2.set_xlabel('volunteers')
+    else:
+        ax2.set_xlabel('experts')
 
     # Save hard copy of the figure
     fig.savefig('%s/%s' % (plot_dir,writefile))
@@ -656,8 +697,6 @@ def compare_volunteer_consensus(subjects,classifications,users):
     experts = load_expert_parameters()
     expert_usernames = [x['expert_user'] for x in experts]
 
-    bad_keys = ('finished_at','started_at','user_agent','lang')
-
     for zid in zooniverse_ids:
         ir_temp = []
         username_temp = []
@@ -796,6 +835,180 @@ def expert_vs_volunteer():
 
     return None
 
+def histogram_experts(classifications,users):
+
+    # Goal: find the distribution and average number of IR sources per image for the science team
+
+    do_experts = True
+
+    if do_experts:
+        experts = load_expert_parameters()
+
+        # Add Larry's regular username as well as Ray Norris
+
+        experts.append({'expert_user':'DocR'})
+        experts.append({'expert_user':'raynorris'})
+
+        expert_avg = []
+        for ex in experts:
+
+            username = ex['expert_user']
+            classcount = classifications.find({'user_name':username}).count()
+
+            if classcount > 0:
+                c = classifications.find({'user_name':username})
+                nir = []
+                for cc in list(c):
+                    annotations = cc['annotations']
+                    na = len(annotations)
+                    for a in annotations:
+                        if a.keys()[0] in bad_keys:
+                            na -= 1
+                        if 'ir' in a.keys():
+                            if a['ir'] is 'No Sources' and a['radio'] is 'No Contours':
+                                na -= 1
+
+                    nir.append(na)
+
+                print '%20s averages %.2f IR sources per image over %i classifications' % (username,np.mean(nir),classcount)
+
+                expert_avg.append(np.mean(nir))
+
+        print '-----------------------------------'
+
+    # Now look at the volunteers
+
+    rgz_id = classifications.find_one()['project_id']
+
+    # Odd that about half of the users don't seem to have a classification count for RGZ. Is that actually true?
+
+    '''
+    In [80]: users.find({'projects.%s.classification_count' % rgz_id:{'$exists':True}}).count()
+    Out[80]: 4907
+
+    In [79]: users.find({'projects.%s.classification_count' % rgz_id:{'$exists':False}}).count()
+    Out[79]: 3312
+    
+    All users with a classification count do have at least one classification. 
+    In the second group, though, most have zero, but some have a couple classifications (maximum of 6)
+
+        742 have at least one classification
+        2570 have no classifications
+
+    So we actually have only 4907+742 = 5,649 contributing users, rather than the 8,219 people in the users db and the 4,955 listed on the API
+
+    '''
+
+    # Concatenate the two groups
+
+    users_good = list(users.find({'projects.%s.classification_count' % rgz_id:{'$exists':True}}))
+    users_unsure = users.find({'projects.%s.classification_count' % rgz_id:{'$exists':False}})
+    for u in list(users_unsure):
+        if classifications.find({'user_id':u['_id']}).count() > 0:
+            users_good.append(u)
+
+    nir_username_volunteers = []
+    nir_avg_volunteers = []
+    nir_count_volunteers = []
+    for u in users_good:
+
+        classcount = classifications.find({'user_id':u['_id']}).count()
+
+        if classcount > 0:
+            c = classifications.find({'user_id':u['_id']})
+            nir = []
+            for cc in list(c):
+                annotations = cc['annotations']
+                na = len(annotations)
+                for a in annotations:
+                    if a.keys()[0] in bad_keys:
+                        na -= 1
+                    if 'ir' in a.keys():
+                        if a['ir'] is 'No Sources' and a['radio'] is 'No Contours':
+                            na -= 1
+
+                nir.append(na)
+
+            
+            avg = np.mean(nir)
+
+            #print '%20s averages %.2f IR sources per image over %i classifications' % (u['name'],avg,classcount)
+
+        else:   # Shouldn't happen with this list
+            print 'No classifications found for %s' % u['name']
+            avg = 0.
+
+
+        nir_username_volunteers.append(u['name'])
+        nir_avg_volunteers.append(avg)
+        nir_count_volunteers.append(classcount)
+
+    # If we eliminate users who average more than two IR sources per image, how much of the data would that reject?
+
+    # counts_lost = np.sum([c for a,b,c in zip(nir_username_volunteers, nir_avg_volunteers, nir_count_volunteers) if b > 2.0])
+    # Only 413 classifications. Negligible.
+
+    return nir_username_volunteers, nir_avg_volunteers, nir_count_volunteers, expert_avg
+
+def plot_histogram_experts(names, avgs, counts, expert_avg):
+
+    xpairs = [[x,x] for x in expert_avg]
+    xlist = []
+    for xends in xpairs:
+        xlist.extend(xends)
+        xlist.append(None)
+
+    avg_cutoff = np.linspace(0,4,50)
+    frac_lost = []
+    for ac in avg_cutoff:
+        frac_lost.append(np.sum([c for a,c in zip(avgs,counts) if a > ac])/float(sum(counts)))
+
+    # Plot results
+
+    fig = plt.figure(1)
+    fig.clf()
+
+    ax1 = fig.add_subplot(221)
+    ax1.scatter(avgs,counts,color='black',marker='.',s=1,alpha=0.5)
+    ax1.set_xlabel('Mean IR sources per image')
+    ax1.set_ylabel('Total number of classifications')
+    ax1.set_yscale('log')
+
+    ax2 = fig.add_subplot(222)
+    ax2.plot(avg_cutoff,frac_lost,color='green',lw=3)
+    ax2.set_ylim(-0.02,1.02)
+    ax2.set_xlabel('Cutoff for IR sources/image')
+    ax2.set_ylabel('Fraction of data affected')
+
+    ax3 = fig.add_subplot(223)
+    ax3.hist(avgs,bins=np.linspace(0,4,100))
+    ax3.text(2.5,700,'All',fontsize=16)
+    ax3.set_xlabel('Mean IR sources per image')
+    ax3.set_ylabel('Count (users)')
+
+    ax4 = fig.add_subplot(224)
+    ax4.hist(np.array(avgs)[np.array(counts) > 10],bins=np.linspace(0,4,100),color='cyan')
+    ax4.text(2.5,250,r'$N_{class}>10$',fontsize=16)
+    ax4.set_xlabel('Mean IR sources per image')
+    ax4.set_ylabel('Count (users)')
+    ax4.set_xlim(ax3.get_xlim())
+
+    for ax in (ax2,ax3,ax4):
+        ypairs = [ax.get_ylim() for x in range(len(xpairs))]
+        ylist = []
+        for yends in ypairs:
+            ylist.extend(yends)
+            ylist.append(None)
+
+        ax.plot(xlist,ylist,color='red',alpha=0.5)
+
+    fig.show()
+
+    # Save hard copy of the figure
+    fig.savefig('%s/plots/histogram_avg_ir_sources.png' % rgz_dir)
+
+    return None
+
 def update_experts(classifications,experts): 
 
     for ex in experts:
@@ -810,6 +1023,8 @@ def update_experts(classifications,experts):
 ########################################
 
 if __name__ == '__main__':
+
+    plt.ioff()
 
     subjects,classifications,users = load_rgz_data()
     experts = load_expert_parameters()
