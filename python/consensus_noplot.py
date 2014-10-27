@@ -56,7 +56,7 @@ nosources_writefile = open('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-ana
 
 print >> radec_writefile,'first_id              ra            dec          n_class     n_users'
 
-start_ind = 19126   # Restart list from last completed classification if desired
+start_ind = 0   # Restart list from last completed classification if desired
 subjects_list = list(subjects.find(class_lim))[start_ind:]
 for sub in subjects_list:
 
