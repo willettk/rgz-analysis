@@ -1,5 +1,9 @@
 *.py[cod]
 
+# Swap files
+
+.*sw[op]
+
 # Data files
 *.dat
 RGZBETA2*txt
