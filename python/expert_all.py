@@ -791,10 +791,10 @@ def compare_volunteer_consensus(subjects,classifications,users):
         iarr.append(np.zeros(len(l),dtype=int)+idx)
         sarr.append(np.zeros(len(l),dtype=float)+s)
 
-    iarr = list_flatten(iarr)
-    larr = list_flatten(larr)
-    varr = list_flatten(varr)
-    sarr = list_flatten(sarr)
+    iarr = list_flatten(iarr)       # Index of galaxy image
+    larr = list_flatten(larr)       # Number of IR sources
+    varr = list_flatten(varr)       # Number of users who selected the given number of IR sources
+    sarr = list_flatten(sarr)       # Shannon diversity index
 
     zipped = zip(sarr,larr,iarr,varr)
     zipped.sort()
