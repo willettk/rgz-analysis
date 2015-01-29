@@ -488,18 +488,6 @@ def compare_expert_consensus():
         ex_array.append(exlist_arr)
         ir_array.append(ir_temp)
 
-    '''
-    # Plot number of users per galaxy
-
-    excount = [len(x) for x in ex_array]
-    fig2 = plt.figure(2)
-    ax2 = fig2.add_subplot(111)
-    ax2.hist(excount,bins=6,range=(5,11))
-    ax2.set_xlim(6,11)
-    fig2.show()
-    fig2.tight_layout()
-    '''
-
     c = [Counter(i) for i in ir_array]
 
     fig = plt.figure(1,(15,4))
@@ -535,7 +523,7 @@ def compare_expert_consensus():
     ikeys = list(OrderedDict.fromkeys(iarr))
     inew = [ikeys.index(ii) for ii in iarr]
 
-    sc = ax.scatter(inew,larr,c=sarr,s=((np.array(varr)+5)**2),cmap = cm.RdBu_r,vmin=0.,vmax =1.0)
+    sc = ax.scatter(inew,larr,c=sarr,s=((np.array(varr)+5)**2),edgecolor='k',cmap = cm.RdBu_r,vmin=0.,vmax =1.0)
     cbar = plt.colorbar(sc)
     cbar.set_label('Normalized Shannon entropy')
 
@@ -575,14 +563,7 @@ def compare_expert_consensus():
 
     '''
 
-    
-
-
-
-
-
-
-
+   
 
     return None
 
