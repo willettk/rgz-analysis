@@ -399,7 +399,7 @@ def plot_image(x,y,srcid,zid,X,Y,Z,npeaks,all_radio,radio_unique):
     #fig.show()
     
     # Save hard copy of the figure
-    fig.savefig('%s/ir_peaks/radio1/%s_ir_peak.png' % (plot_dir,srcid))
+    fig.savefig('%s/ir_peaks/%s_ir_peak.png' % (plot_dir,srcid))
 
     # Close figure after it's done; otherwise mpl complains about having thousands of stuff open
     plt.close()
@@ -657,8 +657,8 @@ def run_sample(subjects,classifications,n_subjects=1000,completed=False):
         class_lim = {'classification_count':{'$gt':0}}
 
     # Look at just the newly retired ones (single-contour, 5 classifications)
-    suffix = '_radio1'
-    class_lim = {'state':'complete','metadata.contour_count':1,'classification_count':5}
+    # suffix = '_radio1'
+    # class_lim = {'state':'complete','metadata.contour_count':1,'classification_count':5}
 
     with open('%s/npeaks_ir%s.csv' % (csv_dir,suffix),'wb') as f:
         for sub in list(subjects.find(class_lim).limit(n_subjects)):
@@ -674,6 +674,59 @@ def run_sample(subjects,classifications,n_subjects=1000,completed=False):
             if not N % 100:
                 print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
     
+    return None
+
+def onemillion(classifications,users):
+
+    '''
+    Discrepancy between the API count and the number of classifications in MongoDB. 
+    For example, on 14 Jan 2015, the counts were:
+            API =   997,395
+        MongoDB = 1,036,501
+    
+    Consulting with Ivy and Chris S., we decided to go with the count on the API. So the correct classification for the
+    1 millionth ID for RGZ will be the 100000 + (Mongo - API) = 1,039,106th entry sorted by date in MongoDB.
+
+    First data dump that got to this was 15 Jan 2015, which had 1,040,566 documents in radio_classifications.
+    '''
+
+    # Limit the number of records to pull from this data dump. 
+
+    ntot = classifications.count()
+    onemillionth = 1039106
+
+    diff1M = ntot - onemillionth
+
+    # Return the classifications surrounding 1 million
+    classifications_sorted = classifications.find().sort([("updated_at",-1)]).limit(diff1M)
+    lc = list(classifications_sorted)
+    lc.reverse()
+
+    names = set()
+    nu = 0
+
+    for idx,c in enumerate(lc):
+        idx1M = idx + 1000000
+
+        try:
+            username = c['user_name']
+            if username not in names:
+                names.add(username)
+                usr = users.find_one({'name':username})
+                email = usr['email']
+
+                # How many classifications have they done? Are these our "power" users?
+                nclass = classifications.find({'user_name':username}).count()
+
+                print 'Classification: %7i, Prize order: %2i, Date: %s, N_class = %5i, Username: %20s, Email: %s ' % (idx1M, nu+1, c['updated_at'], nclass, username, email)
+
+                nu += 1
+        except KeyError:
+            username = "Anonymous"
+
+        if nu >= 10:
+            break
+
     return None
 
 # If program is called from the command line, process the full dataset
