@@ -3,6 +3,7 @@ import numpy as np
 import datetime
 import os,sys
 import urllib
+import cStringIO
 import json
 
 from scipy.ndimage.filters import maximum_filter
@@ -537,16 +538,6 @@ def run_volunteer_sample(subjects,classifications):
     
     return None
 
-'''
-########################################
-TO DO
-
-Find a way to automatically check whether classifications matched for a particular object among the expert sample.
-
-Maybe by reading the .dat files?
-
-########################################
-'''
 def sdi(data):
 
     # Shannon diversity index
@@ -638,7 +629,7 @@ def compare_expert_consensus():
     ikeys = list(OrderedDict.fromkeys(iarr))
     inew = [ikeys.index(ii) for ii in iarr]
 
-    sc = ax.scatter(inew,larr,c=sarr,s=((np.array(varr)+5)**2),cmap = cm.RdBu_r,vmin=0.,vmax =1.0)
+    sc = ax.scatter(inew,larr,c=sarr,s=((np.array(varr)+5)**2),edgecolor='k',cmap = cm.RdBu_r,vmin=0.,vmax =1.0)
     cbar = plt.colorbar(sc)
     cbar.set_label('Normalized Shannon entropy')
 
@@ -690,53 +681,66 @@ def compare_volunteer_consensus(subjects,classifications,users):
     with open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir,'rb') as f:
         zooniverse_ids = [line.rstrip() for line in f]
 
+    # Empty arrays
     ir_array = []
-    zid_array = []
     usernames_array = []
 
+    # Load parameters for the expert science team
     experts = load_expert_parameters()
-    expert_usernames = [x['expert_user'] for x in experts]
+
+    # Loop over each object in the sample of 100
 
     for zid in zooniverse_ids:
         ir_temp = []
         username_temp = []
+
+        # Get all classifications for the subject
         subject_id = subjects.find_one({'zooniverse_id':zid})['_id']
         clist = classifications.find({'subject_ids.0':subject_id})
 
-        zid_array.append(zid)
+        # List of classifications whose classifications shouldn't be included. Start with experts.
+        usernames_bad = [x['expert_user'] for x in experts]
 
+        # Loop over all classifications
         for c in clist:
 
-            usernames_bad = expert_usernames
-
-            # Need to remove both duplicates and experts
+            # Test if user was logged in
             try:
                 user_name = c['user_name']
-                username_temp.append(user_name)
 
+                '''
+                # Only set to analyze the "robust" users with at least 10 total classifications
                 if (user_name not in usernames_bad) and \
+                    # Only set for robust results
                     (users.find_one({'name':user_name})['projects']['52afdb804d69636532000001']['classification_count'] > 10):
-
-                    # Hate the way annotations are stored. 
-
-                    # Need to remove counts both for metadata and where there's a glitch recording; 
-                    # lots of records have a spurious "No Sources" and "No Contours", possibly due to reset
+                '''
+                if user_name not in usernames_bad:
 
                     annotations = c['annotations']
+                    # Record the number of galaxies (that is, IR sources) in image
                     na = len(annotations)
                     for a in annotations:
+                        # Don't count metadata
                         if a.keys()[0] in bad_keys:
                             na -= 1
+                        # Don't count if source has no sources or contours; likely a glitch in system
                         if 'ir' in a.keys():
                             if a['ir'] is 'No Sources' and a['radio'] is 'No Contours':
                                 na -= 1
 
+                    # Count the total number of galaxies in image recorded by the user
                     ir_temp.append(na)
+                    username_temp.append(user_name)
 
-                    # Records only the FIRST time someone with a particular username classifies it. Not ideal. 
+                    # Prevent counts of duplicate classifications by the same user by adding name to the prohibited list
                     usernames_bad.append(user_name)
 
-            # Anonymous users
+                '''
+                else:
+                    print 'Eliminating %s for %s' % (user_name,zid)
+                '''
+
+            # Do not include classifications by anonymous users
             except KeyError:
                 pass
                 '''
@@ -754,18 +758,16 @@ def compare_volunteer_consensus(subjects,classifications,users):
                 ir_temp.append(na)
                 '''
 
-        #print zid,ir_temp
+        # Append counts to the master arrays
         ir_array.append(ir_temp)
         usernames_array.append(username_temp)
         
     i_nozeros = []
-    for ii,zz,uu in zip(ir_array,zid_array,usernames_array):
+    for ii,zz,uu in zip(ir_array,zooniverse_ids,usernames_array):
         if len(ii) > 0:
             i_nozeros.append(ii)
-        '''
         else:
             print 'No non-expert classifications for %s' % zz,uu
-        '''
 
     c = [Counter(i) for i in i_nozeros]
 
@@ -803,7 +805,7 @@ def compare_volunteer_consensus(subjects,classifications,users):
     ikeys = list(OrderedDict.fromkeys(iarr))
     inew = [ikeys.index(ii) for ii in iarr]
 
-    sc = ax.scatter(inew,larr,c=sarr,s=((np.array(varr)+5)**2),cmap = cm.RdBu_r,vmin=0.,vmax =1.0)
+    sc = ax.scatter(inew,larr,c=sarr,s=((np.array(varr)+5)**2),edgecolor='k',cmap = cm.RdBu_r,vmin=0.,vmax =1.0)
     cbar = plt.colorbar(sc)
     cbar.set_label('Normalized Shannon entropy')
 
@@ -1033,6 +1035,7 @@ if __name__ == '__main__':
     # Experts on sample of 100
     run_expert_sample(subjects,classifications)
     #plot_npeaks()
+
     # Volunteers on sample of 100
     run_volunteer_sample(subjects,classifications)
     #plot_npeaks(volunteers=True)
