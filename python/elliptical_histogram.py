@@ -8,7 +8,7 @@ rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 
 # Plot the normalized histogram of (W2-W3) colors for RGZ and WISE all-sky sources
 
-filenames = ['%s/%s.fits' % (rgz_dir,x) for x in ('wise_allsky_2M','gurkan/gurkan_all','rgz_75_wise_16jan')]
+filenames = ['%s/fits/%s.fits' % (rgz_dir,x) for x in ('wise_allsky_2M','gurkan_all','rgz_75_wise')]
 labels = ('WISE all-sky sources','Gurkan+14 radio galaxies','RGZ 75% radio galaxies')
     
 wise_snr = 5.

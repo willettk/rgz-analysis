@@ -157,7 +157,7 @@ def wise_rgz_gurkan():
     
     # WISE All-sky sample
     #
-    filenames = ['%s/%s.fits' % (rgz_dir,x) for x in ('wise_allsky_2M','gurkan/gurkan_all','rgz_75_wise_16jan')]
+    filenames = ['%s/fits/%s.fits' % (rgz_dir,x) for x in ('wise_allsky_2M','gurkan_all','rgz_75_wise')]
     labels = ('WISE all-sky sources','Gurkan+14 radio galaxies','RGZ 75% radio galaxies')
     
     print ''
