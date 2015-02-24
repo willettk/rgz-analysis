@@ -222,7 +222,7 @@ def wise_rgz_gurkan():
         rgz = d[rgz75 & snr_w1 & snr_w2 & snr_w3]
     
     xmin,xmax = -1,6
-    ymin,ymax = -1,3
+    ymin,ymax = -0.5,3
 
     bins_w2w3 = np.linspace(xmin,xmax,40)
     bins_w1w2 = np.linspace(ymin,ymax,40)
@@ -381,7 +381,7 @@ def wise_rgz_gurkan_lowsn():
         rgz = d[rgz75 & snr_w1 & snr_w2 & snr_w3]
     
     xmin,xmax = -1,6
-    ymin,ymax = -1,3
+    ymin,ymax = -0.5,3
 
     bins_w2w3 = np.linspace(xmin,xmax,40)
     bins_w1w2 = np.linspace(ymin,ymax,40)
@@ -461,3 +461,4 @@ def wise_rgz_gurkan_lowsn():
 
     return None
 
+wise_rgz_gurkan()
