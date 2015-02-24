@@ -103,6 +103,8 @@ def plot_compact_hist():
     ax.hist(compact_area,              bins=nbins,range=(0,maxarea),cumulative=True,label='Compact')
     
     ax.vlines(np.sqrt(2)*FIRST_area,ax.get_ylim()[0],ax.get_ylim()[1],linestyles='--',lw=2,color='k')
+
+    # Note that the fraction on the y-axis is wrong unless ymax is reset
     
     ax.set_xlim(0,maxarea)
     ax.set_xlabel('Component area [sq arcsec]',fontsize=16)
