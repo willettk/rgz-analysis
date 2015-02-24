@@ -131,4 +131,5 @@ def plot_compact_hist():
 
 if __name__ == '__main__':
 
+    get_all_1component_areas()
     plot_compact_hist()
