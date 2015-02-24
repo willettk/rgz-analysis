@@ -625,7 +625,7 @@ def plot_consensus(consensus,figno=1, save_fig=None):
     if save_fig:
         writefile = '/Volumes/3TB/rgz/plots/expert_%s.pdf' % zid
         #writefile = '%s/plots/expert/expert_all/expert_%s.pdf' % (rgz_dir,zid)
-        writefile = '%s/goldstandard/volunteer_gs/volunteer_%s.pdf' % (rgz_dir,zid)
+        #writefile = '%s/goldstandard/volunteer_gs/volunteer_%s.pdf' % (rgz_dir,zid)
         #fig.savefig('%s' % (writefile))
         plt.close()
     else:
@@ -654,7 +654,7 @@ def make_75():
     Removed tutorial (ARG0003r15) manually. x_exists,y_exists off by one for some reason.
     '''
 
-    with open('%s/rgz_75_completed_zid.csv' % rgz_dir,'r') as f:
+    with open('%s/csv/rgz_75_completed_zid.csv' % rgz_dir,'r') as f:
         zid_read = f.readlines()
 
     zooniverse_ids = [z.strip() for z in zid_read]
@@ -671,7 +671,7 @@ def make_75():
 
     # Open CSV file to write results to
 
-    writefile = open('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/rgz_75.csv','w')
+    writefile = open('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/csv/rgz_75.csv','w')
     print >> writefile,'first_id,zid,ra,dec,n_lobes,n_users,n_total,ratio'
 
     # Loop over all completed galaxies
