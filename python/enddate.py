@@ -1,3 +1,7 @@
+# When will we finish with the RGZ classifications?
+#
+# Kyle Willett, 3 Mar 2015
+
 import rgz
 import datetime
 import numpy as np
@@ -6,146 +10,164 @@ import scipy.optimize
 from matplotlib import pyplot as plt
 import matplotlib.dates as mdates
 
+# Global variables and paths
+
 rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
-
-# When will we finish with the RGZ classifications?
-
-subjects,classifications,users = rgz.load_rgz_data()
-jan1 = datetime.datetime(2015, 01, 01, 0, 0, 0, 0)
-
-# How many images are there?
-
-N = subjects.count()
-
-# How many are done?
-
-N_done = subjects.find({'state':'complete'}).count()
-
-# how many are left to do?
-
-N_active = subjects.find({'state':'active'}).count()
-N_inactive = subjects.find({'state':'inactive'}).count()
-
-# How many classifications per day over the last three months? Is it constant?
-
-nclass_3months = classifications.find({"updated_at": {"$gt": jan1}}).count()
-today = datetime.datetime.today()
-ndays = (today - jan1).days
-
-classrate = nclass_3months / float(ndays)
-
-# Plot classification rate for last three months
-
-crarr = []
-datearr = []
-for d in range(ndays):
-    dstart = jan1 + datetime.timedelta(d)
-    dend = dstart + datetime.timedelta(1)
-    nclass = classifications.find({"updated_at": {"$gte": dstart,"$lt": dend}}).count()
-    datearr.append(dstart)
-    crarr.append(nclass)
-
-# Plot it
-
-
-fig = plt.figure(1,(11,6))
-ax = fig.add_subplot(111)
-
-ax.plot_date(datearr,crarr)
-ax.set_ylabel('Number of classifications')
-ax.set_xlabel('Date')
-
-fig.savefig('%s/plots/rate_of_classifications_full.png' % rgz_dir)
-
-ax.set_ylim(0,5000)
-fig.savefig('%s/plots/rate_of_classifications_ylim.png' % rgz_dir)
-
-# Plot classifications per day for entire lifetime of RGZ
-
 main_release_date = datetime.datetime(2013, 12, 17, 0, 0, 0, 0)
-all_class = []
-all_dates = []
-alldays = (today - main_release_date).days
-for d in range(alldays):
-    dstart = main_release_date + datetime.timedelta(d)
-    dend = dstart + datetime.timedelta(1)
-    nclass = classifications.find({"updated_at": {"$gte": dstart,"$lt": dend}}).count()
-    all_dates.append(dstart)
-    all_class.append(nclass)
+today = datetime.datetime.today()
 
-
-def sigmoid(p,x):
-    x0,y0,c,k=p
-    y = c / (1 + np.exp(-k*(x-x0))) + y0
-    return y
+# Mathematical functions for fitting time-series data
 
 def exponential(p,x):
-    N0,lamb,x0,b=p
-    y = N0 * np.exp(-1*lamb*(x)) + b
+    N0,lamb,b=p
+    y = N0 * np.exp(-1*lamb*x) + b
     return y
 
 def residuals(p,x,y):
     return y - exponential(p,x)
 
-x = mdates.date2num(all_dates)
-xnorm = x - x[0]
+def count_classifications(subjects,classifications):
 
-p_guess=(10000.,1.,0,100.)
-p, cov, infodict, mesg, ier = scipy.optimize.leastsq(residuals,p_guess,args=(x,all_class),full_output=1)
+    # Takes several minutes to run on the 15 month RGZ data
 
-x0,y0,c,k=p
-xp = np.linspace(x[0], x[-1], 1500)
-pxp=exponential(p,xp)
+    # Calculate the rate at which classifications are done
+    
+    all_class = []
+    all_dates = []
+    alldays = (today - main_release_date).days
+    for d in range(alldays):
+        dstart = main_release_date + datetime.timedelta(d)
+        dend = dstart + datetime.timedelta(1)
+        nclass = classifications.find({"updated_at": {"$gte": dstart,"$lt": dend}}).count()
+        all_dates.append(dstart)
+        all_class.append(nclass)
 
-fig = plt.figure(2,(15,6))
-ax = fig.add_subplot(111)
+    return all_dates,all_class
+    
+def how_many_left(subjects,classifications,verbose=False):
 
-ax.plot_date(all_dates,all_class)
+    rate = find_rate(classifications)
 
-# Plot fit
-ax.plot(xp, pxp, '-')
+    # How many classifications are left?
+    
+    '''
+    Four types of subjects in the system:
 
-ax.set_ylabel('Number of classifications')
-ax.set_xlabel('Date')
+    - active with 1 component
+    - active with 2+ components
+    - inactive with 1 component
+    - inactive with 2+ components
+    '''
 
-fig.savefig('%s/plots/rate_of_all_classifications_full.png' % rgz_dir)
+    nc_single = 5
+    nc_multiple = 20
+    
+    nas = []
+    active_single = subjects.find({'state':'active','metadata.contour_count':1})
+    for x in active_single:
+        nas.append(nc_single - x['classification_count'])
+    nas_total = np.sum(nas)
+    
+    nam = []
+    active_multiple = subjects.find({'state':'active','metadata.contour_count':{"$gt":1}})
+    for x in active_multiple:
+        nam.append(nc_multiple - x['classification_count'])
+    nam_total = np.sum(nam)
+    
+    n_inactive_single = subjects.find({'state':'inactive','metadata.contour_count':1}).count()
+    nis_total = n_inactive_single * nc_single
+    
+    n_inactive_multiple = subjects.find({'state':'inactive','metadata.contour_count':1}).count()
+    nim_total = n_inactive_multiple * nc_multiple
+    
+    remaining_classifications = nas_total + nam_total + nis_total + nim_total
+    finished_classifications = classifications.count()
+    
+    remaining_time = remaining_classifications / rate
+    
+    if verbose:
+        print '%i classifications to do' % remaining_classifications
+        print '%i classifications finished' % finished_classifications
+        print '%i days left' % remaining_time
+        print 'Will finish on %s' % (today + datetime.timedelta(int(remaining_time))).strftime('%b %d, %Y')
 
-# Assume a flat rate
+    return remaining_classifications,finished_classifications
 
-rate = np.median(crarr)
+def find_rate(classifications,rdays=90):
 
-# How many classifications are left?
+    # Find the rate of classifications per day, assuming a constant rate over a recent span of time. Default is last three months (90 days).
 
-'''
-1. active with 1 component
-2. active with 2+ components
-3. inactive with 1 component
-4. inactive with 2+ components
-'''
+    c3 = classifications.find({"updated_at": {"$gte": today - datetime.timedelta(rdays),"$lt": today}}).count()
+    rate = c3 / rdays
 
-nas = []
-active_single = subjects.find({'state':'active','metadata.contour_count':1})
-for x in active_single:
-    nas.append(5 - x['classification_count'])
-nas_total = np.sum(nas)
+    return rate
 
-nam = []
-active_multiple = subjects.find({'state':'active','metadata.contour_count':{"$gt":1}})
-for x in active_multiple:
-    nam.append(20 - x['classification_count'])
-nam_total = np.sum(nam)
+def plot_time_left(all_dates,all_class,remaining_classifications,finished_classifications,rate,savefig=False):
 
-n_inactive_single = subjects.find({'state':'inactive','metadata.contour_count':1}).count()
-nis_total = n_inactive_single * 5
+    # Plot results
+    
+    p_guess=(10000.,1.,100.)
+    xnorm = mdates.date2num(all_dates) - mdates.date2num(all_dates[0]) + 1
+    p, cov, infodict, mesg, ier = scipy.optimize.leastsq(residuals,p_guess,args=(xnorm,all_class),full_output=1)
+    
+    xp = np.linspace(xnorm[0], xnorm[-1], 1000)
+    plot_dates = mdates.num2date(xp+mdates.date2num(all_dates[0]))
+    
+    fig = plt.figure(2,(14,12))
 
-n_inactive_multiple = subjects.find({'state':'inactive','metadata.contour_count':1}).count()
-nim_total = n_inactive_multiple * 20
+    # Panel 1: plot number of classifications per day over lifetime of project
 
-remaining_classifications = nas_total + nam_total + nis_total + nim_total
+    ax1 = fig.add_subplot(211)
+    
+    ax1.plot_date(all_dates,all_class)
+    ax1.plot(plot_dates, exponential(p,xp), '-')
+    
+    ax1.set_ylabel('Number of RGZ classifications',fontsize=16)
+    ax1.set_xlabel('Date',fontsize=16)
+    ax1.set_ylim(1,4.5e4)
+    #ax1.set_yscale('log')
+    
+    # Panel 2: plot cumulative number of classifications
 
-remaining_time = remaining_classifications / rate
+    ax2 = fig.add_subplot(212)
 
-print '%i days left' % remaining_time
-print 'Will finish on %s' % (today + datetime.timedelta(int(remaining_time))).strftime('%b %d, %Y')
+    fc = remaining_classifications + finished_classifications
+    cumclass = [np.sum(all_class[:i]) for i in range(len(all_class))]
+    ax2.plot_date(all_dates,cumclass,'-',color='orange',linewidth=2)
+    ax2.hlines(fc,all_dates[0],datetime.datetime(2019,1,1),linestyle='--',color='k')
+    
+    ndays = 2000
+    y_remaining = finished_classifications + np.arange(ndays) * rate
+    today = datetime.datetime.today()
+    dates_remaining = [today + datetime.timedelta(i) for i in range(ndays)]
+    ax2.plot_date(dates_remaining,y_remaining,'-.',color='gray',linewidth=1)
+    
+    hiplotlim = (np.round(float(fc)/(10**int(np.log10(fc))),1)+0.2) * 10**int(np.log10(fc))
+    ax2.set_xlim(all_dates[0],datetime.datetime(2019,1,1))
+    ax2.set_ylim(1,hiplotlim)
+    ax2.set_ylabel('Cumulative RGZ classifications',fontsize=16)
+    ax2.set_xlabel('Date',fontsize=16)
 
+    if savefig:
+        fig.savefig('%s/plots/enddate.pdf' % rgz_dir)
+    else:
+        plt.show()
 
+    return None
+
+if __name__ == '__main__':
+
+    # Load the data
+    subjects,classifications,users = rgz.load_rgz_data()
+
+    # Find out how many classifications per day the project averages
+    rate = find_rate(classifications)
+
+    # Compute how many classifications are left to do, given the size of the active dataset
+    remaining_classifications,finished_classifications = how_many_left(subjects,classifications)
+
+    # Find the number of classifications per day over the lifetime of the project
+    all_dates,all_class = count_classifications(subjects,classifications)
+
+    # Load the data
+    plot_time_left(all_dates,all_class,remaining_classifications,finished_classifications,rate,savefig=True)
