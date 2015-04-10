@@ -551,12 +551,6 @@ def jet_triples(triples,pathdict):
 def find_multipeaked_singles(subject,plot=False,verbose=True):
 
     '''
-    Start with an example contour set and work out how to get the number of PEAKS per contour set. Could use same m
-
-    Should use same method as KDE analysis for the location of the optical counterparts, although I might have to regrid
-    '''
-
-    '''
     zid = 'ARG000079s'
     zid = 'ARG0002qyh'
     zid = 'ARG0003l84'
@@ -593,8 +587,11 @@ def find_multipeaked_singles(subject,plot=False,verbose=True):
     kernelsize = 50
     neighborhood = np.ones((kernelsize,kernelsize))
 
+    '''
     Z = np.copy(grid_z2)
-    #Z[np.isnan(grid_z2)] = 1.
+    Z[np.isnan(grid_z2)] = 1.
+    '''
+    Z = grid_z2
 
     local_max = maximum_filter(Z, footprint=neighborhood)==Z
     background = np.isnan(Z)
@@ -606,16 +603,17 @@ def find_multipeaked_singles(subject,plot=False,verbose=True):
     detected_peaks = np.isfinite(Z) & all_peaks
     npeaks = detected_peaks.sum()
 
-    if verbose:
-        print '%i peaks detected' % npeaks
-
     xdp = X[detected_peaks]
     ydp = Y[detected_peaks]
+
+    if verbose:
+        print '%i peaks detected' % npeaks
+        print xdp,ydp
 
     if plot:
         plt.subplot(231,aspect='equal')
         plt.plot(points[:,0], points[:,1], 'k.', ms=1)
-        plt.title('Original')
+        plt.title(subject['zooniverse_id'])
 
         plt.subplot(232)
         plt.imshow(grid_z0.T, extent=(xmin,xmax,ymin,ymax), cmap = cm.cubehelix, origin='lower',interpolation='none')
@@ -650,21 +648,27 @@ def find_multipeaked_singles(subject,plot=False,verbose=True):
         plt.gcf().set_size_inches(18, 12)
         plt.show()
 
+    return xdp,ydp
 
-    return None
-
-def batch_multipeaked_singles(n=10):
+def batch_multipeaked_singles():
 
     tstart = time.time()
-    mps = subjects.find({'state':'complete','metadata.contour_count':1}).limit(n)
+    mps = subjects.find({'state':'complete','metadata.contour_count':1})
 
-    for sub in mps:
-        find_multipeaked_singles(sub,plot=False,verbose=False)
+    with open('%s/bending_angles/multipeaked_singles.csv' % rgz_dir,'w') as f:
+        for subject in mps:
+            xdp,ydp = find_multipeaked_singles(subject,plot=False,verbose=False)
+            if len(xdp) > 0 and len(ydp) > 0:
+                for idx,(xsubpeak,ysubpeak) in enumerate(zip(xdp,ydp)):
+                    print >> f,subject['zooniverse_id'],idx+1,len(xdp),xsubpeak,ysubpeak
         
     tend = time.time()
 
-    print '%.2f seconds for %i records' % (tend - tstart,n)
+    print '%.2f seconds for %i images' % (tend - tstart,n)
+    print '%.2f images per second' % (n/(tend - tstart))
 
     return None
 
-    
+if __name__ == '__main__':
+
+    batch_multipeaked_singles(10)
