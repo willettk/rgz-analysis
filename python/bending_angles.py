@@ -1,5 +1,6 @@
 # Measure bending angles in the RGZ data for double components
 #
+# Kyle Willett, UMN
 
 import rgz
 import consensus
@@ -21,6 +22,11 @@ from matplotlib.pyplot import cm
 from matplotlib.path import Path
 import matplotlib.patches as patches
 
+from scipy.interpolate import griddata
+from scipy.ndimage.filters import maximum_filter
+from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
+
+import time
 import random
 
 rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
@@ -541,3 +547,124 @@ def jet_triples(triples,pathdict):
             '''
     
     return None
+
+def find_multipeaked_singles(subject,plot=False,verbose=True):
+
+    '''
+    Start with an example contour set and work out how to get the number of PEAKS per contour set. Could use same m
+
+    Should use same method as KDE analysis for the location of the optical counterparts, although I might have to regrid
+    '''
+
+    '''
+    zid = 'ARG000079s'
+    zid = 'ARG0002qyh'
+    zid = 'ARG0003l84'
+    sub = subjects.find_one({'zooniverse_id':zid})
+    '''
+    # Download contour data
+    
+    r = requests.get(subject['location']['contours'])
+    contours = r.json()
+    
+    lobe = contours['contours'][0]
+    # Order of bounding box components is (xmax,ymax,xmin,ymin)
+    xmax,ymax,xmin,ymin = lobe[0]['bbox']
+    xsize,ysize = 0.1,0.1
+    X,Y = np.mgrid[xmin:xmax:xsize,ymin:ymax:ysize]
+
+    parr = []
+    valarr = []
+    for cl in lobe:
+        parr.extend([(p['x'],p['y']) for p in cl['arr']])
+        valarr.extend(np.ones(len(cl['arr']))+cl['level'])
+
+    points = np.array([(px,py) for px,py in parr])
+    values = np.array(valarr)
+
+    grid_z0 = griddata(points,values,(X,Y),method='nearest')
+    grid_z1 = griddata(points,values,(X,Y),method='linear')
+    grid_z2 = griddata(points,values,(X,Y),method='cubic')
+
+    # Find the number of peaks
+    # http://stackoverflow.com/questions/3684484/peak-detection-in-a-2d-array
+
+    #neighborhood = generate_binary_structure(2,2)
+    kernelsize = 50
+    neighborhood = np.ones((kernelsize,kernelsize))
+
+    Z = np.copy(grid_z2)
+    #Z[np.isnan(grid_z2)] = 1.
+
+    local_max = maximum_filter(Z, footprint=neighborhood)==Z
+    background = np.isnan(Z)
+    eroded_background = binary_erosion(background, structure=neighborhood, border_value=1)
+    all_peaks = local_max - eroded_background
+
+    # Check if peak is in the background
+
+    detected_peaks = np.isfinite(Z) & all_peaks
+    npeaks = detected_peaks.sum()
+
+    if verbose:
+        print '%i peaks detected' % npeaks
+
+    xdp = X[detected_peaks]
+    ydp = Y[detected_peaks]
+
+    if plot:
+        plt.subplot(231,aspect='equal')
+        plt.plot(points[:,0], points[:,1], 'k.', ms=1)
+        plt.title('Original')
+
+        plt.subplot(232)
+        plt.imshow(grid_z0.T, extent=(xmin,xmax,ymin,ymax), cmap = cm.cubehelix, origin='lower',interpolation='none')
+        plt.title('Nearest')
+
+        plt.subplot(233)
+        plt.imshow(grid_z1.T, extent=(xmin,xmax,ymin,ymax), cmap = cm.cubehelix, origin='lower',interpolation='none')
+        plt.title('Linear')
+
+        plt.subplot(234)
+        plt.imshow(grid_z2.T, extent=(xmin,xmax,ymin,ymax), cmap = cm.cubehelix, origin='lower',interpolation='none')
+        plt.title('Cubic')
+
+        plt.subplot(235)
+        plt.imshow(Z.T, extent=(xmin,xmax,ymin,ymax), cmap = cm.cubehelix, origin='lower')#,vmin=0.999,vmax=1.012)
+        plt.title('Z')
+
+        '''
+        plt.subplot(235)
+        plt.imshow(background.T, extent=(xmin,xmax,ymin,ymax), cmap = cm.cubehelix, origin='lower',interpolation='none')
+        plt.title('Background')
+
+        plt.subplot(235)
+        plt.imshow(eroded_background.T, extent=(xmin,xmax,ymin,ymax), cmap = cm.cubehelix, origin='lower',interpolation='none')
+        plt.title('Eroded background')
+        '''
+
+        plt.subplot(236,aspect='equal')
+        plt.plot(points[:,0], points[:,1], 'k.', ms=1)
+        plt.plot(xdp,ydp,'ro')
+        plt.title('Detected peaks')
+        plt.gcf().set_size_inches(18, 12)
+        plt.show()
+
+
+    return None
+
+def batch_multipeaked_singles(n=10):
+
+    tstart = time.time()
+    mps = subjects.find({'state':'complete','metadata.contour_count':1}).limit(n)
+
+    for sub in mps:
+        find_multipeaked_singles(sub,plot=False,verbose=False)
+        
+    tend = time.time()
+
+    print '%.2f seconds for %i records' % (tend - tstart,n)
+
+    return None
+
+    
