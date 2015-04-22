@@ -2,8 +2,11 @@
 #
 # Kyle Willett, UMN
 
+from __future__ import division
 import rgz
 import consensus
+
+import pandas as pd
 
 from astropy.io import ascii,fits
 from astropy import wcs
@@ -28,6 +31,9 @@ from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
 
 import time
 import random
+
+from collections import Counter
+from pymongo.errors import CursorNotFound
 
 rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 local_fits_path = '%s/RGZ-full.44/FIRST-IMGs' % rgz_dir
@@ -550,6 +556,8 @@ def jet_triples(triples,pathdict):
 
 def find_multipeaked_singles(subject,plot=False,verbose=True):
 
+    # Find multi-peaked single component sources via binary kernels
+
     '''
     zid = 'ARG000079s'
     zid = 'ARG0002qyh'
@@ -650,10 +658,206 @@ def find_multipeaked_singles(subject,plot=False,verbose=True):
 
     return xdp,ydp
 
-def batch_multipeaked_singles():
+def centroid(arr):
+
+    x = [l['x'] for l in arr]
+    y = [l['y'] for l in arr]
+
+    xmean = np.mean(x)
+    ymean = np.mean(y)
+
+    return xmean,ymean
+
+def point_in_poly(x,y,poly):
+
+    n = len(poly)
+    inside = False
+
+    p1x,p1y = poly[0]
+    for i in range(n+1):
+        p2x,p2y = poly[i % n]
+        if y > min(p1y,p2y):
+            if y <= max(p1y,p2y):
+                if x <= max(p1x,p2x):
+                    if p1y != p2y:
+                        xints = (y-p1y)*(p2x-p1x)/(p2y-p1y)+p1x
+                    if p1x == p2x or x <= xints:
+                        inside = not inside
+        p1x,p1y = p2x,p2y
+
+    return inside
+
+def make_polygon(arr):
+
+    x = [l['x'] for l in arr]
+    y = [l['y'] for l in arr]
+
+    polygon = [(xx,yy) for xx,yy in zip(x,y)]
+
+    return polygon
+    
+def mps_cc(subject,plot=True,verbose=True):
+
+    # Find multi-peaked single component sources via contour counting
+
+    '''
+    zid = 'ARG0002qyh'
+    zid = 'ARG000079s'
+    zid = 'ARG0003l84'
+    subject = subjects.find_one({'zooniverse_id':zid})
+    '''
+
+    # Download contour data
+    
+    r = requests.get(subject['location']['contours'])
+    contours = r.json()
+    
+    lobe = contours['contours'][0]
+    xmax,ymax,xmin,ymin = lobe[0]['bbox']
+
+    parr = []
+    valarr = []
+    for cl in lobe:
+        parr.extend([(p['x'],p['y']) for p in cl['arr']])
+        valarr.extend(np.ones(len(cl['arr']))+cl['level'])
+
+    points = np.array([(px,py) for px,py in parr])
+    values = np.array(valarr)
+
+    # Find levels with multiple contours
+    # For each of those levels, check if next level up has geometric center within that contour
+    # If no, then that level's geometric center is a local maximum
+    # If yes, then move up one level and repeat
+
+    k = [l['k'] for l in lobe]
+    ck = Counter(k)
+
+    mlarr = []
+    for x,y in ck.iteritems():
+        if y > 1:
+            mlarr.append(x)
+
+    if max(k) not in mlarr:
+        mlarr.append(max(k))
+
+    mlarr.sort()
+
+    local_maxima = []
+    for m in mlarr:
+        levels = [l for l in lobe if l['k'] == m]
+
+        # Is there a higher level?
+        if m < max(k):
+
+            upper_levels = [l for l in lobe if l['k'] == m+1]
+
+            for level in levels:
+                within = False
+                for ul in upper_levels:
+
+                    gc = centroid(ul['arr'])
+                    polygon = make_polygon(level['arr'])
+                    result = point_in_poly(gc[0],gc[1],polygon)
+                    within += result
+
+                if not within:
+                    gc = centroid(level['arr'])
+                    local_maxima.append((m,gc))
+                    if verbose:
+                        print 'Point in poly, m=%i, center=(%.1f,%.1f)' % (m,gc[0],gc[1])
+
+        # If no higher level, centroids = local max
+        else:
+            for level in levels:
+                gc = centroid(level['arr'])
+                local_maxima.append((m,gc))
+                if verbose:
+                    print 'No higher levels, m=%i, center=(%.1f,%.1f)' % (m,gc[0],gc[1])
+
+    # Plot locations of peaks
+
+    npeaks = len(local_maxima)
+
+    if plot:
+        
+        xc = [x[1][0] for x in local_maxima]
+        yc = [x[1][1] for x in local_maxima]
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+
+        verts_all = []
+        codes_all = []
+        components = contours['contours']
+
+        for comp in components:
+        
+            # Order of bounding box components is (xmax,ymax,xmin,ymin)
+            comp_xmax,comp_ymax,comp_xmin,comp_ymin = comp[0]['bbox']
+            
+            # Only plot radio components identified by the users as the consensus;
+            # check on the xmax value to make sure
+        
+            for idx,level in enumerate(comp):
+                verts = [(p['x'],p['y']) for p in level['arr']]
+                
+                codes = np.ones(len(verts),int) * Path.LINETO
+                codes[0] = Path.MOVETO
+            
+                verts_all.extend(verts)
+                codes_all.extend(codes)
+        
+        try:
+            path = Path(verts_all, codes_all)
+            patch_black = patches.PathPatch(path, facecolor = 'none', edgecolor='black', lw=1)
+        except AssertionError:
+            print 'Users found no components for consensus match of %s' % zid
+        
+        # Plot contours identified as the consensus
+        ax.add_patch(patch_black)
+        
+        ax.plot(xc,yc,'r*',ms=10)
+        ax.set_xlim(0,FIRST_FITS_WIDTH)
+        ax.set_ylim(FIRST_FITS_HEIGHT,0)
+        ax.set_aspect('equal')
+        #ax.title(subject['zooniverse_id'])
+
+        plt.show()
+
+    return local_maxima
+
+def batch_mps_cc():
+
+    # Run all multi-peaked singles using contour-counting technique
 
     tstart = time.time()
     mps = subjects.find({'state':'complete','metadata.contour_count':1})
+    n = mps.count()
+
+    with open('%s/bending_angles/multipeaked_singles_cc.csv' % rgz_dir,'w') as f:
+        for subject in mps:
+            try:
+                local_maxima = mps_cc(subject,plot=False,verbose=False)
+                if len(local_maxima) > 0:
+                    for idx,lm in enumerate(local_maxima):
+                        print >> f,subject['zooniverse_id'],idx+1,len(local_maxima),lm[1][0],lm[1][1]
+            except CursorNotFound:
+                print 'Cursor not found for %s' % subject['zooniverse_id']
+        
+    tend = time.time()
+
+    print '%.2f seconds for %i images' % (tend - tstart,n)
+    print '%.2f images per second' % (n/(tend - tstart))
+
+    return None
+
+def batch_multipeaked_singles():
+
+    # Run all multi-peaked singles using kernel technique
+
+    tstart = time.time()
+    mps = subjects.find({'state':'complete','metadata.contour_count':1})
+    n = mps.count()
 
     with open('%s/bending_angles/multipeaked_singles.csv' % rgz_dir,'w') as f:
         for subject in mps:
@@ -669,6 +873,46 @@ def batch_multipeaked_singles():
 
     return None
 
+def mps_bending_angle():
+
+    df = pd.read_csv('%s/bending_angles/multipeaked_singles.csv' % rgz_dir)
+    df2 = df[(df['nlobes'] == 2)]
+
+    with open('%s/bending_angles/angles_multipeaked_singles.csv' % rgz_dir,'w') as f:
+
+        print >> f,'zid,bending_angle'
+
+        # get optical counterpart for zid (loop over eventually)
+
+        df2_pair1 = df2[::2]
+        df2_pair2 = df2[1::2]
+        _zid = np.array(df2_pair1['zid'])
+        _x1 = np.array(df2_pair1['x'])
+        _y1 = np.array(df2_pair1['y'])
+        _x2 = np.array(df2_pair2['x'])
+        _y2 = np.array(df2_pair2['y'])
+
+        for zid,cx1,cy1,cx2,cy2 in zip(_zid,_x1,_y1,_x2,_y2):
+
+            c = consensus.checksum(zid)
+            if (len(c['answer']) == 1) and (c['n_users']/float(c['n_total']) >= 0.75):
+                if c['answer'][c['answer'].keys()[0]].has_key('ir_peak'):
+                    peak_x,peak_y = c['answer'][c['answer'].keys()[0]]['ir_peak']
+
+                    ir_x = peak_x * first_ir_scale_x
+                    ir_y = peak_y * first_ir_scale_y
+                    alpha = bending_angle(ir_x,ir_y,cx1,cy1,cx2,cy2)
+                    alpha_deg = alpha * 180./np.pi
+
+                    print >> f,'%s,%.3f' % (zid,alpha_deg)
+                    #print ir_x,ir_y,cx1,cy1,cx2,cy2
+                    #print alpha_deg
+
+            else:
+                print "Had more than 1 IR sources and/or less than 75 percent consensus for %s" % zid
+
+    return None
+
 if __name__ == '__main__':
 
-    batch_multipeaked_singles(10)
+    mps_bending_angle()
