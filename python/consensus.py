@@ -1,3 +1,5 @@
+from __future__ import division
+
 from pymongo import MongoClient
 from collections import Counter
 import datetime
@@ -22,6 +24,7 @@ from PIL import Image
 import cStringIO
 import urllib
 
+import json
 import collinearity
 
 # MongoDB parameters
@@ -59,7 +62,7 @@ rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 
 # Find the consensus classification for a single subject
 
-def checksum(zid,experts_only=False,excluded=[],no_anonymous=False):
+def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_data=True):
 
     # Find the consensus for all users who have classified a particular galaxy
 
@@ -215,13 +218,17 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False):
 
     for k,gal in enumerate(goodann):
         xmax_temp = []
+        bbox_temp = []
         try:
             for v in gal['radio'].itervalues():
                 xmax_temp.append(float(v['xmax']))
+                bbox_temp.append((v['xmax'],v['ymax'],v['xmin'],v['ymin']))
             checksum2 = round(sum(xmax_temp),3)
             answer[checksum2] = {}
             answer[checksum2]['ind'] = k
             answer[checksum2]['xmax'] = xmax_temp
+            # Add bounding box?
+            answer[checksum2]['bbox'] = bbox_temp
         except KeyError:
             print gal, zid
         except AttributeError:
@@ -316,7 +323,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False):
                 local_max = maximum_filter(Z, footprint=neighborhood)==Z
                 background = (Z==0)
                 eroded_background = binary_erosion(background, structure=neighborhood, border_value=1)
-                detected_peaks = local_max - eroded_background
+                detected_peaks = local_max ^ eroded_background
                 
                 npeaks = detected_peaks.sum()
     
@@ -337,10 +344,11 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False):
                 for k,v in answer.iteritems():
                     if v['ind'] == xk:
                         answer[k]['ir_peak'] = (xpeak,ypeak)
-                        answer[k]['peak_data'] = pd
-                        answer[k]['ir_x'] = x_exists
-                        answer[k]['ir_y'] = y_exists
-        
+                        # Don't write to consensus for serializable JSON object 
+                        if write_peak_data:
+                            answer[k]['peak_data'] = pd
+                            answer[k]['ir_x'] = x_exists
+                            answer[k]['ir_y'] = y_exists
         else:
 
             for k,v in answer.iteritems():
@@ -713,7 +721,7 @@ def make_75():
 
                     # Write to file
 
-                    if ratio >= 0.15:
+                    if ratio >= 0.75:
                         print >> writefile, '%s,%s,%.4f,%.4f,%i,%i,%i,%.2f' % (consensus['source'], zid, world[0][0], world[0][1], n_lobes, n_users, n_total, ratio)
 
             # Check progress by printing to screen every 100 classifications
@@ -762,16 +770,26 @@ def run_sample(run_all=False,do_plot=False):
     N = 0
     
     if run_all:
-        zooniverse_ids = [cz['zooniverse_id'] for cz in subjects.find({'status':'complete'})]
+        zooniverse_ids = [cz['zooniverse_id'] for cz in subjects.find({'status':'complete','tutorial':False})]
     else:
+        # Expert classifications of gold sample
         #with open('%s/goldstandard/gs_zids.txt' % rgz_dir,'rb') as f:
         with open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir,'rb') as f:
             zooniverse_ids = [line.rstrip() for line in f]
     
+    print 'Loaded data; running on %i completed RGZ subjects' % len(zooniverse_ids)
+
+    fj = open('%s/json/consensus.json' % rgz_dir,'w')
+    fc = open('%s/csv/consensus.csv' % rgz_dir,'w')
+
+    # CSV header
+    fc.write('zooniverse_id,FIRST_id,n_users,n_total,consensus_level,label,n_radio,bbox,ir_peak\n')
+    ad = alphadict()
+
     for zid in zooniverse_ids:
     
         N += 1
-        consensus = checksum(zid)
+        consensus = checksum(zid,write_peak_data=do_plot)
         if do_plot:
             plot_consensus(consensus,save_fig=True)
 
@@ -779,3 +797,53 @@ def run_sample(run_all=False,do_plot=False):
         if not N % 100:
             print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
 
+        # Save results to files
+
+        if consensus is not None:
+
+            # JSON
+
+            json.dump(consensus,fj)
+            fj.write('\n')
+
+            # CSV
+
+            ratio = (consensus['n_users']/consensus['n_total'])
+            for ans in consensus['answer'].itervalues():
+                try:
+                    ir_peak = ans['ir_peak']
+                except KeyError:
+                    ir_peak = ans['ir'] if ans.has_key('ir') else (-99,-99)
+
+                fc.write('%s,%s,%4i,%4i,%.3f,%2i,%s,%s,%s\n' % 
+                    (
+                        consensus['zid'],consensus['source'],consensus['n_users'],consensus['n_total'],ratio,
+                        len(ans['xmax']),ad[ans['ind']],bbox_unravel(ans['bbox']),ir_peak
+                        )
+                    )
+
+
+    fc.close()
+    fj.close()
+    print '\nCompleted consensus.'
+
+    return None
+
+def bbox_unravel(bbox):
+
+    bboxes = []
+    for lobe in bbox:
+        t = [float(x) for x in lobe]
+        t = tuple(t)
+        bboxes.append(t)
+
+    return bboxes
+
+def alphadict():
+
+    alphabet_str = 'abcdefghijklmnopqrstuvwxyz'
+    ad = {}
+    for idx,letter in enumerate(alphabet_str):
+        ad[idx] = letter
+
+    return ad
