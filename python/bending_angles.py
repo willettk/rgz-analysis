@@ -32,6 +32,8 @@ from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
 import time
 import random
 
+from astroML.plotting import hist as histML
+    
 from collections import Counter
 from pymongo.errors import CursorNotFound
 
@@ -294,8 +296,6 @@ def plothist():
     fig = plt.figure(2,(8,8))
     ax1 = fig.add_subplot(111)
     
-    from astroML.plotting import hist as histML
-    
     c1 = '#e41a1c'
     c2 = '#377eb8'
     c2 = '#a6cee3'
@@ -492,7 +492,7 @@ def plot_one_double(dbl,pathdict,figno=1,save_fig=False):
     
     # Save hard copy of the figure
     if save_fig:
-        fig.savefig('%s/bending_angles/plots/ba_%s.pdf' % (rgz_dir,zid))
+        fig.savefig('%s/bending_angles/plots/individual/ba_%s.pdf' % (rgz_dir,zid))
         plt.close()
     else:
         plt.show()
@@ -830,24 +830,57 @@ def batch_mps_cc():
 
     # Run all multi-peaked singles using contour-counting technique
 
+    '''
+    5013.01 seconds for 38750 images
+    7.73 images per second
+    '''
+
     tstart = time.time()
-    mps = subjects.find({'state':'complete','metadata.contour_count':1})
+    mps = subjects.find({'state':'complete','metadata.contour_count':1},timeout=False)
     n = mps.count()
 
     with open('%s/bending_angles/multipeaked_singles_cc.csv' % rgz_dir,'w') as f:
         for subject in mps:
-            try:
-                local_maxima = mps_cc(subject,plot=False,verbose=False)
-                if len(local_maxima) > 0:
-                    for idx,lm in enumerate(local_maxima):
-                        print >> f,subject['zooniverse_id'],idx+1,len(local_maxima),lm[1][0],lm[1][1]
-            except CursorNotFound:
-                print 'Cursor not found for %s' % subject['zooniverse_id']
+            local_maxima = mps_cc(subject,plot=False,verbose=False)
+            if len(local_maxima) > 0:
+                for idx,lm in enumerate(local_maxima):
+                    print >> f,subject['zooniverse_id'],idx+1,len(local_maxima),lm[1][0],lm[1][1]
         
+    mps.close()
     tend = time.time()
 
     print '%.2f seconds for %i images' % (tend - tstart,n)
     print '%.2f images per second' % (n/(tend - tstart))
+
+    return None
+
+def plot_mps_cc():
+
+    # How many of the single-contour sources actually have more than one peak?
+
+    from astropy.io import ascii
+    data = ascii.read('%s/bending_angles/multipeaked_singles_cc.csv' % rgz_dir,delimiter=' ',data_start=1,header_start=0)
+
+    c = Counter(data['zid'])
+
+    fig = plt.figure(1,(12,6))
+    ax1 = fig.add_subplot(121)
+
+    histML(c.values(), bins=range(10), ax=ax1, histtype='step', lw=2, alpha=1.0, color='#377eb8',log=True)
+    ax1.set_xlim(1,10)
+    ax1.set_xlabel(r'$N_{peaks}$',fontsize=18)
+    ax1.set_ylabel('Count')
+    ax1.set_title('RGZ 1-contour sources')
+
+    ax2 = fig.add_subplot(122)
+    histML(c.values(), bins=range(10), ax=ax2, histtype='step', lw=2, alpha=1.0, color='#e41a1c',cumulative=True,normed=True)
+    ax2.set_xlabel(r'$N_{peaks}$',fontsize=18)
+    ax1.set_title('RGZ 1-contour sources')
+    ax2.set_ylabel('Cumulative fraction')
+
+    fig.savefig('%s/bending_angles/plots/mps_cc.pdf' % rgz_dir)
+
+    plt.show() 
 
     return None
 
