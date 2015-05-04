@@ -238,7 +238,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
         ir_x[k] = []
         ir_y[k] = []
     
-    # Now loop over the galaxies themselves
+    # Now loop over all sets of classifications to get the IR counterparts
     for c in clist:
         if c['checksum'] == mc_checksum:
     
@@ -251,24 +251,41 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
                     except TypeError:
                         xmax_checksum = -99
 
-                    k = answer[xmax_checksum]['ind']
+                    try:
+                        k = answer[xmax_checksum]['ind']
 
-                    if ann['ir'] == 'No Sources':
-                        ir_x[k].append(-99)
-                        ir_y[k].append(-99)
-                    else:
-                        # Only takes the first IR source right now; NEEDS TO BE MODIFIED.
+                        if ann['ir'] == 'No Sources':
+                            ir_x[k].append(-99)
+                            ir_y[k].append(-99)
+                        else:
+                            # Only takes the first IR source right now; NEEDS TO BE MODIFIED.
 
-                        ir_x[k].append(float(ann['ir']['0']['x']))
-                        ir_y[k].append(float(ann['ir']['0']['y']))
-
+                            ir_x[k].append(float(ann['ir']['0']['x']))
+                            ir_y[k].append(float(ann['ir']['0']['y']))
+                    except KeyError:
+                        print '"No radio" still appearing as valid consensus option.'
 
     # Perform a kernel density estimate on the data for each galaxy
     
     scale_ir = 500./424.
 
     peak_data = []
+
+    # Remove empty IR peaks if they exist
+
     for (xk,xv),(yk,yv) in zip(ir_x.iteritems(),ir_y.iteritems()):
+        
+        if len(xv) == 0:
+            ir_x.pop(xk)
+        if len(yv) == 0:
+            ir_y.pop(yk)
+
+    assert len(ir_x) == len(ir_y),'Lengths of ir_x (%i) and ir_y (%i) are not the same' % (len(ir_x),len(ir_y))
+
+    for (xk,xv),(yk,yv) in zip(ir_x.iteritems(),ir_y.iteritems()):
+        
+        if len(xv) == 0:
+            irx
 
         pd = {}
     
@@ -289,9 +306,9 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
             try:
                 values = np.vstack([x_exists, y_exists])
             except ValueError:
+                # Breaks on the tutorial subject. Find out why len(x) != len(y)
                 print zid
-                print x_exists,y_exists
-                print len(x_exists),len(y_exists)
+                print 'Length of IR x array: %i; Length of IR y array: %i' % (len(x_exists),len(y_exists))
             try:
                 kernel = stats.gaussian_kde(values)
             except LinAlgError:
@@ -684,6 +701,7 @@ def make_75():
 
     # Loop over all completed galaxies
 
+    print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
     for zid in zooniverse_ids[idx_start:]:
 
         N += 1
@@ -770,32 +788,34 @@ def run_sample(run_all=False,do_plot=False):
     N = 0
     
     if run_all:
-        zooniverse_ids = [cz['zooniverse_id'] for cz in subjects.find({'status':'complete','tutorial':False})]
+        zooniverse_ids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','tutorial':{'$exists':False}})]
     else:
         # Expert classifications of gold sample
         #with open('%s/goldstandard/gs_zids.txt' % rgz_dir,'rb') as f:
         with open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir,'rb') as f:
             zooniverse_ids = [line.rstrip() for line in f]
     
+    restart_idx = 47000
+    N += restart_idx
+    zooniverse_ids = zooniverse_ids[restart_idx:]
     print 'Loaded data; running on %i completed RGZ subjects' % len(zooniverse_ids)
 
-    fj = open('%s/json/consensus.json' % rgz_dir,'w')
-    fc = open('%s/csv/consensus.csv' % rgz_dir,'w')
-
-    # CSV header
-    fc.write('zooniverse_id,FIRST_id,n_users,n_total,consensus_level,label,n_radio,bbox,ir_peak\n')
     ad = alphadict()
 
     for zid in zooniverse_ids:
     
-        N += 1
+        # Check progress and save every 1000 classifications
+        if not N % 1000:
+            print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
+            fj = open('%s/json/consensus_%i.json' % (rgz_dir,N),'w')
+            fc = open('%s/csv/consensus_%i.csv' % (rgz_dir,N),'w')
+
+            # CSV header
+            fc.write('zooniverse_id,FIRST_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
+
         consensus = checksum(zid,write_peak_data=do_plot)
         if do_plot:
             plot_consensus(consensus,save_fig=True)
-
-        # Check progress by printing to screen every 100 classifications
-        if not N % 100:
-            print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
 
         # Save results to files
 
@@ -815,16 +835,24 @@ def run_sample(run_all=False,do_plot=False):
                 except KeyError:
                     ir_peak = ans['ir'] if ans.has_key('ir') else (-99,-99)
 
-                fc.write('%s,%s,%4i,%4i,%.3f,%2i,%s,%s,%s\n' % 
-                    (
-                        consensus['zid'],consensus['source'],consensus['n_users'],consensus['n_total'],ratio,
-                        len(ans['xmax']),ad[ans['ind']],bbox_unravel(ans['bbox']),ir_peak
+                try:
+                    fc.write('%s,%s,%4i,%4i,%.3f,%2i,%s,"%s","%s"\n' % 
+                        (
+                            consensus['zid'],consensus['source'],consensus['n_users'],consensus['n_total'],ratio,
+                            len(ans['xmax']),ad[ans['ind']],bbox_unravel(ans['bbox']),ir_peak
+                            )
                         )
-                    )
+                except KeyError:
+                    print zid
+                    print consensus
 
 
-    fc.close()
-    fj.close()
+        if not (N+1) % 1000:
+            fc.close()
+            fj.close()
+
+        N += 1
+
     print '\nCompleted consensus.'
 
     return None
@@ -847,3 +875,7 @@ def alphadict():
         ad[idx] = letter
 
     return ad
+
+if __name__ == "__main__":
+    print 'No plotting',datetime.datetime.now().strftime('%H:%M:%S.%f')
+    run_sample(run_all=True,do_plot=False)
