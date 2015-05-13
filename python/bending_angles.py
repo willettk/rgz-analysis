@@ -858,7 +858,6 @@ def plot_mps_cc():
 
     # How many of the single-contour sources actually have more than one peak?
 
-    from astropy.io import ascii
     data = ascii.read('%s/bending_angles/multipeaked_singles_cc.csv' % rgz_dir,delimiter=' ',data_start=1,header_start=0)
 
     c = Counter(data['zid'])
@@ -883,6 +882,61 @@ def plot_mps_cc():
     plt.show() 
 
     return None
+
+def mps_cc_bendingangle():
+
+    # What's the distribution of bending angles for the multipeaked double sources?
+
+    '''
+    Two sets:
+        radio triples, no IR souces
+        radio doubles, IR counterpart
+    '''
+
+    # Radio triples
+
+    data = ascii.read('%s/bending_angles/multipeaked_singles_cc.csv' % rgz_dir,delimiter=' ',data_start=1,header_start=0)
+
+    mps_triples = data[data['ntotal'] == 3]
+    mps_triples_ids = set(mps_triples['zid'])
+
+    # Check if they had IR counterpart
+
+    consensus_data = ascii.read('%s/csv/consensus_all.csv' % rgz_dir,delimiter=',',data_start=1,header_start=0)
+    alpha_deg = []
+    for id3 in mps_triples_ids:
+        cons = consensus_data[consensus_data['zooniverse_id'] == id3]
+        # Only keep ones without IR counterpart
+        if cons['ir_peak'] == '(-99, -99)':
+            t3 = mps_triples[mps_triples['zid'] == id3]
+            alpha = bending_angle(t3[0]['xc'],t3[0]['yc'],t3[1]['xc'],t3[1]['yc'],t3[2]['xc'],t3[2]['yc'])
+            alpha_deg.append(alpha * 180./np.pi)
+
+    fig = plt.figure(2,(8,8))
+    ax1 = fig.add_subplot(111)
+    
+    c1 = '#e41a1c'
+    c2 = '#377eb8'
+    c2 = '#a6cee3'
+    c3 = '#386cb0'
+    
+    histML(alpha_deg, bins=20, ax=ax1, histtype='stepfilled', alpha=1.0, color=c1, range=(0,180),label='Single-contour, triple-peaked radio sources w/o IR')
+    ax1.set_xlim(0,180)
+    ax1.vlines(x=np.median(alpha_deg),ymin=ax1.get_ylim()[0],ymax = ax1.get_ylim()[1],color='k',linestyle='--')
+    ax1.set_xlabel(r'bending angle [deg]',fontsize=24)
+    ax1.set_ylabel('count',fontsize=20)
+    plt.tick_params(axis='both', which='major', labelsize=20)
+    
+    ax1.legend(loc='upper left')
+    #plt.show()
+    
+    fig.tight_layout()
+    fig.savefig('%s/bending_angles/plots/mps_cc_bendingangle.pdf' % rgz_dir)
+
+
+    return None
+
+
 
 def batch_multipeaked_singles():
 
