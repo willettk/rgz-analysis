@@ -137,30 +137,37 @@ def plot_empirical_distribution_function(dfc):
 
     ax1.plot(np.arange(len(volunteers))+1,cdf)
 
-    ax1.set_title('Empirical distribution of work in RGZ')
-    ax1.set_xlabel('Number of volunteers')
-    ax1.set_ylabel('Percent of total classifications')
+    #ax1.set_title('Empirical distribution of work in RGZ')
+    ax1.set_xlabel('Number of volunteers',fontsize=18)
+    ax1.set_ylabel('Percent of total classifications',fontsize=18)
     ax1.set_xscale('log')
     ax1.set_ylim(0,1)
 
     varr = (100,1000)
-    for v in varr:
-        ax1.plot([1,v],[cdf[v]]*2,'k--')
-        ax1.plot([v]*2,[0,cdf[v]],'k--')
+    lsarr = ('--','-.')
+    for v,ls in zip(varr,lsarr):
+        ax1.plot([1,v],[cdf[v]]*2,'k'+ls)
+        ax1.plot([v]*2,[0,cdf[v]],'k'+ls)
 
-    ax1.text(1.3,cdf[0],'Anon.',ha='left',fontsize=8)
-    ax1.text(100,cdf[100],'Anon. + 100',ha='right',va='baseline',fontsize=8)
-    ax1.text(1000,cdf[1000],'Anon. + 1000',ha='right',va='bottom',fontsize=8)
+    ax1.text(1.3,cdf[0],'Anonymous users',ha='left',fontsize=12)
+    #ax1.text(100,cdf[100]*1.1,'Anon. + 100',ha='right',va='baseline',fontsize=8)
+    #ax1.text(1000,cdf[1000]*1.1,'Anon. + 1000',ha='right',va='bottom',fontsize=8)
 
+    '''
     ax1.text(0.95,0.30,'Anonymous users have done %2i%% of the total work.' % (cdf[0]*100.),ha='right',fontsize=12,transform=ax1.transAxes)
     ax1.text(0.95,0.25,'The top  100 logged-in users have done %2i%% of the total work.' % ((cdf[100] - cdf[0])*100.),ha='right',fontsize=12,transform=ax1.transAxes)
     ax1.text(0.95,0.20,'The top 1000 logged-in users have done %2i%% of the total work.' % ((cdf[1000] - cdf[0])*100.),ha='right',fontsize=12,transform=ax1.transAxes)
+    '''
+    print('Anonymous users have done %2i%% of the total work.' % (cdf[0]*100.))
+    print('The top  100 logged-in users have done %2i%% of the total work.' % ((cdf[100] - cdf[0])*100.))
+    print('The top 1000 logged-in users have done %2i%% of the total work.' % ((cdf[1000] - cdf[0])*100.))
 
     fig.show()
     fig.set_tight_layout(True)
 
     # Save hard copy of the figure
     fig.savefig('%s/distribution_of_work.png' % plot_dir)
+    fig.savefig('/Users/willettk/Dropbox/RGZ/fig4.eps')
 
     return None
 
