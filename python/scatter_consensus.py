@@ -21,6 +21,10 @@ vcn = np.array([3, 1, 3, 1, 1, 1, 1, 3, 1, 1, 1, 2, 2, 3, 2, 3, 2, 1, 3, 2, 1, 3
 
 ve = np.array([False, True, True, True, True, True, True, False, True, True, False, False, False, True, True, True, True, True, True, True, True, True, True, False, False, False, False, True, True, True, True, True, True, True, False, True, True, True, True, True, True, False, True, True, True, True, True, False, True, True, True, True, False, False, True, True, True, False, True, True, True, True, True, True, False, True, True, False, True, True, True, False, False, False, False, False, True, True, True, True, True, True, False, True, True, True, True, True, False, False, True, True, True, False, True, True, True, True, True, True])
 
+ir_position_agrees = np.ones(len(cv),dtype=bool)
+for i in (10,11,12,23,25,52,53,72,73,82,88,89):
+    ir_position_agrees[i] = False
+
 names = ['ARG00000b0', 'ARG00003y9', 'ARG00004rl', 'ARG00004um', 'ARG000051b', 'ARG000051q', 'ARG00008v5', 'ARG000090l', 'ARG0000cps', 'ARG0000czo', 'ARG0000d56', 'ARG0000dju', 'ARG0000fle', 'ARG0000jqj', 'ARG0000lv1', 'ARG0000mpd', 'ARG0000nbh', 'ARG0000opo', 'ARG0000p2c', 'ARG0000pfu', 'ARG0000slz', 'ARG0000t1w', 'ARG0000v25', 'ARG0000vcr', 'ARG0000y8j', 'ARG0000yhw', 'ARG0000yw0', 'ARG0000zaz', 'ARG0000zeh', 'ARG00011aj', 'ARG000180p', 'ARG00018qp', 'ARG0001bnj', 'ARG0001c6k', 'ARG0001d12', 'ARG0001e8e', 'ARG0001fsk', 'ARG0001fsn', 'ARG0001gxs', 'ARG0001gxz', 'ARG0001kqx', 'ARG0001lau', 'ARG0001mzk', 'ARG0001n7u', 'ARG0001nbb', 'ARG0001o4l', 'ARG0001p9x', 'ARG0001qy6', 'ARG0001r2h', 'ARG0001rcw', 'ARG0001u0z', 'ARG0001ugd', 'ARG0001wnd', 'ARG0001ynm', 'ARG00020o8', 'ARG00021gd', 'ARG00022wv', 'ARG00025a1', 'ARG000269p', 'ARG00029d6', 'ARG0002ato', 'ARG0002c2p', 'ARG0002ehu', 'ARG0002gz5', 'ARG0002jz8', 'ARG0002k8k', 'ARG0002kcp', 'ARG0002kve', 'ARG0002mfx', 'ARG0002nl1', 'ARG0002pf3', 'ARG0002qfa', 'ARG0002qj7', 'ARG0002r8g', 'ARG0002rwh', 'ARG0002rx3', 'ARG0002w9n', 'ARG0002wel', 'ARG0002wze', 'ARG0002xat', 'ARG0002y2z', 'ARG0002yeu', 'ARG0002yms', 'ARG0002yzd', 'ARG000316y', 'ARG00031s5', 'ARG00031s6', 'ARG00037z5', 'ARG00039w1', 'ARG0003aob', 'ARG0003bq8', 'ARG0003bul', 'ARG0003ccm', 'ARG0003dzd', 'ARG0003glu', 'ARG0003ioj', 'ARG0003j0a', 'ARG0003j4t', 'ARG0003jlu', 'ARG0003knd']
 
 # Plot the agreement in consensus for the 100 galaxy control sample, experts vs. volunteers
@@ -105,18 +109,26 @@ ce_av_disagree = np.logical_not(ve) & (ce < 0.66) & (cv >= 0.88)
 ce_bv_disagree = np.logical_not(ve) & (ce < 0.66) & (cv < 0.88) & (cv >= 0.66)
 ce_cv_disagree = np.logical_not(ve) & (ce < 0.66) & (cv < 0.66)
 
-print 'A & &      %2i      &   %2i      &      %2i \\\\' % (ae_av.sum(),ae_bv.sum(),ae_cv.sum())
-print 'B & &      %2i      &   %2i      &      %2i \\\\' % (be_av.sum(),be_bv.sum(),be_cv.sum())
+print 'A & &      %2i      &   %2i      &      %2i \\\\'    % (ae_av.sum(),ae_bv.sum(),ae_cv.sum())
+print 'B & &      %2i      &   %2i      &      %2i \\\\'    % (be_av.sum(),be_bv.sum(),be_cv.sum())
 print 'C & &      %2i      &   %2i      &      %2i \\\\ \n' % (ce_av.sum(),ce_bv.sum(),ce_cv.sum())
 
-print 'A & &      %2i      &   %2i      &      %2i \\\\' % (ae_av_agree.sum(),ae_bv_agree.sum(),ae_cv_agree.sum())
-print 'B & &      %2i      &   %2i      &      %2i \\\\' % (be_av_agree.sum(),be_bv_agree.sum(),be_cv_agree.sum())
-print 'C & &      %2i      &   %2i      &      %2i \\\\' % (ce_av_agree.sum(),ce_bv_agree.sum(),ce_cv_agree.sum())
+print 'A & &      %2i      &   %2i      &      %2i \\\\'    % (ae_av_agree.sum(),ae_bv_agree.sum(),ae_cv_agree.sum())
+print 'B & &      %2i      &   %2i      &      %2i \\\\'    % (be_av_agree.sum(),be_bv_agree.sum(),be_cv_agree.sum())
+print 'C & &      %2i      &   %2i      &      %2i \\\\'    % (ce_av_agree.sum(),ce_bv_agree.sum(),ce_cv_agree.sum())
 print '\\hline'
-print 'A & &      %2i      &   %2i      &      %2i \\\\' % (ae_av_disagree.sum(),ae_bv_disagree.sum(),ae_cv_disagree.sum())
-print 'B & &      %2i      &   %2i      &      %2i \\\\' % (be_av_disagree.sum(),be_bv_disagree.sum(),be_cv_disagree.sum())
+print 'A & &      %2i      &   %2i      &      %2i \\\\'    % (ae_av_disagree.sum(),ae_bv_disagree.sum(),ae_cv_disagree.sum())
+print 'B & &      %2i      &   %2i      &      %2i \\\\'    % (be_av_disagree.sum(),be_bv_disagree.sum(),be_cv_disagree.sum())
 print 'C & &      %2i      &   %2i      &      %2i \\\\ \n' % (ce_av_disagree.sum(),ce_bv_disagree.sum(),ce_cv_disagree.sum())
 
 print 'Total galaxies: %i' % np.sum((ae_av.sum(),ae_bv.sum(),ae_cv.sum(), be_av.sum(),be_bv.sum(),be_cv.sum(), ce_av.sum(),ce_bv.sum(),ce_cv.sum()))
 print 'Number that agreed: %i' % np.sum(ve)
 print 'Number that agreed in A or B: %i' % np.sum(ve[ce >= 0.66])
+
+print '\nTotal A galaxies: %i' % np.sum([ae_av.sum(),ae_bv.sum(),ae_cv.sum()])
+print 'Total B galaxies: %i' % np.sum([be_av.sum(),be_bv.sum(),be_cv.sum()])
+print 'Total C galaxies: %i' % np.sum([ce_av.sum(),ce_bv.sum(),ce_cv.sum()])
+
+ab_no_ir = np.logical_not(ir_position_agrees[ae_av_disagree | ae_bv_disagree | ae_cv_disagree | be_av_disagree | be_bv_disagree | be_cv_disagree]).sum()
+total = np.sum([(ae_av_disagree.sum(),ae_bv_disagree.sum(),ae_cv_disagree.sum(),be_av_disagree.sum(),be_bv_disagree.sum(),be_cv_disagree.sum())])
+print '\n%i/%i of the expert A/B sample with which volunteers disagreed were due to IR differences, not radio' % (ab_no_ir,total)
