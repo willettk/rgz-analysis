@@ -785,8 +785,6 @@ def run_sample(run_all=False,do_plot=False):
 
     # Run all galaxies in the expert sample
     
-    N = 0
-    
     if run_all:
         zooniverse_ids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','tutorial':{'$exists':False}})]
     else:
@@ -795,7 +793,8 @@ def run_sample(run_all=False,do_plot=False):
         with open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir,'rb') as f:
             zooniverse_ids = [line.rstrip() for line in f]
     
-    restart_idx = 47000
+    N = 0
+    restart_idx = 0
     N += restart_idx
     zooniverse_ids = zooniverse_ids[restart_idx:]
     print 'Loaded data; running on %i completed RGZ subjects' % len(zooniverse_ids)
