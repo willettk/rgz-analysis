@@ -902,7 +902,7 @@ def mps_cc_bendingangle():
 
     # Check if they had IR counterpart
 
-    consensus_data = ascii.read('%s/csv/consensus_all.csv' % rgz_dir,delimiter=',',data_start=1,header_start=0)
+    consensus_data = ascii.read('%s/csv/consensus.csv' % rgz_dir,delimiter=',',data_start=1,header_start=0)
     alpha_deg = []
     for id3 in mps_triples_ids:
         cons = consensus_data[consensus_data['zooniverse_id'] == id3]
@@ -911,27 +911,30 @@ def mps_cc_bendingangle():
             t3 = mps_triples[mps_triples['zid'] == id3]
             alpha = bending_angle(t3[0]['xc'],t3[0]['yc'],t3[1]['xc'],t3[1]['yc'],t3[2]['xc'],t3[2]['yc'])
             alpha_deg.append(alpha * 180./np.pi)
+        else:
+            print cons['ir_peak']
 
-    fig = plt.figure(2,(8,8))
-    ax1 = fig.add_subplot(111)
-    
-    c1 = '#e41a1c'
-    c2 = '#377eb8'
-    c2 = '#a6cee3'
-    c3 = '#386cb0'
-    
-    histML(alpha_deg, bins=20, ax=ax1, histtype='stepfilled', alpha=1.0, color=c1, range=(0,180),label='Single-contour, triple-peaked radio sources w/o IR')
-    ax1.set_xlim(0,180)
-    ax1.vlines(x=np.median(alpha_deg),ymin=ax1.get_ylim()[0],ymax = ax1.get_ylim()[1],color='k',linestyle='--')
-    ax1.set_xlabel(r'bending angle [deg]',fontsize=24)
-    ax1.set_ylabel('count',fontsize=20)
-    plt.tick_params(axis='both', which='major', labelsize=20)
-    
-    ax1.legend(loc='upper left')
-    #plt.show()
-    
-    fig.tight_layout()
-    fig.savefig('%s/bending_angles/plots/mps_cc_bendingangle.pdf' % rgz_dir)
+    # OK - currently claims there aren't any
+
+    if len(alpha_deg) > 0:
+        fig = plt.figure(2,(8,8))
+        ax1 = fig.add_subplot(111)
+        
+        c1 = '#e41a1c'
+        c2 = '#a6cee3'
+        c3 = '#386cb0'
+        
+        histML(alpha_deg, bins=20, ax=ax1, histtype='stepfilled', alpha=1.0, color=c1, range=(0,180),label='Single-contour, triple-peaked radio sources w/o IR')
+        ax1.set_xlim(0,180)
+        ax1.vlines(x=np.median(alpha_deg),ymin=ax1.get_ylim()[0],ymax = ax1.get_ylim()[1],color='k',linestyle='--')
+        ax1.set_xlabel(r'bending angle [deg]',fontsize=24)
+        ax1.set_ylabel('count',fontsize=20)
+        plt.tick_params(axis='both', which='major', labelsize=20)
+        
+        ax1.legend(loc='upper left')
+        
+        fig.tight_layout()
+        fig.savefig('%s/bending_angles/plots/mps_cc_bendingangle.pdf' % rgz_dir)
 
 
     return None
