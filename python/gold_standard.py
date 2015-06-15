@@ -22,8 +22,8 @@ experts=("42jkb", "ivywong", "stasmanian", "klmasters", "Kevin", "akapinska", "e
     
 def get_galaxies():
     
-    with open('%s/goldstandard/gs_zids.txt' % rgz_dir) as f:
-    #with open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir) as f:
+    #with open('%s/goldstandard/gs_zids.txt' % rgz_dir) as f:
+    with open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir) as f:
         gs = f.readlines()
     
     gals = [g.strip() for g in gs]
@@ -68,7 +68,7 @@ def top_volunteers(gs):
 def compare(zid,user_name,verbose=True):
 
     their_answer = consensus.one_answer(zid,user_name)
-    expert_answer = consensus.checksum(zid,save_fig=True)
+    expert_answer = consensus.checksum(zid)
 
     nt = len(their_answer)
     nx = len(expert_answer)
@@ -137,8 +137,10 @@ def barchart(expert=False):
 
     # Load saved data from pickled files
 
-    file_compare = 'gs_compare.pkl'
-    file_topusers = 'gs_topusers.pkl'
+    #file_compare = 'gs_compare.pkl'
+    #file_topusers = 'gs_topusers.pkl'
+    file_compare = 'gs_compare_ex.pkl'
+    file_topusers = 'gs_compare_vol.pkl'
 
     with open('%s/goldstandard/%s' % (rgz_dir,file_compare), 'rb') as pkl_file:
         data = pickle.load(pkl_file)
