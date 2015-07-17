@@ -93,7 +93,6 @@ def get_singles_large():
 
     return singles_large
 
-
 def make_pathdict():
 
     with open('%s/csv/rgz_75_completed_zid.csv' % rgz_dir,'r') as f:
@@ -116,13 +115,15 @@ def make_pathdict():
 def all_doubles_pixradio(doubles,pathdict):
 
     with open('%s/bending_angles/angles_double_pixradio.csv' % rgz_dir,'w') as f:
-        for dbl in doubles:
-            irx,iry,radio_components = pix_convert(dbl,pathdict)
+        print >> f,'zid,bending_angle'
+        for double in doubles:
+            irx,iry,radio_components = pix_convert(double,pathdict)
             if irx is not None:
                 xc,yc,radio_centroids = pix_radio(irx,iry,radio_components)
                 alpha = bending_angle(xc,yc,radio_centroids[0][0],radio_centroids[0][1],radio_centroids[1][0],radio_centroids[1][1])
+                alpha_deg = alpha * 180./np.pi
                 if alpha is not None:
-                    print >> f,alpha*180/np.pi
+                    print >> f,'%s,%.3f' % (double['zid'],alpha_deg)
 
     return None
 
@@ -268,11 +269,19 @@ def pix_radio(irx,iry,radio_components):
     radio_centroids = []
     for comp in radio_components:
         bbox = comp[0]['bbox']
+
         '''
         cx = np.median((bbox[0],bbox[2])) / first_ir_scale_x
         cy = np.median(((bbox[1]/first_ir_scale_y),(bbox[3]/first_ir_scale_y)))
         '''
+
+        '''
         cxu,cyu = centroid(bbox)
+        '''
+
+        cxu = np.median((bbox[0],bbox[2]))
+        cyu = np.median((bbox[1],bbox[3]))
+
         cx,cy = cxu/first_ir_scale_x,cyu/first_ir_scale_y
         radio_centroids.append((cx,cy))
 
@@ -281,40 +290,57 @@ def pix_radio(irx,iry,radio_components):
 
     return xc,yc,radio_centroids
 
-def plothist():
+def load_angles(filename):
 
-    with open('%s/bending_angles/angles_double_pixradio.csv' % rgz_dir,'r') as f:
+    with open('%s/bending_angles/%s.csv' % (rgz_dir,filename),'r') as f:
         angstr = f.readlines()
 
-    angles_double_pixradio = [float(x.strip()) for x in angstr]
+    angles = [float(x.split(',')[1]) for x in angstr[1:]]
 
-    with open('%s/bending_angles/angles_triple_pixradio.csv' % rgz_dir,'r') as f:
-        angstr = f.readlines()
+    return angles
 
-    angles_triple_pixradio = [float(x.strip()) for x in angstr]
+def plothist(savefig=False):
+
+    angles_double_pixradio = load_angles('angles_double_pixradio')
+    angles_triple_pixradio = load_angles('angles_triple_pixradio')
+    angles_double_mps = load_angles('angles_multipeaked_singles')
+    angles_triple_mps = load_angles('angles_multipeaked_singles_no_optical')
 
     fig = plt.figure(2,(8,8))
     ax1 = fig.add_subplot(111)
     
+    '''
     c1 = '#e41a1c'
-    c2 = '#377eb8'
     c2 = '#a6cee3'
-    c3 = '#386cb0'
+    c3 = '#377eb8'
+    c4 = '#386cb0'
+    '''
     
-    histML(angles_double_pixradio, bins=20, ax=ax1, histtype='stepfilled', alpha=1.0, color=c1, range=(0,180),label='doubles')
-    histML(angles_triple_pixradio, bins=20, ax=ax1, histtype='stepfilled', alpha=1.0, color=c2, range=(0,180),label='triples')
+    c1 = '#377eb8'
+    c2 = '#e41a1c'
+    c3 = '#4daf4a'
+    c4 = '#984ea3'
+
+    histML(angles_double_pixradio, bins=20, ax=ax1, histtype='step', lw=3, alpha=1.0, color=c1, range=(0,180),label='double multi-contour')
+    histML(angles_triple_pixradio, bins=20, ax=ax1, histtype='step', lw=3, alpha=1.0, color=c2, range=(0,180),label='triple multi-contour')
+    histML(angles_double_mps,      bins=20, ax=ax1, histtype='step', lw=3, alpha=1.0, color=c3, range=(0,180),label='double single-contour')
+    histML(angles_triple_mps,      bins=20, ax=ax1, histtype='step', lw=3, alpha=1.0, color=c4, range=(0,180),label='triple single-contour')
     ax1.set_xlim(0,180)
-    ax1.vlines(x=np.median(angles_double_pixradio),ymin=ax1.get_ylim()[0],ymax = ax1.get_ylim()[1],color='k',linestyle='--')
-    ax1.vlines(x=np.median(angles_triple_pixradio),ymin=ax1.get_ylim()[0],ymax = ax1.get_ylim()[1],color='k',linestyle='-.')
+    ax1.vlines(x=np.median(angles_double_pixradio),ymin=ax1.get_ylim()[0],ymax = ax1.get_ylim()[1],color=c1,linestyle='--')
+    ax1.vlines(x=np.median(angles_triple_pixradio),ymin=ax1.get_ylim()[0],ymax = ax1.get_ylim()[1],color=c2,linestyle='--')
+    ax1.vlines(x=np.median(angles_double_mps),     ymin=ax1.get_ylim()[0],ymax = ax1.get_ylim()[1],color=c3,linestyle='--')
+    ax1.vlines(x=np.median(angles_triple_mps),     ymin=ax1.get_ylim()[0],ymax = ax1.get_ylim()[1],color=c4,linestyle='--')
     ax1.set_xlabel(r'bending angle [deg]',fontsize=24)
     ax1.set_ylabel('count',fontsize=20)
     plt.tick_params(axis='both', which='major', labelsize=20)
     
     ax1.legend(loc='upper left')
-    #plt.show()
-    
     fig.tight_layout()
-    fig.savefig('%s/bending_angles/plots/bending_angles_hist.pdf' % rgz_dir)
+
+    if savefig:
+        fig.savefig('%s/bending_angles/plots/bending_angles_hist.pdf' % rgz_dir)
+    else:
+        plt.show()
 
     return None
 
@@ -518,7 +544,7 @@ def pix_dist(x1,y1,x2,y2):
 
     return dist
 
-def jet_triples(triples,pathdict):
+def all_triples_pixradio(triples,pathdict):
 
     # Limit the triple set to those with an optical ID within 1 beam size of the center
 
@@ -527,9 +553,8 @@ def jet_triples(triples,pathdict):
     imagescale = IMG_HEIGHT_NEW/imagesize / 60. # pixel / arcsec
     radio_tol = radiobeamsize * imagescale
 
-    #triples_centered = []
-
     with open('%s/bending_angles/angles_triple_pixradio.csv' % rgz_dir,'w') as f:
+        print >> f,'zid,bending_angle'
         for triple in triples:
             irx,iry,radio_components = pix_convert(triple,pathdict)
             xc,yc,radio_centroids = pix_radio(irx,iry,radio_components)
@@ -545,7 +570,7 @@ def jet_triples(triples,pathdict):
                     alpha = bending_angle(middle_radio[0],middle_radio[1],radio_centroids[0][0],radio_centroids[0][1],radio_centroids[1][0],radio_centroids[1][1])
                     alpha_deg = alpha * 180./np.pi
     
-                    print >> f,alpha_deg
+                    print >> f,'%s,%.3f' % (triple['zid'],alpha_deg)
                     break
             '''
             else:
@@ -939,8 +964,6 @@ def mps_cc_bendingangle():
 
     return None
 
-
-
 def batch_multipeaked_singles():
 
     # Run all multi-peaked singles using kernel technique
@@ -966,6 +989,10 @@ def batch_multipeaked_singles():
 def mps_bending_angle():
 
     df = pd.read_csv('%s/bending_angles/multipeaked_singles.csv' % rgz_dir)
+
+    # Part 1: select double-peaked, single-contour sources with optical counterparts
+
+    '''
     df2 = df[(df['nlobes'] == 2)]
 
     with open('%s/bending_angles/angles_multipeaked_singles.csv' % rgz_dir,'w') as f:
@@ -1000,6 +1027,48 @@ def mps_bending_angle():
 
             else:
                 print "Had more than 1 IR sources and/or less than 75 percent consensus for %s" % zid
+
+    '''
+    # Part 2: select triple-peaked, single-contour sources with no optical counterparts
+
+    df3 = df[(df['nlobes'] == 3)]
+
+    with open('%s/bending_angles/angles_multipeaked_singles_no_optical.csv' % rgz_dir,'w') as f:
+
+        print >> f,'zid,bending_angle'
+
+        # get optical counterpart for zid (loop over eventually)
+
+        df3_pair1 = df3[::3]
+        df3_pair2 = df3[1::3]
+        df3_pair3 = df3[2::3]
+        _zid = np.array(df3_pair1['zid'])
+        _x1 = np.array(df3_pair1['x'])
+        _y1 = np.array(df3_pair1['y'])
+        _x2 = np.array(df3_pair2['x'])
+        _y2 = np.array(df3_pair2['y'])
+        _x3 = np.array(df3_pair3['x'])
+        _y3 = np.array(df3_pair3['y'])
+
+
+        for zid,cx1,cy1,cx2,cy2,cx3,cy3 in zip(_zid,_x1,_y1,_x2,_y2,_x3,_y3):
+
+            c = consensus.checksum(zid)
+            try:
+                if (c['n_users']/float(c['n_total']) >= 0.75):
+                    # Use the maximum of the three possible opening angles, since we don't know the "center" of the galaxy
+                    
+                    # Pick optical IDs close to the center, as we do for the discrete sources?
+                    alpha1 = bending_angle(cx1,cy1,cx2,cy2,cx3,cy3)
+                    alpha2 = bending_angle(cx2,cy2,cx1,cy1,cx3,cy3)
+                    alpha3 = bending_angle(cx1,cy1,cx3,cy3,cx2,cy2)
+                    alpha_deg = max(alpha1,alpha2,alpha3) * 180./np.pi
+                    
+                    print >> f,'%s,%.3f' % (zid,alpha_deg)
+                else:
+                    print "Had less than 75 percent consensus for %s" % zid
+            except TypeError:
+                print "No 'answer' key for %s" % zid,c
 
     return None
 
