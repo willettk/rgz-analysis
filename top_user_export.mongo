@@ -1,0 +1,4 @@
+mongoexport --db ouroboros --collection radio_classifications --csv --fields subject_ids.0 --query '{"user_name":"antikodon"}' --out csv/rgz_antikodon.csv
+mongoexport --db ouroboros --collection radio_classifications --csv --fields subject_ids.0 --query '{"user_name":"planetari7"}' --out csv/rgz_planetari7.csv
+mongoexport --db ouroboros --collection radio_classifications --csv --fields subject_ids.0 --query '{"user_name":"pamelaann"}' --out csv/rgz_pamelaann.csv
+mongoexport --db ouroboros --collection radio_classifications --csv --fields subject_ids.0 --query '{"user_name":"WizardHowl"}' --out csv/rgz_WizardHowl.csv
