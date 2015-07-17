@@ -17,6 +17,14 @@ class Node(object):
         else:
             self.img = img #FITS data as an array
             self.w = w #WCS converter object
+        dec = self.w.wcs_pix2world( np.array( [[66, 66]] ), 1)[0][1] #dec of image center
+        if dec > 4.5558: #northern region, above +4*33'21"
+            self.beamArea = 1.44*np.pi*5.4*5.4/4 #5.4" FWHM circle
+        elif 4.5558 > dec > -2.5069: #middle region, between +4*33'21" and -2*30'25"
+            self.beamArea = 1.44*np.pi*6.4*5.4/4 #6.4"x5.4" FWHM ellipse
+        else: #southern region, below -2*30'25"
+            self.beamArea = 1.44*np.pi*6.8*5.4/4 #6.8"x5.4" FWHM ellipse
+        self.pixelArea = 1.8*1.8 #arcsecond^2
         if contour is not None:
             mad2sigma = np.sqrt(2)*erfinv(2*0.75-1) #conversion factor
             self.sigma = (contour[0]['level']/3) / mad2sigma #standard deviation of flux density measurements
@@ -26,13 +34,13 @@ class Node(object):
             for i in contour[0]['arr']:
                 vertices.append([i['x'], i['y']])
             self.pathOutline = path.Path(vertices) #self.pathOutline is a Path object tracing the contour
-            self.getTotalFlux() #self.flux and self.fluxUncertainty are the total integrated flux and uncertainty, respectively
+            self.getTotalFlux() #self.flux and self.fluxErr are the total integrated flux and error, respectively
             self.getPeaks() #self.peaks is list of dicts of peak fluxes and locations
         else:
             self.sigma = sigma
             self.pathOutline = None
             self.flux = 0
-            self.fluxUncertainty = 0
+            self.fluxErr = 0
             self.peaks = []
 
     #insert a contour node
@@ -73,7 +81,7 @@ class Node(object):
         self.w = wcs.WCS(fits.open(fits_loc)[0].header) #gets pixel-to-WCS conversion from header
         return self.img
 
-    #find the total integrated flux of the component and its uncertainty
+    #find the total integrated flux of the component and its error
     def getTotalFlux(self):
         fluxDensity = 0
         pixelCount = 0
@@ -82,18 +90,10 @@ class Node(object):
                 if self.contains([i, j]):
                     fluxDensity += self.img[133-j][i]
                     pixelCount +=1
-        fluxDensityUncertainty = np.sqrt(pixelCount) * self.sigma
-        dec = self.w.wcs_pix2world( np.array( [[66, 66]] ), 1)[0][1] #dec of image center
-        if dec > 4.5558: #northern region, above +4*33'21"
-            beamArea = 1.44*np.pi*5.4*5.4/4 #5.4" FWHM circle
-        elif 4.5558 > dec > -2.5069: #middle region, between +4*33'21" and -2*30'25"
-            beamArea = 1.44*np.pi*6.4*5.4/4 #6.4"x5.4" FWHM ellipse
-        else: #southern region, below -2*30'25"
-            beamArea = 1.44*np.pi*6.8*5.4/4 #6.8"x5.4" FWHM ellipse
-        pixelArea = 1.8*1.8 #arcsecond^2
-        self.flux = fluxDensity*beamArea/pixelArea
-        self.fluxUncertainty = fluxDensityUncertainty*beamArea/pixelArea
-        return [self.flux, self.fluxUncertainty]
+        fluxDensityErr = np.sqrt(pixelCount) * self.sigma
+        self.flux = fluxDensity*self.beamArea/self.pixelArea*pixelCount
+        self.fluxErr = fluxDensityErr*self.beamArea/self.pixelArea*pixelCount
+        return [self.flux, self.fluxErr]
 
         
     #finds the peak values (in mJy) and locations (in DS9 pixel space) and return as dict
@@ -105,7 +105,7 @@ class Node(object):
             flux = self.img[ bbox[3]-1:bbox[1]+1, bbox[2]-1:bbox[0]+1 ].max() #peak flux in bbox, with 1 pixel padding
             locP = np.where(self.img == flux) #location in pixels
             locRD = self.w.wcs_pix2world( np.array( [[locP[1][0]+1, locP[0][0]+1]] ), 1) #location in ra and dec
-            peak = dict( ra = locRD[0][0], dec = locRD[0][1], peakFluxDensity = flux*1000)
+            peak = dict( ra = locRD[0][0], dec = locRD[0][1], peakFluxDensity = flux*self.beamArea/self.pixelArea*1000)
             pList.append(peak)
         else:
             for i in self.children:
