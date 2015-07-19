@@ -929,7 +929,7 @@ def run_sample(update=True,subset=None,do_plot=False):
         import pandas as pd
         cmaster = pd.read_csv('%s/csv/%s.csv' % (rgz_dir,filestem))
         cmaster75 = cmaster[cmaster['consensus_level'] >= 0.75]
-        cmaster75.to_csv('%s/csv/%s_75.csv' % (rgz_dir,filestem))
+        cmaster75.to_csv('%s/csv/%s_75.csv' % (rgz_dir,filestem),index=False)
         
     print '\nCompleted consensus.'
 
