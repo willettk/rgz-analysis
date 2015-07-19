@@ -26,6 +26,9 @@ import urllib
 
 import json
 import collinearity
+import os.path
+import time
+import shutil
 
 # MongoDB parameters
 
@@ -649,9 +652,7 @@ def plot_consensus(consensus,figno=1, save_fig=None):
     # Save hard copy of the figure
     if save_fig:
         writefile = '/Volumes/3TB/rgz/plots/expert_%s.pdf' % zid
-        #writefile = '%s/plots/expert/expert_all/expert_%s.pdf' % (rgz_dir,zid)
-        #writefile = '%s/goldstandard/volunteer_gs/volunteer_%s.pdf' % (rgz_dir,zid)
-        #fig.savefig('%s' % (writefile))
+        fig.savefig('%s' % (writefile))
         plt.close()
     else:
         plt.show()
@@ -686,7 +687,7 @@ def make_75():
     
     # Get dictionary for finding the path to FITS files and WCS headers
     
-    with open('/Volumes/3TB/rgz/first_fits.txt') as f:
+    with open('%s/first_fits.txt' % rgz_dir) as f:
         lines = f.readlines()
     
     pathdict = {}
@@ -781,36 +782,78 @@ def rc(zid):
 
     return None
 
-def run_sample(run_all=False,do_plot=False):
+def run_sample(update=True,subset=None,do_plot=False):
 
     # Run all galaxies in the expert sample
+
+    filestem = "consensus_rgz"
     
-    if run_all:
-        zooniverse_ids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','tutorial':{'$exists':False}})]
-    else:
-        # Expert classifications of gold sample
-        #with open('%s/goldstandard/gs_zids.txt' % rgz_dir,'rb') as f:
-        with open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir,'rb') as f:
+    if subset is not None:
+
+        '''
+        Only run consensus for classifications of 
+            expert100: the sample of 100 galaxies classified by science team
+            gs: the gold standard sample of 20 galaxies classified by all users
+        '''
+
+        assert subset in ('expert100','gs'), \
+            "subset is %s; must be either 'expert100' or 'gs100'" % subset
+
+        pathd = {'expert100':'expert/expert_all_zooniverse_ids.txt',
+                    'gs':'goldstandard/gs_zids.txt'}
+        with open('%s/%s' % (rgz_dir,pathd[subset]),'rb') as f:
             zooniverse_ids = [line.rstrip() for line in f]
-    
-    N = 0
-    restart_idx = 0
-    N += restart_idx
-    zooniverse_ids = zooniverse_ids[restart_idx:]
-    print 'Loaded data; running on %i completed RGZ subjects' % len(zooniverse_ids)
+
+        suffix = '_%s' % subset
+
+    else:
+        all_completed_zids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','tutorial':{'$exists':False}})]
+
+        if update:
+            '''
+            Check to see which subjects have already been completed --
+                only run on subjects without an existing consensus.
+            '''
+
+            master_json = '%s/json/%s.json' % (rgz_dir,filestem)
+
+            with open(master_json,'r') as fm:
+                jmaster = json.load(fm)
+
+            already_finished_zids = []
+            for gal in jmaster:
+                already_finished_zids.append(gal['zid'])
+
+            zooniverse_ids = list(set(all_completed_zids) - set(already_finished_zids))
+
+            print "\n%i RGZ subjects already in master catalog" % len(already_finished_zids)
+            print "%i RGZ subjects completed since last consensus catalog generation on %s" % \
+                (len(zooniverse_ids),time.ctime(os.path.getmtime(master_json)))
+
+            suffix = '_update'
+
+        else:
+
+            # Rerun consensus for every completed subject in RGZ.
+            zooniverse_ids = all_completed_zids
+
+    print '\nLoaded data; running consensus algorithm on %i completed RGZ subjects' % len(zooniverse_ids)
 
     ad = alphadict()
 
-    for zid in zooniverse_ids:
-    
-        # Check progress and save every 1000 classifications
-        if not N % 1000:
-            print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
-            fj = open('%s/json/consensus_%i.json' % (rgz_dir,N),'w')
-            fc = open('%s/csv/consensus_%i.csv' % (rgz_dir,N),'w')
+    # Empty files and objects for CSV, JSON output
+    fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'w')
+    json_output = []
 
-            # CSV header
-            fc.write('zooniverse_id,FIRST_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
+    # CSV header
+    if not update:
+        fc.write('zooniverse_id,FIRST_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
+
+    for idx,zid in enumerate(zooniverse_ids):
+    
+        # Check progress to screen
+        if not idx % 100:
+            print idx, datetime.datetime.now().strftime('%H:%M:%S.%f')
 
         consensus = checksum(zid,write_peak_data=do_plot)
         if do_plot:
@@ -820,14 +863,14 @@ def run_sample(run_all=False,do_plot=False):
 
         if consensus is not None:
 
+            consensus['consensus_level'] = (consensus['n_users']/consensus['n_total'])
+
             # JSON
 
-            json.dump(consensus,fj)
-            fj.write('\n')
+            json_output.append(consensus)
 
             # CSV
 
-            ratio = (consensus['n_users']/consensus['n_total'])
             for ans in consensus['answer'].itervalues():
                 try:
                     ir_peak = ans['ir_peak']
@@ -837,7 +880,8 @@ def run_sample(run_all=False,do_plot=False):
                 try:
                     fc.write('%s,%s,%4i,%4i,%.3f,%2i,%s,"%s","%s"\n' % 
                         (
-                            consensus['zid'],consensus['source'],consensus['n_users'],consensus['n_total'],ratio,
+                            consensus['zid'],consensus['source'],
+                            consensus['n_users'],consensus['n_total'],consensus['consensus_level'],
                             len(ans['xmax']),ad[ans['ind']],bbox_unravel(ans['bbox']),ir_peak
                             )
                         )
@@ -845,13 +889,48 @@ def run_sample(run_all=False,do_plot=False):
                     print zid
                     print consensus
 
+    fc.close()
 
-        if not (N+1) % 1000:
-            fc.close()
-            fj.close()
+    # Merge the update with master
 
-        N += 1
+    # JSON
+    if update:
+        jmaster.extend(json_output)
+        with open('%s/json/%s.json' % (rgz_dir,filestem),'w') as fj:
+            json.dump(jmaster,fj)
+    else:
+        with open('%s/json/%s%s.json' % (rgz_dir,filestem,suffix),'w') as fj:
+            json.dump(json_output,fj)
 
+    # CSV
+
+    if update:
+        outfilename,infile_master,infile_update = ['%s/csv/%s%s.csv' % (rgz_dir,filestem,x) for x in ('_all','','_update')]
+
+        with open(outfilename, 'wb') as outfile:
+            for filename in (infile_master,infile_update):
+                if filename == outfilename:
+                    # don't want to copy the output into the output
+                    continue
+                with open(filename, 'rb') as readfile:
+                    shutil.copyfileobj(readfile, outfile)
+
+        shutil.move(outfilename,infile_master)
+        os.remove(infile_update)
+
+    # Make 75% version for full catalog
+
+    if subset is None:
+        # JSON
+        jmaster75 = filter(lambda a: (a['n_users']/a['n_total']) >= 0.75, jmaster)
+        with open('%s/json/%s_75.json' % (rgz_dir,filestem),'w') as fj:
+            json.dump(jmaster75,fj)
+        # CSV
+        import pandas as pd
+        cmaster = pd.read_csv('%s/csv/%s.csv' % (rgz_dir,filestem))
+        cmaster75 = cmaster[cmaster['consensus_level'] >= 0.75]
+        cmaster75.to_csv('%s/csv/%s_75.csv' % (rgz_dir,filestem))
+        
     print '\nCompleted consensus.'
 
     return None
