@@ -99,7 +99,7 @@ def plot_compact_hist():
     maxarea = 1500
     fig = plt.figure(1,figsize=(8,8))
     ax = fig.add_subplot(111)
-    ax.hist(resolved_area+compact_area,bins=nbins,range=(0,maxarea),cumulative=True,label='All 1-component images')
+    n,bins,patches = ax.hist(resolved_area+compact_area,bins=nbins,range=(0,maxarea),cumulative=True,label='All 1-component images')
     ax.hist(compact_area,              bins=nbins,range=(0,maxarea),cumulative=True,label='Compact')
     
     ax.vlines(np.sqrt(2)*FIRST_area,ax.get_ylim()[0],ax.get_ylim()[1],linestyles='--',lw=2,color='k')
@@ -112,7 +112,7 @@ def plot_compact_hist():
     
     ax2 = ax.twinx()
     ntl = np.arange(6)/5.
-    new_tick_locations = [x * ax.get_ylim()[1] for x in ntl]
+    new_tick_locations = [x * max(n)/ax.get_ylim()[1] for x in ntl]
     new_tick_labels = ['%.2f' % x for x in ntl]
     
     ax2.set_yticks(new_tick_locations)
