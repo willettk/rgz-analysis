@@ -24,17 +24,17 @@ class Node(object):
             self.beamArea = 1.44*np.pi*6.4*5.4/4 #6.4"x5.4" FWHM ellipse
         else: #southern region, below -2*30'25"
             self.beamArea = 1.44*np.pi*6.8*5.4/4 #6.8"x5.4" FWHM ellipse
-        self.pixelArea = 1.8*1.8 #arcsecond^2
+        self.pixelArea = wcs.utils.proj_plane_pixel_area(self.w)*3600*3600 #arcsecond^2
         if contour is not None:
             mad2sigma = np.sqrt(2)*erfinv(2*0.75-1) #conversion factor
             self.sigma = (contour[0]['level']/3) / mad2sigma #standard deviation of flux density measurements
             for i in contour:
                 self.insert(Node(value=i, img=self.img, w=self.w, sigma=self.sigma))
             vertices = []
-            for i in contour[0]['arr']:
-                vertices.append([i['x'], i['y']])
+            for pos in contour[0]['arr']:
+                vertices.append([pos['x'], pos['y']])
             self.pathOutline = path.Path(vertices) #self.pathOutline is a Path object tracing the contour
-            self.getTotalFlux() #self.flux and self.fluxErr are the total integrated flux and error, respectively
+            self.getTotalFlux() #self.flux and self.fluxErr are the total integrated flux and error, respectively; also sets self.area, in arcsec^2
             self.getPeaks() #self.peaks is list of dicts of peak fluxes and locations
         else:
             self.sigma = sigma
@@ -56,10 +56,10 @@ class Node(object):
                 raise Exception('Inside-out contour')
             else: #otherwise, find the next level that has a bounding box enclosing the new contour
                 inner = fn.findBox(newNode.value['arr'])
-                for i in self.children:
-                    outer = fn.findBox(i.value['arr'])
+                for child in self.children:
+                    outer = fn.findBox(child.value['arr'])
                     if outer[0]>inner[0] and outer[1]>inner[1] and outer[2]<inner[2] and outer[3]<inner[3]:
-                        i.insert(newNode)
+                        child.insert(newNode)
 
     #manually check the topology of the tree by printing level numbers and bboxes to screen
     #for testing only
@@ -71,8 +71,8 @@ class Node(object):
             if self.children == []:
                 print 'End'
             else:
-                for i in self.children:
-                    i.check()
+                for child in self.children:
+                    child.check()
 
     #get FITS data from file
     def getFITS(self, fits_loc):
@@ -85,16 +85,16 @@ class Node(object):
     def getTotalFlux(self):
         fluxDensity = 0
         pixelCount = 0
-        for i in range(132):
-            for j in range(132):
-                if self.contains([i, j]):
-                    fluxDensity += self.img[133-j][i]
-                    pixelCount +=1
-        fluxDensityErr = np.sqrt(pixelCount) * self.sigma
-        self.flux = fluxDensity*self.beamArea/self.pixelArea*pixelCount
-        self.fluxErr = fluxDensityErr*self.beamArea/self.pixelArea*pixelCount
+        for i in range(131):
+            for j in range(131):
+                if self.contains([i+1, j+1]):
+                    fluxDensity += self.img[j][i]
+                    pixelCount += 1
+        self.area = pixelCount*self.pixelArea
+        fluxDensityErr = np.sqrt(pixelCount)*self.sigma
+        self.flux = fluxDensity*self.pixelArea/self.beamArea*1000
+        self.fluxErr = fluxDensityErr*self.pixelArea/self.beamArea*1000
         return [self.flux, self.fluxErr]
-
         
     #finds the peak values (in mJy) and locations (in DS9 pixel space) and return as dict
     def getPeaks(self, pList=None):
@@ -105,11 +105,11 @@ class Node(object):
             flux = self.img[ bbox[3]-1:bbox[1]+1, bbox[2]-1:bbox[0]+1 ].max() #peak flux in bbox, with 1 pixel padding
             locP = np.where(self.img == flux) #location in pixels
             locRD = self.w.wcs_pix2world( np.array( [[locP[1][0]+1, locP[0][0]+1]] ), 1) #location in ra and dec
-            peak = dict( ra = locRD[0][0], dec = locRD[0][1], peakFluxDensity = flux*self.beamArea/self.pixelArea*1000)
+            peak = dict(ra=locRD[0][0], dec=locRD[0][1], peakFlux=flux*self.pixelArea/self.beamArea*1000)
             pList.append(peak)
         else:
-            for i in self.children:
-                i.getPeaks(pList)
+            for child in self.children:
+                child.getPeaks(pList)
         self.peaks = pList
         return self.peaks
 
