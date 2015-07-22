@@ -54,9 +54,9 @@ class Node(object):
             elif newNode.value['k'] <= self.value['k']: #if a contour of lower level appears, something went wrong
                 raise Exception('Inside-out contour')
             else: #otherwise, find the next level that has a bounding box enclosing the new contour
-                inner = fn.findBox(newNode.value['arr'])
+                inner = findBox(newNode.value['arr'])
                 for child in self.children:
-                    outer = fn.findBox(child.value['arr'])
+                    outer = findBox(child.value['arr'])
                     if outer[0]>inner[0] and outer[1]>inner[1] and outer[2]<inner[2] and outer[3]<inner[3]:
                         child.insert(newNode)
 
@@ -66,7 +66,7 @@ class Node(object):
         if self.value is None:
             print 'Empty'
         else:
-            print 'Level ' + str(self.value['k']) + ': ' + str(fn.findBox(self.value['arr']))
+            print 'Level ' + str(self.value['k']) + ': ' + str(findBox(self.value['arr']))
             if self.children == []:
                 print 'End'
             else:
@@ -100,7 +100,7 @@ class Node(object):
         if pList is None:
             pList = []
         if self.children == []:
-            bbox = fn.bboxToDS9(fn.findBox(self.value['arr']))[0] #bbox of innermost contour
+            bbox = bboxToDS9(findBox(self.value['arr']))[0] #bbox of innermost contour
             flux = self.img[ bbox[3]-1:bbox[1]+1, bbox[2]-1:bbox[0]+1 ].max() #peak flux in bbox, with 1 pixel padding
             locP = np.where(self.img == flux) #location in pixels
             locRD = self.w.wcs_pix2world( np.array( [[locP[1][0]+1, locP[0][0]+1]] ), 1) #location in ra and dec

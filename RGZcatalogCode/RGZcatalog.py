@@ -262,15 +262,15 @@ def RGZcatalog():
                 consensusBboxes = literal_eval(consensusObject['bbox'])
                 for contour in data['contours']:
                     for bbox in consensusBboxes:
-                        if fn.approx(contour[0]['bbox'][0], bbox[0]) and fn.approx(contour[0]['bbox'][1], bbox[1]) and \
-                           fn.approx(contour[0]['bbox'][2], bbox[2]) and fn.approx(contour[0]['bbox'][3], bbox[3]):
+                        if approx(contour[0]['bbox'][0], bbox[0]) and approx(contour[0]['bbox'][1], bbox[1]) and \
+                           approx(contour[0]['bbox'][2], bbox[2]) and approx(contour[0]['bbox'][3], bbox[3]):
                             tree = c.Node(contour=contour, fits_loc=fits_loc)
                             contourTrees.append(tree)
 
                 #get component fluxes and sizes
                 components = []
                 for tree in contourTrees:
-                    bboxP = fn.bboxToDS9(fn.findBox(tree.value['arr']))[0] #bbox in DS9 coordinate pixels
+                    bboxP = bboxToDS9(findBox(tree.value['arr']))[0] #bbox in DS9 coordinate pixels
                     bboxCornersRD = tree.w.wcs_pix2world( np.array( [[bboxP[0],bboxP[1]], [bboxP[2],bboxP[3]] ]), 1) #two opposite corners of bbox in ra and dec
                     raRange = [ min(bboxCornersRD[0][0], bboxCornersRD[1][0]), max(bboxCornersRD[0][0], bboxCornersRD[1][0]) ]
                     decRange = [ min(bboxCornersRD[0][1], bboxCornersRD[1][1]), max(bboxCornersRD[0][1], bboxCornersRD[1][1]) ]
@@ -397,6 +397,20 @@ def findBox(loop):
       elif i['y']<ymin:
          ymin = i['y']
    return [xmax, ymax, xmin, ymin]
+
+#finds the coordinates of the bbox in DS9's system and the input values for drawing a box in DS9
+#bbox = tree.value['bbox'] #outermost bbox (for testing)
+def bboxToDS9(bbox):
+    xmax = bbox[0]
+    ymax = bbox[1]
+    xmin = bbox[2]
+    ymin = bbox[3]
+    temp = 133-ymax
+    ymax = 133-ymin
+    ymin = temp
+    newBbox = [xmax, ymax, xmin, ymin]
+    ds9Box = [ (xmax+xmin)/2., (ymax+ymin)/2., xmax-xmin, ymax-ymin ]
+    return [newBbox, ds9Box]
 
 if __name__ == '__main__':
     counts = RGZcatalog()
