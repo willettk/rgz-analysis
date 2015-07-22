@@ -10,6 +10,7 @@ from gzip import GzipFile
 import json
 from ast import literal_eval
 import os
+import scandir
 from astropy.io import fits
 from astropy import wcs
 from astropy import coordinates as coord
@@ -17,8 +18,6 @@ from astropy import units as u
 from astroquery.irsa import Irsa
 import mechanize
 import time
-from polygon import SphericalPolygon #modified from https://github.com/spacetelescope/sphere/tree/master/spherical_geometry
-import catalogFunctions as fn #contains custom functions
 import contourNode as c #contains Node class
 
 def RGZcatalog():
@@ -51,8 +50,8 @@ def RGZcatalog():
     starttime = time.time()
 
     #iterate through all subjects
-    #for subject in subjects.find().batch_size(30):
-    for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
+    for subject in subjects.find().batch_size(30):
+    #for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
     #for subject in subjects.find({'zooniverse_id':'ARG0002qyh'}): #sample multipeaked subject
     #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct galaxies
     #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple components
@@ -64,18 +63,23 @@ def RGZcatalog():
         for consensusObject in consensus.find({'zooniverse_id':subject['zooniverse_id']}):
 
             count += 1
+            if count>10:
+                print 'Time taken:', time.time()-starttime
+                return [count, IDnumber]
 
             #display which entry is being processed to see how far the program is
             catalog_id = 'RGZ'+str(IDnumber)+str(consensusObject['label'])
             print catalog_id
-
+            
+            searchtime = time.time()
             #find location of FITS file
             fid = consensusObject['FIRST_id']
-            for root, dirnames, filenames in os.walk(fits_dir):
+            for root, dirnames, filenames in scandir.walk(fits_dir):
                 for filename in filenames:
                     if filename == fid + '.fits':
                         fits_loc = os.path.join(root, filename)
-
+            print 'Time spent finding FITS:', time.time()-searchtime
+            
             #find IR counterpart from consensus data, if present
             w = wcs.WCS(fits.open(fits_loc)[0].header) #gets pixel-to-WCS conversion from header
             ir_coords = literal_eval(consensusObject['ir_peak'])
@@ -86,151 +90,162 @@ def RGZcatalog():
                 ir_ra_pixels = ir_coords[0] * 132./500.
                 ir_dec_pixels = 133 - ir_coords[1] * 132./500.
                 ir_peak = p2w( np.array([[ir_ra_pixels, ir_dec_pixels]]), 1)
-            ir_ra = ir_peak[0][0]
-            ir_dec = ir_peak[0][1]
+            ir_pos = coord.SkyCoord(ir_peak[0][0], ir_peak[0][1], unit=(u.deg,u.deg), frame='icrs')
 
-##            #if an IR peak exists, search AllWISE and SDSS for counterparts
-##            if ir_ra:
-##
-##                #get IR data from AllWISE Source Catalog
-##                table = Irsa.query_region(coord.SkyCoord(ir_ra, ir_dec, unit=(u.deg,u.deg), frame='icrs'), catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
-##                if len(table):
-##                    numberMatches = 0
-##                    if table[0]['w1snr']>5:
-##                        match = table[0]
-##                        dist = match['dist']
-##                        numberMatches += 1
-##                    else:
-##                        match = None
-##                        dist = np.inf
-##                    if len(table)>1:
-##                        for entry in table:
-##                            if entry['dist']<dist and entry['w1snr']>5:
-##                                match = entry
-##                                dist = match['dist']
-##                                numberMatches += 1
-##                    if match:
-##                        wise_match = {'designation':'WISEA'+match['designation'], 'ra':match['ra'], 'dec':match['dec'], 'numberMatches':np.int16(numberMatches), \
-##                                      'w1mpro':match['w1mpro'], 'w1sigmpro':match['w1sigmpro'], 'w1snr':match['w1snr'], \
-##                                      'w2mpro':match['w2mpro'], 'w2sigmpro':match['w2sigmpro'], 'w2snr':match['w2snr'], \
-##                                      'w3mpro':match['w3mpro'], 'w3sigmpro':match['w3sigmpro'], 'w3snr':match['w3snr'], \
-##                                      'w4mpro':match['w4mpro'], 'w4sigmpro':match['w4sigmpro'], 'w4snr':match['w4snr']}
-##                        for key in wise_match:
-##                            if wise_match[key] is np.ma.masked:
-##                                wise_match[key] = None
-##                    else:
-##                        wise_match = None
-##                else:
-##                    wise_match = None
-##
-##                #get optical magnitude data from Galaxy table in SDSS
-##                query = '''select objID, ra, dec, u, g, r, i, z, err_u, err_g, err_r, err_i, err_z from Galaxy
-##                           where (ra between ''' + str(ir_ra) + '-1.5/3600 and ' + str(ir_ra) + '''+1.5/3600) and
-##                                 (dec between ''' + str(ir_dec) + '-1.5/3600 and ' + str(ir_dec) + '+1.5/3600)'
-##                df = SDSS_select(query)
-##                if len(df):
-##                    numberMatches = 0
-##                    tempDist = fn.distance( [ir_ra, ir_dec], [df.iloc[0]['ra'], df.iloc[0]['dec']] )
-##                    if tempDist<3./3600:
-##                        match = df.iloc[0]
-##                        dist = tempDist
-##                        numberMatches += 1
-##                    else:
-##                        match = None
-##                        dist = np.inf
-##                    if len(df)>1:
-##                        for i in range(len(df)):
-##                            tempDist = fn.distance( [ir_ra, ir_dec], [df.iloc[i]['ra'], df.iloc[i]['dec']] )
-##                            if tempDist<dist and tempDist<3./3600:
-##                                match = df.iloc[i]
-##                                dist = tempDist
-##                                numberMatches += 1
-##                    if match is not None:
-##                        sdss_match = {'objid':df['objID'][match.name], 'ra':match['ra'], 'dec':match['dec'], 'numberMatches':np.int16(numberMatches), \
-##                                      'u':match['u'], 'g':match['g'], 'r':match['r'], 'i':match['i'], 'z':match['z'], \
-##                                      'u_err':match['err_u'], 'g_err':match['err_g'], 'r_err':match['err_r'], 'i_err':match['err_i'], 'z_err':match['err_z']}
-##                    else:
-##                        sdss_match = None
-##                else:
-##                    sdss_match = None
-##
-##                #only get more data from SDSS if a postional match exists
-##                if sdss_match:
-##
-##                    #get photo redshift and uncertainty from Photoz table
-##                    query = 'select z, zErr from Photoz where objID=' + str(sdss_match['objid'])
-##                    df = SDSS_select(query)
-##                    if len(df):
-##                        photoZ = df['z'][0]
-##                        photoZErr = df['zErr'][0]
-##                    else:
-##                        photoZ = None
-##                        photoZErr = None
-##
-##                    #get spectral lines from GalSpecLine tables
-##                    query = '''select oiii_5007_flux, oiii_5007_flux_err, h_beta_flux, h_beta_flux_err,
-##                                      nii_6584_flux, nii_6584_flux_err, h_alpha_flux, h_alpha_flux_err
-##                               from GalSpecLine AS g
-##                                  join SpecObj AS s ON s.specobjid = g.specobjid
-##                               where s.bestObjID = ''' + str(sdss_match['objid'])
-##                    df = SDSS_select(query)
-##                    if len(df):
-##                        sdss_match.update({'oiii_5007_flux':df['oiii_5007_flux'][0], 'oiii_5007_flux_err':df['oiii_5007_flux_err'][0], \
-##                                           'h_beta_flux':df['h_beta_flux'][0], 'h_beta_flux_err':df['h_beta_flux_err'][0], \
-##                                           'nii_6584_flux':df['nii_6584_flux'][0], 'nii_6584_flux_err':df['nii_6584_flux_err'][0], \
-##                                           'h_alpha_flux':df['h_alpha_flux'][0], 'h_alpha_flux_err':df['h_alpha_flux_err'][0]})
-##                    else:
-##                        sdss_match.update({'oiii_5007_flux':None, 'oiii_5007_flux_err':None, 'h_beta_flux':None, 'h_beta_flux_err':None, \
-##                                           'nii_6584_flux':None, 'nii_6584_flux_err':None, 'h_alpha_flux':None, 'h_alpha_flux_err':None})
-##
-##                    #get spectral class and redshiftfrom SpecPhoto table
-##                    query = '''select z, zErr, case when class like 'GALAXY' then 0
-##                                                    when class like 'QSO' then 1
-##                                                    when class like 'STAR' then 2 end as classNum
-##                               from SpecObj
-##                               where bestObjID = ''' + str(sdss_match['objid'])
-##                    df = SDSS_select(query)
-##                    if len(df):
-##                        sdss_match.update({'spectralClass':np.int16(df['classNum'][0])})
-##                        specZ = df['z'][0]
-##                        specZErr = df['zErr'][0]
-##                    else:
-##                        sdss_match.update({'spectralClass':None})
-##                        specZ = None
-##                        specZErr = None
-##
-##                    #use specZ is present, otherwise use photoZ
-##                    if specZ:
-##                        sdss_match.update({'redshift':specZ, 'redshift_err':specZErr, 'redshift_type':np.int16(1)})
-##                    else:
-##                        sdss_match.update({'redshift':photoZ, 'redshift_err':photoZErr, 'redshift_type':np.int16(0)})
-##
-##                #end of 'if SDSS match'
-##
-##            #end of 'if IR peak'
-##
-##            #convert match data from numpy types to native Python types for JSON compatibility
-##            if wise_match:
-##                for key in wise_match:
-##                    if wise_match[key] and type(wise_match[key]) is not str:
-##                        wise_match[key] = wise_match[key].item()
-##                    elif wise_match[key] == 0:
-##                        wise_match[key] = 0
-##            if sdss_match:
-##                for key in sdss_match:
-##                    if sdss_match[key] and type(sdss_match[key]) is not str:
-##                        sdss_match[key] = sdss_match[key].item()
-##                    elif sdss_match[key] == 0:
-##                        sdss_match[key] = 0
+            #if an IR peak exists, search AllWISE and SDSS for counterparts
+            if ir_pos:
+                wisetime = time.time()
+                #get IR data from AllWISE Source Catalog
+                table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
+                if len(table):
+                    numberMatches = 0
+                    if table[0]['w1snr']>5:
+                        match = table[0]
+                        dist = match['dist']
+                        numberMatches += 1
+                    else:
+                        match = None
+                        dist = np.inf
+                    if len(table)>1:
+                        for entry in table:
+                            if entry['dist']<dist and entry['w1snr']>5:
+                                match = entry
+                                dist = match['dist']
+                                numberMatches += 1
+                    if match:
+                        wise_match = {'designation':'WISEA'+match['designation'], 'ra':match['ra'], 'dec':match['dec'], 'numberMatches':np.int16(numberMatches), \
+                                      'w1mpro':match['w1mpro'], 'w1sigmpro':match['w1sigmpro'], 'w1snr':match['w1snr'], \
+                                      'w2mpro':match['w2mpro'], 'w2sigmpro':match['w2sigmpro'], 'w2snr':match['w2snr'], \
+                                      'w3mpro':match['w3mpro'], 'w3sigmpro':match['w3sigmpro'], 'w3snr':match['w3snr'], \
+                                      'w4mpro':match['w4mpro'], 'w4sigmpro':match['w4sigmpro'], 'w4snr':match['w4snr']}
+                        for key in wise_match:
+                            if wise_match[key] is np.ma.masked:
+                                wise_match[key] = None
+                    else:
+                        wise_match = None
+                else:
+                    wise_match = None
 
-            wise_match = None
-            sdss_match = None
+                if wise_match:
+                    matched = 'match'
+                else:
+                    matched = 'no match'
+                print 'WISE:', time.time()-wisetime, matched
+                sdsstime = time.time()
+
+                #get optical magnitude data from Galaxy table in SDSS
+                query = '''select objID, ra, dec, u, g, r, i, z, err_u, err_g, err_r, err_i, err_z from Galaxy
+                           where (ra between ''' + str(ir_pos.ra.deg) + '-1.5/3600 and ' + str(ir_pos.ra.deg) + '''+1.5/3600) and
+                                 (dec between ''' + str(ir_pos.dec.deg) + '-1.5/3600 and ' + str(ir_pos.dec.deg) + '+1.5/3600)'
+                df = SDSS_select(query)
+                if len(df):
+                    numberMatches = 0
+                    matchPos = coord.SkyCoord(df.iloc[0]['ra'], df.iloc[0]['dec'], unit=(u.deg, u.deg))
+                    tempDist = ir_pos.separation(matchPos).arcsecond
+                    if tempDist<3:
+                        match = df.iloc[0]
+                        dist = tempDist
+                        numberMatches += 1
+                    else:
+                        match = None
+                        dist = np.inf
+                    if len(df)>1:
+                        for i in range(len(df)):
+                            matchPos = coord.SkyCoord(df.iloc[i]['ra'], df.iloc[i]['dec'], unit=(u.deg, u.deg))
+                            tempDist = ir_pos.separation(matchPos).arcsecond
+                            if tempDist<3 and tempDist<dist:
+                                match = df.iloc[i]
+                                dist = tempDist
+                                numberMatches += 1
+                    if match is not None:
+                        sdss_match = {'objID':df['objID'][match.name], 'ra':match['ra'], 'dec':match['dec'], 'numberMatches':np.int16(numberMatches), \
+                                      'u':match['u'], 'g':match['g'], 'r':match['r'], 'i':match['i'], 'z':match['z'], \
+                                      'u_err':match['err_u'], 'g_err':match['err_g'], 'r_err':match['err_r'], 'i_err':match['err_i'], 'z_err':match['err_z']}
+                    else:
+                        sdss_match = None
+                else:
+                    sdss_match = None
+
+                #only get more data from SDSS if a postional match exists
+                if sdss_match:
+
+                    #get photo redshift and uncertainty from Photoz table
+                    query = 'select z, zErr from Photoz where objID=' + str(sdss_match['objID'])
+                    df = SDSS_select(query)
+                    if len(df):
+                        photoZ = df['z'][0]
+                        photoZErr = df['zErr'][0]
+                    else:
+                        photoZ = None
+                        photoZErr = None
+
+                    #get spectral lines from GalSpecLine tables
+                    query = '''select oiii_5007_flux, oiii_5007_flux_err, h_beta_flux, h_beta_flux_err,
+                                      nii_6584_flux, nii_6584_flux_err, h_alpha_flux, h_alpha_flux_err
+                               from GalSpecLine AS g
+                                  join SpecObj AS s ON s.specobjid = g.specobjid
+                               where s.bestObjID = ''' + str(sdss_match['objID'])
+                    df = SDSS_select(query)
+                    if len(df):
+                        sdss_match.update({'oiii_5007_flux':df['oiii_5007_flux'][0], 'oiii_5007_flux_err':df['oiii_5007_flux_err'][0], \
+                                           'h_beta_flux':df['h_beta_flux'][0], 'h_beta_flux_err':df['h_beta_flux_err'][0], \
+                                           'nii_6584_flux':df['nii_6584_flux'][0], 'nii_6584_flux_err':df['nii_6584_flux_err'][0], \
+                                           'h_alpha_flux':df['h_alpha_flux'][0], 'h_alpha_flux_err':df['h_alpha_flux_err'][0]})
+                    else:
+                        sdss_match.update({'oiii_5007_flux':None, 'oiii_5007_flux_err':None, 'h_beta_flux':None, 'h_beta_flux_err':None, \
+                                           'nii_6584_flux':None, 'nii_6584_flux_err':None, 'h_alpha_flux':None, 'h_alpha_flux_err':None})
+
+                    #get spectral class and redshiftfrom SpecPhoto table
+                    query = '''select z, zErr, case when class like 'GALAXY' then 0
+                                                    when class like 'QSO' then 1
+                                                    when class like 'STAR' then 2 end as classNum
+                               from SpecObj
+                               where bestObjID = ''' + str(sdss_match['objID'])
+                    df = SDSS_select(query)
+                    if len(df):
+                        sdss_match.update({'spectralClass':np.int16(df['classNum'][0])})
+                        specZ = df['z'][0]
+                        specZErr = df['zErr'][0]
+                    else:
+                        sdss_match.update({'spectralClass':None})
+                        specZ = None
+                        specZErr = None
+
+                    #use specZ is present, otherwise use photoZ
+                    if specZ:
+                        sdss_match.update({'redshift':specZ, 'redshift_err':specZErr, 'redshift_type':np.int16(1)})
+                    else:
+                        sdss_match.update({'redshift':photoZ, 'redshift_err':photoZErr, 'redshift_type':np.int16(0)})
+
+                #end of 'if SDSS match'
+
+            #end of 'if IR peak'
+            if sdss_match:
+                matched = 'match'
+            else:
+                matched = 'no match'
+            print 'SDSS:', time.time()-sdsstime, matched
+
+            #convert match data from numpy types to native Python types for JSON compatibility
+            if wise_match:
+                for key in wise_match:
+                    if wise_match[key] and type(wise_match[key]) is not str:
+                        wise_match[key] = wise_match[key].item()
+                    elif wise_match[key] == 0:
+                        wise_match[key] = 0
+            if sdss_match:
+                for key in sdss_match:
+                    if sdss_match[key] and type(sdss_match[key]) is not str:
+                        sdss_match[key] = sdss_match[key].item()
+                    elif sdss_match[key] == 0:
+                        sdss_match[key] = 0
 
             #save consensus data as dict for printing to JSON
             outputDict = { 'catalog_id':catalog_id, 'Zooniverse_id':str(subject['zooniverse_id']), 'FIRST_id':str(fid), 'AllWISE':wise_match, 'SDSS':sdss_match, \
                            'consensus':{'n_users':consensusObject['n_users'], 'n_total':consensusObject['n_total'], \
-                                        'level':consensusObject['consensus_level'], 'IR_ra':ir_ra, 'IR_dec':ir_dec} }
+                                        'level':consensusObject['consensus_level'], 'IR_ra':ir_pos.ra.deg, 'IR_dec':ir_pos.dec.deg} }
 
+            radiotime = time.time()
             #try block attempts to read JSON from web; if it exists, calculate data
             try:
                 compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
@@ -318,8 +333,8 @@ def RGZcatalog():
                         maxPhysicalExtent = D_A*maxAngularExtent*np.pi/180/3600 #arcseconds to radians
                         totalCrossSection = pow(D_A,2)*totalSolidAngle*pow(np.pi/180/60,2) #arcminutes^2 to radians^2
                         for component in components:
-                            component['physicalExtent'] = D_A*angularExtent*np.pi/180/3600
-                            component['crossSection'] = pow(D_A,2)*solidAngle*pow(np.pi/180/60,2)
+                            component['physicalExtent'] = D_A*component['angularExtent']*np.pi/180/3600
+                            component['crossSection'] = pow(D_A,2)*component['solidAngle']*pow(np.pi/180/60,2)
                 else:
                     maxPhysicalExtent = None
                     totalCrossSection = None
@@ -340,6 +355,8 @@ def RGZcatalog():
                 else:
                     raise
 
+            print 'radio:', time.time()-radiotime
+
             catalog.insert(outputDict)
 
     #end timer
@@ -358,6 +375,28 @@ def SDSS_select(sql):
     response = br.submit()
     file_like = StringIO(response.get_data())
     return pd.read_csv(file_like, skiprows=1)
+
+#determines if two floats are approximately equal
+def approx(a, b, uncertainty=1e-5):
+   return np.abs(a-b) < uncertainty
+
+#creates a bounding box for a given contour path
+#loop = data['contours'][0][0]['arr'] #outermost contour (for testing)
+def findBox(loop):
+   xmax = loop[0]['x']
+   ymax = loop[0]['y']
+   xmin = loop[0]['x']
+   ymin = loop[0]['y']
+   for i in loop:
+      if i['x']>xmax:
+         xmax = i['x']
+      elif i['x']<xmin:
+         xmin = i['x']
+      if i['y']>ymax:
+         ymax = i['y']
+      elif i['y']<ymin:
+         ymin = i['y']
+   return [xmax, ymax, xmin, ymin]
 
 if __name__ == '__main__':
     counts = RGZcatalog()
