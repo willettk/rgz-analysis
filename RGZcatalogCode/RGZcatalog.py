@@ -23,7 +23,7 @@ import contourNode as c #contains Node class
 def RGZcatalog():
 
     #connect to database of subjects
-    client = MongoClient('localhost',27017)
+    client = MongoClient('localhost', 27017)
     db = client['radio']
     subjects = db['radio_subjects']
     #import consensus database with
@@ -31,7 +31,7 @@ def RGZcatalog():
     consensus = db['consensus']
     catalog = db['catalog'] #this is being populated by this program
 
-    #for testing
+    #this will be hardcoded in the final program
     if catalog.count():
         overwrite = raw_input('Catalog has entries. Overwrite or append? (o/a) ').lower()
         while overwrite!='o' and overwrite!='a':
@@ -39,9 +39,22 @@ def RGZcatalog():
         if overwrite=='o':
             db.drop_collection('catalog')
 
-    fits_dir = raw_input('Directory where radio FITS images are stored: ')
-    while not os.path.exists(fits_dir):
-        fits_dir = raw_input('Invalid path. Please re-enter: ')
+    #this will be hardcoded in the final program
+##    if os.path.exists('/data/extragal/willett/rgz/raw_images/'):
+##        fits_dir = '/data/extragal/willett/rgz/raw_images/'
+##    else:
+##        fits_dir = raw_input('Directory where radio FITS images are stored: ')
+##        while not os.path.exists(fits_dir):
+##            fits_dir = raw_input('Invalid path. Please re-enter: ')
+    fits_dir = '/data/extragal/willett/rgz/raw_images/'
+
+    #get dictionary for finding the path to FITS files and WCS headers
+    with open('/data/extragal/willett/rgz/first_fits.txt') as f:
+        lines = f.readlines()
+    pathdict = {}
+    for l in lines:
+        spl = l.split(' ')
+        pathdict[spl[1].strip()] = '%s/RGZ-full.%i/FIRST-IMGS/%s.fits' % (fits_dir, int(spl[0]), spl[1].strip())
 
     IDnumber = 0 #ID number for catalog
     count = 0 #number of sources added
@@ -56,29 +69,30 @@ def RGZcatalog():
     #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct galaxies
     #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple components
 
-        IDnumber += 1
+        if consensus.find_one({'zooniverse_id':subject['zooniverse_id']}):
+            IDnumber += 1
 
         link = subject['location']['contours'] #gets url as Unicode string
 
         for consensusObject in consensus.find({'zooniverse_id':subject['zooniverse_id']}):
 
-            count += 1
-            if count>10:
+            if count>=100:
                 print 'Time taken:', time.time()-starttime
-                return [count, IDnumber]
+                return [count, IDnumber-1]
+            count += 1
 
             #display which entry is being processed to see how far the program is
             catalog_id = 'RGZ'+str(IDnumber)+str(consensusObject['label'])
             print catalog_id
             
-            searchtime = time.time()
             #find location of FITS file
             fid = consensusObject['FIRST_id']
-            for root, dirnames, filenames in scandir.walk(fits_dir):
-                for filename in filenames:
-                    if filename == fid + '.fits':
-                        fits_loc = os.path.join(root, filename)
-            print 'Time spent finding FITS:', time.time()-searchtime
+            fits_loc = pathdict[fid]
+##            if not os.path.exists(fits_loc):
+##                for root, dirnames, filenames in scandir.walk(fits_dir):
+##                    for filename in filenames:
+##                        if filename == fid + '.fits':
+##                            fits_loc = os.path.join(root, filename)
             
             #find IR counterpart from consensus data, if present
             w = wcs.WCS(fits.open(fits_loc)[0].header) #gets pixel-to-WCS conversion from header
@@ -94,7 +108,8 @@ def RGZcatalog():
 
             #if an IR peak exists, search AllWISE and SDSS for counterparts
             if ir_pos:
-                wisetime = time.time()
+                
+##                wisetime = time.time()
                 #get IR data from AllWISE Source Catalog
                 table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
                 if len(table):
@@ -126,12 +141,12 @@ def RGZcatalog():
                 else:
                     wise_match = None
 
-                if wise_match:
-                    matched = 'match'
-                else:
-                    matched = 'no match'
-                print 'WISE:', time.time()-wisetime, matched
-                sdsstime = time.time()
+##                if wise_match:
+##                    matched = 'match'
+##                else:
+##                    matched = 'no match'
+##                print 'WISE:', time.time()-wisetime, matched
+##                sdsstime = time.time()
 
                 #get optical magnitude data from Galaxy table in SDSS
                 query = '''select objID, ra, dec, u, g, r, i, z, err_u, err_g, err_r, err_i, err_z from Galaxy
@@ -220,11 +235,11 @@ def RGZcatalog():
                 #end of 'if SDSS match'
 
             #end of 'if IR peak'
-            if sdss_match:
-                matched = 'match'
-            else:
-                matched = 'no match'
-            print 'SDSS:', time.time()-sdsstime, matched
+##            if sdss_match:
+##                matched = 'match'
+##            else:
+##                matched = 'no match'
+##            print 'SDSS:', time.time()-sdsstime, matched
 
             #convert match data from numpy types to native Python types for JSON compatibility
             if wise_match:
@@ -245,7 +260,7 @@ def RGZcatalog():
                            'consensus':{'n_users':consensusObject['n_users'], 'n_total':consensusObject['n_total'], \
                                         'level':consensusObject['consensus_level'], 'IR_ra':ir_pos.ra.deg, 'IR_dec':ir_pos.dec.deg} }
 
-            radiotime = time.time()
+##            radiotime = time.time()
             #try block attempts to read JSON from web; if it exists, calculate data
             try:
                 compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
@@ -278,8 +293,8 @@ def RGZcatalog():
                     pos2 = coord.SkyCoord(raRange[1], decRange[1], unit=(u.deg, u.deg))
                     extent = pos1.separation(pos2).arcminute
                     solidAngle = tree.area #square arcsec
-                    components.append({'flux':tree.flux, 'fluxErr':tree.fluxErr, 'angularExtent':extent, 'solidAngle':solidAngle, \
-                                       'raRange':raRange, 'decRange':decRange, 'physicalExtent':None, 'crossSection':None})
+                    components.append({'flux':tree.flux, 'fluxErr':tree.fluxErr, 'angularExtent':extent, 'solidAngle':solidAngle, 'raRange':raRange, \
+                                       'decRange':decRange, 'physicalExtent':None, 'crossSection':None, 'luminosity':None, 'luminosityErr':None})
 
                 #adds up total flux of all components
                 totalFlux = 0
@@ -322,40 +337,52 @@ def RGZcatalog():
                 for tree in contourTrees:
                     for peak in tree.peaks:
                         peakList.append(peak)
+                peakFluxErr = contourTrees[0].sigma*1000
 
                 #calculate physical data using redshift
                 if sdss_match:
                     if sdss_match['redshift']:
                         z = sdss_match['redshift']
                         lz = np.log10(z)
-                        D_A = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239) #angular size distance approximation
-                        D_L = D_A*pow(1+z, 2) #luminosity distance approximation
+                        D_A = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)/1000 #angular size distance approximation in kpc
+                        D_L = D_A*pow(1+z, 2) #luminosity distance approximation in kpc
                         maxPhysicalExtent = D_A*maxAngularExtent*np.pi/180/3600 #arcseconds to radians
                         totalCrossSection = pow(D_A,2)*totalSolidAngle*pow(np.pi/180/60,2) #arcminutes^2 to radians^2
+                        totalLuminosity = totalFlux*1e-29*4*np.pi*pow(D_L*3.09e19,2) #mJy to W/(m^2 Hz), kpc to m
+                        totalLuminosityErr = totalFluxErr*1e-29*4*np.pi*pow(D_L*3.09e19,2)
+                        peakLuminosityErr = peakFluxErr*1e-29*4*np.pi*pow(D_L*3.09e19,2)
                         for component in components:
                             component['physicalExtent'] = D_A*component['angularExtent']*np.pi/180/3600
                             component['crossSection'] = pow(D_A,2)*component['solidAngle']*pow(np.pi/180/60,2)
+                            component['luminosity'] = component['flux']*1e-29*4*np.pi*pow(D_L*3.09e19,2)
+                            component['luminosityErr'] = component['fluxErr']*1e-29*4*np.pi*pow(D_L*3.09e19,2)
+                        for peak in peakList:
+                            peak['luminosity'] = peak['flux']*1e-29*4*np.pi*pow(D_L*3.09e19,2)
                 else:
                     maxPhysicalExtent = None
                     totalCrossSection = None
+                    totalLuminosity = None
+                    totalLuminosityErr = None
+                    peakLuminosityErr = None
 
                 #save radio data as dict for printing
-                outputDict.update({'totalFlux':totalFlux, 'totalFluxErr':totalFluxErr, \
-                                   'outermostLevel':data['contours'][0][0]['level']*1000, 'numberComponents':len(contourTrees), 'numberPeaks':len(peakList), \
-                                   'maxAngularExtent':maxAngularExtent, 'maxPhysicalExtent':maxPhysicalExtent, 'totalSolidAngle':totalSolidAngle, \
-                                   'totalCrossSection':totalCrossSection, 'peakFluxErr':contourTrees[0].sigma*1000, 'peaks':peakList, 'components':components})
+                outputDict.update({'totalFlux':totalFlux, 'totalFluxErr':totalFluxErr, 'outermostLevel':data['contours'][0][0]['level']*1000, \
+                                   'numberComponents':len(contourTrees), 'numberPeaks':len(peakList), 'maxAngularExtent':maxAngularExtent, \
+                                   'maxPhysicalExtent':maxPhysicalExtent, 'totalSolidAngle':totalSolidAngle, 'totalCrossSection':totalCrossSection, \
+                                   'totalLuminosity':totalLuminosity, 'totalLuminosityErr':totalLuminosityErr, 'peakFluxErr':peakFluxErr, \
+                                   'peakLuminosityErr':peakLuminosityErr, 'peaks':peakList, 'components':components})
                                    
             #if the link doesn't have a JSON, no data can be determined
             except urllib2.HTTPError, err:
                 if err.code == 404:
-                    outputDict.update({'totalFlux':None, 'totalFluxErr':None, 'outermostLevel':None, \
-                                       'numberComponents':None, 'numberPeaks':None, 'maxExtent':None, 'totalArea':None, \
-                                       'peakFluxErr':None, 'peaks':None, 'components':None})
+                    outputDict.update({'totalFlux':None, 'totalFluxErr':None, 'outermostLevel':None, 'numberComponents':None, 'numberPeaks':None, \
+                                       'maxAngularExtent':None, 'maxPhysicalExtent':None, 'totalSolidAngle':None, 'totalCrossSection': None, \
+                                       'totalLuminosity':None, 'totalLuminosityErr':None, 'peakFluxErr':None, 'peaks':None, 'components':None})
                     pass
                 else:
                     raise
 
-            print 'radio:', time.time()-radiotime
+##            print 'radio:', time.time()-radiotime
 
             catalog.insert(outputDict)
 
@@ -368,7 +395,7 @@ def RGZcatalog():
 #pass an SQL query to SDSS and return a pandas dataframe
 def SDSS_select(sql):
     br = mechanize.Browser()
-    br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx')
+    br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
     br.select_form(name='sql')
     br['cmd'] = sql
     br['format'] = ['csv']

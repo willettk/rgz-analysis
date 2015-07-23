@@ -104,7 +104,7 @@ class Node(object):
             flux = self.img[ bbox[3]-1:bbox[1]+1, bbox[2]-1:bbox[0]+1 ].max() #peak flux in bbox, with 1 pixel padding
             locP = np.where(self.img == flux) #location in pixels
             locRD = self.w.wcs_pix2world( np.array( [[locP[1][0]+1, locP[0][0]+1]] ), 1) #location in ra and dec
-            peak = dict(ra=locRD[0][0], dec=locRD[0][1], peakFlux=flux*self.pixelArea/self.beamArea*1000)
+            peak = dict(ra=locRD[0][0], dec=locRD[0][1], flux=flux*self.pixelArea/self.beamArea*1000, luminosity=None)
             pList.append(peak)
         else:
             for child in self.children:
