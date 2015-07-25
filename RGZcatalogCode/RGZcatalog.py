@@ -12,9 +12,7 @@ from ast import literal_eval
 import os
 import scandir
 from astropy.io import fits
-from astropy import wcs
-from astropy import coordinates as coord
-from astropy import units as u
+from astropy import wcs, coordinates as coord, units as u
 from astroquery.irsa import Irsa
 import mechanize
 import time
@@ -63,8 +61,8 @@ def RGZcatalog():
     starttime = time.time()
 
     #iterate through all subjects
-    for subject in subjects.find().batch_size(30):
-    #for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
+    #for subject in subjects.find().batch_size(30):
+    for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
     #for subject in subjects.find({'zooniverse_id':'ARG0002qyh'}): #sample multipeaked subject
     #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct galaxies
     #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple components
@@ -109,7 +107,6 @@ def RGZcatalog():
             #if an IR peak exists, search AllWISE and SDSS for counterparts
             if ir_pos:
                 
-##                wisetime = time.time()
                 #get IR data from AllWISE Source Catalog
                 table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
                 if len(table):
@@ -140,13 +137,6 @@ def RGZcatalog():
                         wise_match = None
                 else:
                     wise_match = None
-
-##                if wise_match:
-##                    matched = 'match'
-##                else:
-##                    matched = 'no match'
-##                print 'WISE:', time.time()-wisetime, matched
-##                sdsstime = time.time()
 
                 #get optical magnitude data from Galaxy table in SDSS
                 query = '''select objID, ra, dec, u, g, r, i, z, err_u, err_g, err_r, err_i, err_z from Galaxy
@@ -235,11 +225,6 @@ def RGZcatalog():
                 #end of 'if SDSS match'
 
             #end of 'if IR peak'
-##            if sdss_match:
-##                matched = 'match'
-##            else:
-##                matched = 'no match'
-##            print 'SDSS:', time.time()-sdsstime, matched
 
             #convert match data from numpy types to native Python types for JSON compatibility
             if wise_match:
@@ -260,17 +245,12 @@ def RGZcatalog():
                            'consensus':{'n_users':consensusObject['n_users'], 'n_total':consensusObject['n_total'], \
                                         'level':consensusObject['consensus_level'], 'IR_ra':ir_pos.ra.deg, 'IR_dec':ir_pos.dec.deg} }
 
-##            radiotime = time.time()
             #try block attempts to read JSON from web; if it exists, calculate data
             try:
                 compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
                 tempfile = StringIO(compressed) #temporarily stores contents as file (emptied after unzipping)
                 uncompressed = GzipFile(fileobj=tempfile, mode='r').read() #unzips contents to str
                 data = json.loads(uncompressed) #loads JSON object
-
-                #scaling factors, pixels to arcminutes
-                #w = 3./data['width']
-                #h = 3./data['height']
 
                 #create list of trees, each containing a contour and its contents
                 contourTrees = []
@@ -344,10 +324,10 @@ def RGZcatalog():
                     if sdss_match['redshift']:
                         z = sdss_match['redshift']
                         lz = np.log10(z)
-                        D_A = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)/1000 #angular size distance approximation in kpc
+                        D_A = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)*1000 #angular size distance approximation in kpc
                         D_L = D_A*pow(1+z, 2) #luminosity distance approximation in kpc
                         maxPhysicalExtent = D_A*maxAngularExtent*np.pi/180/3600 #arcseconds to radians
-                        totalCrossSection = pow(D_A,2)*totalSolidAngle*pow(np.pi/180/60,2) #arcminutes^2 to radians^2
+                        totalCrossSection = pow(D_A,2)*totalSolidAngle*pow(np.pi/180/3600,2) #arcseconds^2 to radians^2
                         totalLuminosity = totalFlux*1e-29*4*np.pi*pow(D_L*3.09e19,2) #mJy to W/(m^2 Hz), kpc to m
                         totalLuminosityErr = totalFluxErr*1e-29*4*np.pi*pow(D_L*3.09e19,2)
                         peakLuminosityErr = peakFluxErr*1e-29*4*np.pi*pow(D_L*3.09e19,2)
@@ -366,23 +346,21 @@ def RGZcatalog():
                     peakLuminosityErr = None
 
                 #save radio data as dict for printing
-                outputDict.update({'totalFlux':totalFlux, 'totalFluxErr':totalFluxErr, 'outermostLevel':data['contours'][0][0]['level']*1000, \
-                                   'numberComponents':len(contourTrees), 'numberPeaks':len(peakList), 'maxAngularExtent':maxAngularExtent, \
-                                   'maxPhysicalExtent':maxPhysicalExtent, 'totalSolidAngle':totalSolidAngle, 'totalCrossSection':totalCrossSection, \
-                                   'totalLuminosity':totalLuminosity, 'totalLuminosityErr':totalLuminosityErr, 'peakFluxErr':peakFluxErr, \
-                                   'peakLuminosityErr':peakLuminosityErr, 'peaks':peakList, 'components':components})
+                outputDict.update({'radio':{'totalFlux':totalFlux, 'totalFluxErr':totalFluxErr, 'outermostLevel':data['contours'][0][0]['level']*1000, \
+                                            'numberComponents':len(contourTrees), 'numberPeaks':len(peakList), 'maxAngularExtent':maxAngularExtent, \
+                                            'maxPhysicalExtent':maxPhysicalExtent, 'totalSolidAngle':totalSolidAngle, 'totalCrossSection':totalCrossSection, \
+                                            'totalLuminosity':totalLuminosity, 'totalLuminosityErr':totalLuminosityErr, 'peakFluxErr':peakFluxErr, \
+                                            'peakLuminosityErr':peakLuminosityErr, 'peaks':peakList, 'components':components}})
                                    
             #if the link doesn't have a JSON, no data can be determined
             except urllib2.HTTPError, err:
                 if err.code == 404:
-                    outputDict.update({'totalFlux':None, 'totalFluxErr':None, 'outermostLevel':None, 'numberComponents':None, 'numberPeaks':None, \
-                                       'maxAngularExtent':None, 'maxPhysicalExtent':None, 'totalSolidAngle':None, 'totalCrossSection': None, \
-                                       'totalLuminosity':None, 'totalLuminosityErr':None, 'peakFluxErr':None, 'peaks':None, 'components':None})
+                    outputDict.update({'radio':{'totalFlux':None, 'totalFluxErr':None, 'outermostLevel':None, 'numberComponents':None, 'numberPeaks':None, \
+                                                'maxAngularExtent':None, 'maxPhysicalExtent':None, 'totalSolidAngle':None, 'totalCrossSection': None, \
+                                                'totalLuminosity':None, 'totalLuminosityErr':None, 'peakFluxErr':None, 'peaks':None, 'components':None}})
                     pass
                 else:
                     raise
-
-##            print 'radio:', time.time()-radiotime
 
             catalog.insert(outputDict)
 
