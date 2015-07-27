@@ -24,7 +24,7 @@ def RGZcatalog():
     logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s')
 
     #connect to database of subjects
-    logging.info('Connecting to MongoDB.')
+    logging.info('Connecting to MongoDB')
     client = MongoClient('localhost', 27017)
     db = client['radio']
     subjects = db['radio_subjects']
@@ -40,18 +40,9 @@ def RGZcatalog():
             overwrite = raw_input('Invalid choice. Overwrite or append? (o/a) ').lower()
         if overwrite=='o':
             db.drop_collection('catalog')
-            logging.info('User chose to overwrite catalog.')
+            logging.info('User chose to overwrite catalog')
         else:
-            logging.info('User chose to append to catalog.')
-
-    #this will be hardcoded in the final program
-##    if os.path.exists('/data/extragal/willett/rgz/raw_images/'):
-##        fits_dir = '/data/extragal/willett/rgz/raw_images/'
-##    else:
-##        fits_dir = raw_input('Directory where radio FITS images are stored: ')
-##        while not os.path.exists(fits_dir):
-##            fits_dir = raw_input('Invalid path. Please re-enter: ')
-    fits_dir = '/data/extragal/willett/rgz/raw_images/'
+            logging.info('User chose to append to catalog')
 
     #get dictionary for finding the path to FITS files and WCS headers
     with open('/data/extragal/willett/rgz/first_fits.txt') as f:
@@ -59,7 +50,7 @@ def RGZcatalog():
     pathdict = {}
     for l in lines:
         spl = l.split(' ')
-        pathdict[spl[1].strip()] = '%s/RGZ-full.%i/FIRST-IMGS/%s.fits' % (fits_dir, int(spl[0]), spl[1].strip())
+        pathdict[spl[1].strip()] = '/data/extragal/willett/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (int(spl[0]), spl[1].strip())
 
     #count the number of entries from this run and how many entries are in the catalog total
     count = 0
@@ -85,19 +76,16 @@ def RGZcatalog():
 
         for consensusObject in consensus.find({'zooniverse_id':subject['zooniverse_id']}):
             
-            logging.info('Processing consensus object %s within subject field %s.', consensusObject['label'].upper(), subject['zooniverse_id'])
+            logging.info('Processing consensus object %s within subject field %s', consensusObject['label'].upper(), subject['zooniverse_id'])
 
             #skip if this object in this field is already in catalog
-            if catalog.find_one({'zooniverse_id':subject['zooniverse_id']}) and \
-               catalog.find_one({'zooniverse_id':subject['zooniverse_id']})['consensus']['label'] == consensusObject['label']:
+            if catalog.find_one({'Zooniverse_id':subject['zooniverse_id']}) and \
+               catalog.find_one({'Zooniverse_id':subject['zooniverse_id']})['consensus']['label'] == consensusObject['label']:
 
-                logging.info('Entry already in catalog; skipping.')
+                logging.info('Entry already in catalog; skipping')
                 
             else:
 
-    ##            if count>=100:
-    ##                print 'Time taken:', time.time()-starttime
-    ##                return [count, -1]
                 count += 1
                 IDnumber += 1
 
@@ -108,11 +96,6 @@ def RGZcatalog():
                 #find location of FITS file
                 fid = consensusObject['FIRST_id']
                 fits_loc = pathdict[fid]
-    ##            if not os.path.exists(fits_loc):
-    ##                for root, dirnames, filenames in scandir.walk(fits_dir):
-    ##                    for filename in filenames:
-    ##                        if filename == fid + '.fits':
-    ##                            fits_loc = os.path.join(root, filename)
                 
                 #find IR counterpart from consensus data, if present
                 w = wcs.WCS(fits.open(fits_loc)[0].header) #gets pixel-to-WCS conversion from header
@@ -121,6 +104,8 @@ def RGZcatalog():
                     ir_pos = None
                     ir_ra = None
                     ir_dec = None
+                    wise_match = None
+                    sdss_match = None
                 else:
                     p2w = w.wcs_pix2world
                     ir_ra_pixels = ir_coords[0] * 132./500.
@@ -131,9 +116,9 @@ def RGZcatalog():
                     ir_pos = coord.SkyCoord(ir_ra, ir_dec, unit=(u.deg,u.deg), frame='icrs')
 
                 if ir_pos:
-                    logging.info('IR counterpart found.')
+                    logging.info('IR counterpart found')
                 else:
-                    logging.info('No IR conterpart found.')
+                    logging.info('No IR conterpart found')
 
                 #if an IR peak exists, search AllWISE and SDSS for counterparts
                 if ir_pos:
@@ -170,9 +155,9 @@ def RGZcatalog():
                         wise_match = None
                         
                     if wise_match:
-                        logging.info('AllWISE match found.')
+                        logging.info('AllWISE match found')
                     else:
-                        logging.info('No AllWISE match found.')
+                        logging.info('No AllWISE match found')
 
                     #get optical magnitude data from Galaxy table in SDSS
                     query = '''select objID, ra, dec, u, g, r, i, z, err_u, err_g, err_r, err_i, err_z from Galaxy
@@ -208,9 +193,9 @@ def RGZcatalog():
                         sdss_match = None
 
                     if sdss_match:
-                        logging.info('SDSS match found.')
+                        logging.info('SDSS match found')
                     else:
-                        logging.info('No SDSS match found.')
+                        logging.info('No SDSS match found')
 
                     #only get more data from SDSS if a postional match exists
                     if sdss_match:
@@ -262,6 +247,8 @@ def RGZcatalog():
                             sdss_match.update({'redshift':specZ, 'redshift_err':specZErr, 'redshift_type':np.int16(1)})
                         else:
                             sdss_match.update({'redshift':photoZ, 'redshift_err':photoZErr, 'redshift_type':np.int16(0)})
+                        if sdss_match['redshift'] == -9999:
+                            sdss_match.update({'redshift':None, 'redshift_err':None, 'redshift_type':None})
 
                     #end of 'if SDSS match'
 
@@ -393,7 +380,7 @@ def RGZcatalog():
                                                 'totalLuminosity':totalLuminosity, 'totalLuminosityErr':totalLuminosityErr, 'peakFluxErr':peakFluxErr, \
                                                 'peakLuminosityErr':peakLuminosityErr, 'peaks':peakList, 'components':components}})
 
-                    logging.info('Radio data added.')
+                    logging.info('Radio data added')
                                        
                 #if the link doesn't have a JSON, no data can be determined
                 except urllib2.HTTPError, err:
@@ -401,19 +388,21 @@ def RGZcatalog():
                         outputDict.update({'radio':{'totalFlux':None, 'totalFluxErr':None, 'outermostLevel':None, 'numberComponents':None, 'numberPeaks':None, \
                                                     'maxAngularExtent':None, 'maxPhysicalExtent':None, 'totalSolidAngle':None, 'totalCrossSection': None, \
                                                     'totalLuminosity':None, 'totalLuminosityErr':None, 'peakFluxErr':None, 'peaks':None, 'components':None}})
-                        logging.info('No radio JSON detected.')
+                        logging.info('No radio JSON detected')
                         pass
                     else:
                         raise
 
                 catalog.insert(outputDict)
-                logging.info('Entry %s added to catalog.', catalog_id)
+                logging.info('Entry %s added to catalog', catalog_id)
 
     #end of subject search
 
     #end timer
     endtime = time.time()
-    print 'Time taken:', endtime-starttime
+    output = 'Time taken:' + str(endtime-starttime)
+    logging.info(output)
+    print output
 
     return count
 
@@ -465,7 +454,8 @@ def bboxToDS9(bbox):
     return [newBbox, ds9Box]
 
 if __name__ == '__main__':
-    logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s')
+    logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s')
+    logging.captureWarnings(True)
     logging.info('Catalog run from command line.')
     try:
         output = str(RGZcatalog()) + ' entries added.'
