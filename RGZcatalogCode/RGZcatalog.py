@@ -33,16 +33,8 @@ def RGZcatalog():
     consensus = db['consensus']
     catalog = db['catalog'] #this is being populated by this program
 
-    #this will be hardcoded in the final program
     if catalog.count():
-        overwrite = raw_input('Catalog has entries. Overwrite or append? (o/a) ').lower()
-        while overwrite!='o' and overwrite!='a':
-            overwrite = raw_input('Invalid choice. Overwrite or append? (o/a) ').lower()
-        if overwrite=='o':
-            db.drop_collection('catalog')
-            logging.info('User chose to overwrite catalog')
-        else:
-            logging.info('User chose to append to catalog')
+        logging.info('Catalog contains entries; appending')
 
     #get dictionary for finding the path to FITS files and WCS headers
     with open('/data/extragal/willett/rgz/first_fits.txt') as f:
@@ -66,7 +58,6 @@ def RGZcatalog():
     #iterate through all subjects
     for subject in subjects.find().batch_size(30):
     #for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
-    #for subject in subjects.find({'zooniverse_id':'ARG0002qyh'}): #sample multipeaked subject
     #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct galaxies
     #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple components
 
@@ -101,8 +92,6 @@ def RGZcatalog():
                 ir_coords = literal_eval(consensusObject['ir_peak'])
                 if ir_coords == (-99, -99):
                     ir_pos = None
-                    ir_ra = None
-                    ir_dec = None
                     wise_match = None
                     sdss_match = None
                 else:
@@ -110,9 +99,7 @@ def RGZcatalog():
                     ir_ra_pixels = ir_coords[0] * 132./500.
                     ir_dec_pixels = 133 - ir_coords[1] * 132./500.
                     ir_peak = p2w( np.array([[ir_ra_pixels, ir_dec_pixels]]), 1)
-                    ir_ra = ir_peak[0][0]
-                    ir_dec = ir_peak[0][1]
-                    ir_pos = coord.SkyCoord(ir_ra, ir_dec, unit=(u.deg,u.deg), frame='icrs')
+                    ir_pos = coord.SkyCoord(ir_peak[0][0], ir_peak[0][1], unit=(u.deg,u.deg), frame='icrs')
 
                 entry.update({'consensus':{'n_users':consensusObject['n_users'], 'n_total':consensusObject['n_total'], \
                                            'level':consensusObject['consensus_level'], 'label':consensusObject['label']}})
@@ -137,9 +124,9 @@ def RGZcatalog():
                             match = None
                             dist = np.inf
                         if len(table)>1:
-                            for entry in table:
-                                if entry['dist']<dist and entry['w1snr']>5:
-                                    match = entry
+                            for row in table:
+                                if row['dist']<dist and row['w1snr']>5:
+                                    match = row
                                     dist = match['dist']
                                     numberMatches += 1
                         if match:
@@ -147,11 +134,7 @@ def RGZcatalog():
                                           'w1mpro':match['w1mpro'], 'w1sigmpro':match['w1sigmpro'], 'w1snr':match['w1snr'], \
                                           'w2mpro':match['w2mpro'], 'w2sigmpro':match['w2sigmpro'], 'w2snr':match['w2snr'], \
                                           'w3mpro':match['w3mpro'], 'w3sigmpro':match['w3sigmpro'], 'w3snr':match['w3snr'], \
-                                          'w4mpro':match['w4mpro'], 'w4sigmpro':match['w4sigmpro'], 'w4snr':match['w4snr']}
-                            for key in wise_match:
-                                if wise_match[key] is np.ma.masked:
-                                    wise_match.pop(key)
-                                    
+                                          'w4mpro':match['w4mpro'], 'w4sigmpro':match['w4sigmpro'], 'w4snr':match['w4snr']}     
                         else:
                             wise_match = None
                     else:
@@ -159,8 +142,10 @@ def RGZcatalog():
                         
                     if wise_match:
                         logging.info('AllWISE match found')
-                        for key in wise_match:
-                            if wise_match[key] and type(wise_match[key]) is not str:
+                        for key in wise_match.keys():
+                            if wise_match[key] is np.ma.masked:
+                                    wise_match.pop(key)
+                            elif wise_match[key] and type(wise_match[key]) is not str:
                                 wise_match[key] = wise_match[key].item()
                             elif wise_match[key] == 0:
                                 wise_match[key] = 0
@@ -226,9 +211,6 @@ def RGZcatalog():
                                                'h_beta_flux':df['h_beta_flux'][0], 'h_beta_flux_err':df['h_beta_flux_err'][0], \
                                                'nii_6584_flux':df['nii_6584_flux'][0], 'nii_6584_flux_err':df['nii_6584_flux_err'][0], \
                                                'h_alpha_flux':df['h_alpha_flux'][0], 'h_alpha_flux_err':df['h_alpha_flux_err'][0]})
-                        else:
-                            sdss_match.update({'oiii_5007_flux':None, 'oiii_5007_flux_err':None, 'h_beta_flux':None, 'h_beta_flux_err':None, \
-                                               'nii_6584_flux':None, 'nii_6584_flux_err':None, 'h_alpha_flux':None, 'h_alpha_flux_err':None})
 
                         #get spectral class and redshiftfrom SpecPhoto table
                         query = '''select z, zErr, case when class like 'GALAXY' then 0
@@ -242,9 +224,7 @@ def RGZcatalog():
                             specZ = df['z'][0]
                             specZErr = df['zErr'][0]
                         else:
-                            sdss_match.update({'spectralClass':None})
                             specZ = None
-                            specZErr = None
 
                         #use specZ is present, otherwise use photoZ
                         if specZ:
@@ -252,22 +232,24 @@ def RGZcatalog():
                         else:
                             sdss_match.update({'redshift':photoZ, 'redshift_err':photoZErr, 'redshift_type':np.int16(0)})
                         if sdss_match['redshift'] == -9999:
-                            sdss_match.update({'redshift':None, 'redshift_err':None, 'redshift_type':None})
+                            sdss_match.pop('redshift')
+                            sdss_match.pop('redshift_err')
+                            sdss_match.pop('redshift_type')
 
-                        for key in sdss_match:
-                            if sdss_match[key] and type(sdss_match[key]) is not str:
+                    #end of 'if SDSS match'
+
+                    if sdss_match:
+                        logging.info('SDSS match found')
+                        for key in sdss_match.keys():
+                            if sdss_match[key] is None:
+                                sdss_match.pop(key)
+                            elif sdss_match[key] and type(sdss_match[key]) is not str:
                                 sdss_match[key] = sdss_match[key].item()
                             elif sdss_match[key] == 0:
                                 sdss_match[key] = 0
-
-                        logging.info('SDSS match found')
-                        entry.update({'SDSS':sdss_match})
-
+                        entry.update({'AllWISE':wise_match})
                     else:
-
-                        logging.info('No SDSS match found')  
-
-                    #end of 'if SDSS match'
+                        logging.info('No AllWISE match found')
 
                 #end of 'if IR peak'
 
@@ -352,7 +334,7 @@ def RGZcatalog():
 
                     #calculate physical data using redshift
                     if sdss_match:
-                        if sdss_match['redshift']:
+                        if 'redshift' in sdss_match:
                             z = sdss_match['redshift']
                             lz = np.log10(z)
                             DAkpc = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)*1000 #angular size distance approximation in kpc
@@ -384,13 +366,13 @@ def RGZcatalog():
                         raise
 
                 catalog.insert(entry)
-                logging.info('Entry %s added to catalog', IDnumber)
+                logging.info('Entry %i added to catalog', IDnumber)
 
     #end of subject search
 
     #end timer
     endtime = time.time()
-    output = 'Time taken:' + str(endtime-starttime)
+    output = 'Time taken: ' + str(endtime-starttime)
     logging.info(output)
     print output
 
@@ -399,7 +381,7 @@ def RGZcatalog():
 if __name__ == '__main__':
     logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s')
     logging.captureWarnings(True)
-    logging.info('Catalog run from command line.')
+    logging.info('Catalog run from command line')
     try:
         output = str(RGZcatalog()) + ' entries added.'
         logging.info(output)
