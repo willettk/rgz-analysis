@@ -41,16 +41,16 @@ def approx(a, b, uncertainty=1e-5):
    return np.abs(a-b) < uncertainty
 
 #pass an SQL query to SDSS and return a pandas dataframe
-def SDSS_select(sql, tryAgain=True):
-    br = mechanize.Browser()
-    try:
-        br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
-        br.select_form(name='sql')
-        br['cmd'] = sql
-        br['format'] = ['csv']
-        response = br.submit()
-        file_like = StringIO(response.get_data())
-        return pd.read_csv(file_like, skiprows=1)
-    except RuntimeError: #try connecting once more in case of time-out or robots.txt error
-        if tryAgain:
-            return SDSS_select(sql, False)
+def SDSS_select(sql):
+   br = mechanize.Browser()
+   try:
+      br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
+   except RuntimeError: #try once more
+      br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
+      pass
+   br.select_form(name='sql')
+   br['cmd'] = sql
+   br['format'] = ['csv']
+   response = br.submit()
+   file_like = StringIO(response.get_data())
+   return pd.read_csv(file_like, skiprows=1)

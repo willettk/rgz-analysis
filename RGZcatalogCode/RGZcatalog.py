@@ -115,7 +115,7 @@ def RGZcatalog():
                     #get IR data from AllWISE Source Catalog
                     try:
                         table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
-                    except astroquery.exceptions.TimeoutError:
+                    except astroquery.exceptions.TimeoutError: #try once more
                         table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
                         pass
                     if len(table):
@@ -260,7 +260,11 @@ def RGZcatalog():
                 #try block attempts to read JSON from web; if it exists, calculate data
                 try:
                     link = subject['location']['contours'] #gets url as Unicode string
-                    compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
+                    try:
+                        compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
+                    except urllib2.URLerror: #try once more
+                        compressed = urllib2.urlopen(str(link)).read()
+                        pass
                     tempfile = StringIO(compressed) #temporarily stores contents as file (emptied after unzipping)
                     uncompressed = GzipFile(fileobj=tempfile, mode='r').read() #unzips contents to str
                     data = json.loads(uncompressed) #loads JSON object
