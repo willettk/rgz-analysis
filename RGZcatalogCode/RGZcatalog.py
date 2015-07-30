@@ -12,6 +12,7 @@ from ast import literal_eval
 import os
 from astropy.io import fits
 from astropy import wcs, coordinates as coord, units as u
+import astroquery
 from astroquery.irsa import Irsa
 import time
 import catalogFunctions as fn #contains custom functions
