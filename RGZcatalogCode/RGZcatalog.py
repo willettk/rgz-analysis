@@ -113,7 +113,11 @@ def RGZcatalog():
                 if ir_pos:
                     
                     #get IR data from AllWISE Source Catalog
-                    table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
+                    try:
+                        table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
+                    except astroquery.exceptions.TimeoutError:
+                        table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
+                        pass
                     if len(table):
                         numberMatches = 0
                         if table[0]['w1snr']>5:
