@@ -45,9 +45,8 @@ def SDSS_select(sql):
    br = mechanize.Browser()
    try:
       br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
-   except RuntimeError: #try once more
+   except (mechanize.HTTPError, mechanize.URLError): #try once more
       br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
-      pass
    br.select_form(name='sql')
    br['cmd'] = sql
    br['format'] = ['csv']

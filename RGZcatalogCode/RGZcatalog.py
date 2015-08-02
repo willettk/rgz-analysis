@@ -118,7 +118,6 @@ def RGZcatalog():
                         table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
                     except astroquery.exceptions.TimeoutError: #try once more
                         table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
-                        pass
                     if len(table):
                         numberMatches = 0
                         if table[0]['w1snr']>5:
@@ -263,9 +262,8 @@ def RGZcatalog():
                     link = subject['location']['contours'] #gets url as Unicode string
                     try:
                         compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
-                    except urllib2.URLerror: #try once more
+                    except (urllib2.URLError, urllib2.HTTPError): #try once more
                         compressed = urllib2.urlopen(str(link)).read()
-                        pass
                     tempfile = StringIO(compressed) #temporarily stores contents as file (emptied after unzipping)
                     uncompressed = GzipFile(fileobj=tempfile, mode='r').read() #unzips contents to str
                     data = json.loads(uncompressed) #loads JSON object
