@@ -1,7 +1,9 @@
+import logging
 import numpy as np
 import pandas as pd
 from StringIO import StringIO
 import mechanize
+import urllib2
 
 #creates a bounding box for a given contour path
 #loop = data['contours'][0][0]['arr'] #outermost contour (for testing)
@@ -42,10 +44,12 @@ def approx(a, b, uncertainty=1e-5):
 
 #pass an SQL query to SDSS and return a pandas dataframe
 def SDSS_select(sql):
+   logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
    br = mechanize.Browser()
    try:
       br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
-   except (mechanize.HTTPError, mechanize.URLError): #try once more
+   except (urllib2.HTTPError, urllib2.URLError) as e: #try once more
+      logging.exception(e)
       br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
    br.select_form(name='sql')
    br['cmd'] = sql

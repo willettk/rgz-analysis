@@ -1,6 +1,3 @@
-#to copy individual FITS files for test runs:
-#find /data/extragal/willett/rgz/raw_images/ -name '[whatever].fits' | xargs cp -t .
-
 import logging
 from pymongo import MongoClient
 import numpy as np
@@ -116,7 +113,8 @@ def RGZcatalog():
                     #get IR data from AllWISE Source Catalog
                     try:
                         table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
-                    except astroquery.exceptions.TimeoutError: #try once more
+                    except astroquery.exceptions.TimeoutError as e: #try once more
+                        logging.exception(e)
                         table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
                     if len(table):
                         numberMatches = 0
@@ -262,7 +260,8 @@ def RGZcatalog():
                     link = subject['location']['contours'] #gets url as Unicode string
                     try:
                         compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
-                    except (urllib2.URLError, urllib2.HTTPError): #try once more
+                    except (urllib2.URLError, urllib2.HTTPError) as e: #try once more
+                        logging.exception(e)
                         compressed = urllib2.urlopen(str(link)).read()
                     tempfile = StringIO(compressed) #temporarily stores contents as file (emptied after unzipping)
                     uncompressed = GzipFile(fileobj=tempfile, mode='r').read() #unzips contents to str
@@ -368,8 +367,8 @@ def RGZcatalog():
                 except urllib2.HTTPError as e:
                     if e.code == 404:
                         logging.info('No radio JSON detected')
-                        pass
                     else:
+                        logging.exception(e)
                         raise
 
                 catalog.insert(entry)
@@ -386,7 +385,7 @@ def RGZcatalog():
     return count
 
 if __name__ == '__main__':
-    logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s')
+    logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
     logging.info('Catalog run from command line')
     try:
