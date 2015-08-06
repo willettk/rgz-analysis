@@ -126,28 +126,32 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
             goodann = [x for x in c['annotations'] if (x.keys()[0] not in bad_keys)]
             n_galaxies = len(goodann)
     
-            for idx,ann in enumerate(goodann):
+            if n_galaxies > 0:  # There must be at least one galaxy!
+                for idx,ann in enumerate(goodann):
     
-                xmaxlist = []
-                try:
-                    radio_comps = ann['radio']
+                    xmaxlist = []
+                    try:
+                        radio_comps = ann['radio']
 
-                    # loop over all the radio components within an galaxy
-                    if radio_comps != 'No Contours':
-                        for rc in radio_comps:
-                            xmaxlist.append(float(radio_comps[rc]['xmax']))
-                    # or make the value -99 if there are no contours
-                    else:
+                        # loop over all the radio components within an galaxy
+                        if radio_comps != 'No Contours':
+                            for rc in radio_comps:
+                                xmaxlist.append(float(radio_comps[rc]['xmax']))
+                        # or make the value -99 if there are no contours
+                        else:
+                            xmaxlist.append(-99)
+                    except KeyError:
                         xmaxlist.append(-99)
-                except KeyError:
-                    xmaxlist.append(-99)
     
-                # To create a unique ID for the combination of radio components,
-                # take the product of all the xmax coordinates and sum them together.
-                product = reduce(operator.mul, xmaxlist, 1)
-                sumlist.append(round(product,3))
-    
-            checksum = sum(sumlist)
+                    # To create a unique ID for the combination of radio components,
+                    # take the product of all the xmax coordinates and sum them together.
+                    product = reduce(operator.mul, xmaxlist, 1)
+                    sumlist.append(round(product,3))
+
+                checksum = sum(sumlist)
+            else:
+                checksum = -99
+
             checksum_list.append(checksum)
             c['checksum'] = checksum
     
@@ -370,6 +374,9 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
                             answer[k]['ir_x'] = x_exists
                             answer[k]['ir_y'] = y_exists
         else:
+
+            # Note: need to actually put a limit in if less than half of users selected IR counterpart.
+            # Right now it still IDs a sources even if only 1/10 users said it was there.
 
             for k,v in answer.iteritems():
                 if v['ind'] == xk:
@@ -650,8 +657,10 @@ def plot_consensus(consensus,figno=1, save_fig=None):
     plt.subplots_adjust(wspace=0.02)
     
     # Save hard copy of the figure
-    if save_fig:
-        writefile = '/Volumes/3TB/rgz/plots/expert_%s.pdf' % zid
+    if save_fig is not None:
+        if save_fig == True:
+            save_fig = zid
+        writefile = '/Volumes/3TB/rgz/plots/%s.pdf' % save_fig
         fig.savefig('%s' % (writefile))
         plt.close()
     else:
@@ -847,7 +856,7 @@ def run_sample(update=True,subset=None,do_plot=False):
 
     # CSV header
     if not update:
-        fc.write('zooniverse_id,FIRST_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
+        fc.write('zooniverse_id,first_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
 
     for idx,zid in enumerate(zooniverse_ids):
     
