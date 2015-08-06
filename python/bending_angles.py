@@ -60,7 +60,7 @@ ymax = IMG_WIDTH_NEW
 
 subjects,classifications,users = rgz.load_rgz_data()
 
-rgz_75_file = '%s/csv/rgz_75.csv' % rgz_dir
+rgz_75_file = '%s/csv/consensus_rgz_75.csv' % rgz_dir
 
 def get_doubles():
 
@@ -68,7 +68,7 @@ def get_doubles():
 
     rgz75 = ascii.read(rgz_75_file,format='csv')
 
-    dblidx = (rgz75['n_lobes'] == 2) & (rgz75['ratio'] >= 0.75)
+    dblidx = (rgz75['n_radio'] == 2) & (rgz75['consensus_level'] >= 0.75)
     doubles = rgz75[dblidx]
 
     return doubles
@@ -79,7 +79,7 @@ def get_triples():
 
     rgz75 = ascii.read(rgz_75_file,format='csv')
 
-    trpidx = (rgz75['n_lobes'] == 3) & (rgz75['ratio'] >= 0.75)
+    trpidx = (rgz75['n_radio'] == 3) & (rgz75['consensus_level'] >= 0.75)
     triples = rgz75[trpidx]
 
     return triples
@@ -88,17 +88,17 @@ def get_singles_large():
 
     rgz75 = ascii.read(rgz_75_file,format='csv')
 
-    sngidx = (rgz75['n_lobes'] == 1) & (rgz75['ratio'] >= 0.75)
+    sngidx = (rgz75['n_radio'] == 1) & (rgz75['consensus_level'] >= 0.75)
     singles_large = rgz75[sngidx]
 
     return singles_large
 
 def make_pathdict():
 
-    with open('%s/csv/rgz_75_completed_zid.csv' % rgz_dir,'r') as f:
+    with open(rgz_75_file,'r') as f:
         zid_read = f.readlines()
 
-    zooniverse_ids = [z.strip() for z in zid_read]
+    zooniverse_ids = [z.split()[0].strip() for z in zid_read]
     
     # Get dictionary for finding the path to FITS files and WCS headers
     
@@ -115,15 +115,17 @@ def make_pathdict():
 def all_doubles_pixradio(doubles,pathdict):
 
     with open('%s/bending_angles/angles_double_pixradio.csv' % rgz_dir,'w') as f:
-        print >> f,'zid,bending_angle'
+        print >> f,'zooniverse_id,bending_angle,position_angle'
         for double in doubles:
             irx,iry,radio_components = pix_convert(double,pathdict)
             if irx is not None:
                 xc,yc,radio_centroids = pix_radio(irx,iry,radio_components)
                 alpha = bending_angle(xc,yc,radio_centroids[0][0],radio_centroids[0][1],radio_centroids[1][0],radio_centroids[1][1])
                 alpha_deg = alpha * 180./np.pi
+                phi = position_angle(xc,yc,radio_centroids[0][0],radio_centroids[0][1],radio_centroids[1][0],radio_centroids[1][1])
+                phi_deg = phi * 180./np.pi
                 if alpha is not None:
-                    print >> f,'%s,%.3f' % (double['zid'],alpha_deg)
+                    print >> f,'%s,%.3f' % (double['zooniverse_id'],alpha_deg,phi_deg)
 
     return None
 
@@ -137,7 +139,7 @@ def all_doubles_plot(doubles,pathdict):
     with open('%s/bending_angles/angles_double_plot.csv' % rgz_dir,'w') as f:
         for dbl in doubles:
             irx,iry,radio_components = pix_convert(dbl,pathdict)
-            cons = consensus.checksum(dbl['zid'])
+            cons = consensus.checksum(dbl['zooniverse_id'])
             if irx is not None:
                 xc,yc,radio_centroids = pix_radio(irx,iry,radio_components)
                 answer = cons['answer']
@@ -154,15 +156,17 @@ def all_doubles_plot(doubles,pathdict):
 
     return None
 
-def dblid(doubles,zid):
+def dblid(doubles,zooniverse_id):
 
-    dbl = doubles[doubles['zid'] == zid][0]
+    dbl = doubles[doubles['zooniverse_id'] == zooniverse_id][0]
 
     return dbl
 
 def pix_convert(galaxy,pathdict,local=False):
 
-    sub = subjects.find_one({'zooniverse_id':galaxy['zid']})
+    # Convert IR coordinates from RA/dec into pixel
+
+    sub = subjects.find_one({'zooniverse_id':galaxy['zooniverse_id']})
 
     r = requests.get(sub['location']['contours'])
     contours = r.json()
@@ -171,7 +175,7 @@ def pix_convert(galaxy,pathdict,local=False):
 
     try:
         assert len(radio_components) > 1, \
-            'Radio data only has %i component for %s' % (len(radio_components),galaxy['zid'])
+            'Radio data only has %i component for %s' % (len(radio_components),galaxy['zooniverse_id'])
     except AssertionError:
         return None,None,None
 
@@ -197,7 +201,7 @@ def pix_convert(galaxy,pathdict,local=False):
 
 def radio_to_wcs(galaxy,pathdict):
 
-    sub = subjects.find_one({'zooniverse_id':galaxy['zid']})
+    sub = subjects.find_one({'zooniverse_id':galaxy['zooniverse_id']})
 
     r = requests.get(sub['location']['contours'])
     contours = r.json()
@@ -206,7 +210,7 @@ def radio_to_wcs(galaxy,pathdict):
 
     try:
         assert len(radio_components) > 1, \
-            'Radio data only has %i component for %s' % (len(radio_components),galaxy['zid'])
+            'Radio data only has %i component for %s' % (len(radio_components),galaxy['zooniverse_id'])
     except AssertionError:
         return None,None,None
 
@@ -240,9 +244,9 @@ def bending_angle(xc,yc,cx1,cy1,cx2,cy2):
     '''
     Points are:
 
-        - xc,yc:    x,y center of IR counterpart in radio coordinates (500x500)
-        - cx1,cy1:  x,y center of 1st radio lobe in radio coordinates (500x500)
-        - cx2,cy2:  x,y center of 2nd radio lobe in radio coordinates (500x500)
+        - xc,yc:    x,y center of IR counterpart
+        - cx1,cy1:  x,y center of 1st radio lobe
+        - cx2,cy2:  x,y center of 2nd radio lobe
     '''
 
 
@@ -259,6 +263,37 @@ def bending_angle(xc,yc,cx1,cy1,cx2,cy2):
     r2len = np.hypot(r2diff[0],r2diff[1])
 
     alpha = np.arccos(np.dot(r1diff,r2diff) / (r1len*r2len))
+
+    return alpha
+
+def position_angle(xc,yc,cx1,cy1,cx2,cy2):
+
+    # Compute the bending angle (in radians) between three points
+
+    '''
+    Points are:
+
+        - xc,yc:    x,y center of bending angle
+        - cx1,cy1:  x,y center of 1st component
+        - cx2,cy2:  x,y center of 2nd component
+    '''
+
+    r1 = np.array([cx1,cy1])
+    r2 = np.array([cx2,cy2])
+    center = np.array([xc,yc])
+
+    r12sum = (r1-center) + (r2-center)
+    r12len = np.hypot(r12sum[0],r12sum[1])
+
+    north = np.array([0,1])
+    northlen = np.hypot(north[0],north[1])
+
+    alpha = np.arccos(np.dot(r12sum,north) / (r12len*northlen))
+
+    # Measure CCW from north
+
+    if r12sum[0] > 0.:
+        alpha = 2*np.pi - alpha
 
     return alpha
 
@@ -295,9 +330,10 @@ def load_angles(filename):
     with open('%s/bending_angles/%s.csv' % (rgz_dir,filename),'r') as f:
         angstr = f.readlines()
 
-    angles = [float(x.split(',')[1]) for x in angstr[1:]]
+    ba = [float(x.split(',')[1]) for x in angstr[1:]]
+    #pa = [float(x.split(',')[2]) for x in angstr[1:]]
 
-    return angles
+    return ba#,pa
 
 def plothist(savefig=False):
 
@@ -346,18 +382,28 @@ def plothist(savefig=False):
 
 def plot_one_double(dbl,pathdict,figno=1,save_fig=False):
 
-    cons = consensus.checksum(dbl['zid'])
+    cons = consensus.checksum(dbl['zooniverse_id'])
 
-    if pathdict[dbl['first_id']].split('/')[5].split('.')[-1] == '44':
+    '''
+    if pathdict[dbl['first_id']].split('/')[5].split('.')[-1] == '35':
         irx,iry,radio_components = pix_convert(dbl,pathdict,local=False)
     else:
         irx,iry,radio_components = pix_convert(dbl,pathdict)
+    '''
+
+    irx = float(dbl['ir_peak'][1:-1].split(',')[0]) / first_ir_scale_x
+    iry = float(dbl['ir_peak'][1:-1].split(',')[1]) / first_ir_scale_y
+
+    sub = subjects.find_one({'zooniverse_id':dbl['zooniverse_id']})
+    r = requests.get(sub['location']['contours'])
+    contours = r.json()
+    radio_components = contours['contours']
 
     # Plot image
     
-    zid = cons['zid']
+    zooniverse_id = cons['zid']
     answer = cons['answer']
-    sub = subjects.find_one({'zooniverse_id':zid})
+    sub = subjects.find_one({'zooniverse_id':zooniverse_id})
 
     # Download contour data
     
@@ -394,7 +440,7 @@ def plot_one_double(dbl,pathdict,figno=1,save_fig=False):
         path = Path(verts_all, codes_all)
         patch_black = patches.PathPatch(path, facecolor = 'none', edgecolor='black', lw=1)
     except AssertionError:
-        print 'Users found no components for consensus match of %s' % zid
+        print 'Users found no components for consensus match of %s' % zooniverse_id
     
     # Plot the infrared results
     
@@ -437,7 +483,7 @@ def plot_one_double(dbl,pathdict,figno=1,save_fig=False):
     
     ax3.set_xlim([0, 500])
     ax3.set_ylim([500, 0])
-    ax3.set_title(zid)
+    ax3.set_title(zooniverse_id)
     ax3.set_aspect('equal')
     
     ax4.set_xlim([0, 500])
@@ -503,9 +549,34 @@ def plot_one_double(dbl,pathdict,figno=1,save_fig=False):
         ax4.plot([xt,xc],[yt,yc],color='orange',linestyle='--')
         ax4.plot([xb,xc],[yb,yc],color='orange',linestyle='--')
 
-    alpha = bending_angle(xc,yc,cx1,cy1,cx2,cy2)
-    alpha_deg = alpha * 180./np.pi
+    alpha_deg = bending_angle(xc,yc,cx1,cy1,cx2,cy2) * 180/np.pi
     ax4.text(550,0,r'$\alpha$ = %.1f deg' % alpha_deg,fontsize=11)
+    phi_deg = position_angle(xc,500-yc,cx1,500-cy1,cx2,500-cy2) * 180/np.pi
+    ax4.arrow(xc,yc,0,-250,head_width=20, head_length=40, fc='grey', ec='grey',ls='dotted')
+    ax4.text(550,50,r'$\phi$ = %.1f deg' % phi_deg,fontsize=11)
+
+    # Draw the bisector vector
+
+    print xt,yt
+    print xb,yb
+    print xc,yc
+    center = np.array([xc,yc])
+    r1 = np.array([xb,yb]) - center
+    r2 = np.array([xt,yt]) - center
+    r1norm = r1/np.hypot(r1[0],r1[1])
+    r2norm = r2/np.hypot(r2[0],r2[1])
+    r12 = r1+r2
+    r12norm = r1norm+r2norm
+    print r1norm
+    print r2norm
+    print r12norm
+    print r1
+    print r2
+    print r1+r2
+
+    ax4.arrow(xc,yc,r12[0],r12[1],head_width=20, head_length=40, fc='blue', ec='blue')
+
+
 
     ax4.yaxis.tick_right()
     
@@ -518,7 +589,7 @@ def plot_one_double(dbl,pathdict,figno=1,save_fig=False):
     
     # Save hard copy of the figure
     if save_fig:
-        fig.savefig('%s/bending_angles/plots/individual/ba_%s.pdf' % (rgz_dir,zid))
+        fig.savefig('%s/bending_angles/plots/individual/ba_%s.pdf' % (rgz_dir,zooniverse_id))
         plt.close()
     else:
         plt.show()
@@ -554,7 +625,7 @@ def all_triples_pixradio(triples,pathdict):
     radio_tol = radiobeamsize * imagescale
 
     with open('%s/bending_angles/angles_triple_pixradio.csv' % rgz_dir,'w') as f:
-        print >> f,'zid,bending_angle'
+        print >> f,'zooniverse_id,bending_angle,position_angle'
         for triple in triples:
             irx,iry,radio_components = pix_convert(triple,pathdict)
             xc,yc,radio_centroids = pix_radio(irx,iry,radio_components)
@@ -569,8 +640,10 @@ def all_triples_pixradio(triples,pathdict):
     
                     alpha = bending_angle(middle_radio[0],middle_radio[1],radio_centroids[0][0],radio_centroids[0][1],radio_centroids[1][0],radio_centroids[1][1])
                     alpha_deg = alpha * 180./np.pi
+                    phi = position_angle(middle_radio[0],middle_radio[1],radio_centroids[0][0],radio_centroids[0][1],radio_centroids[1][0],radio_centroids[1][1])
+                    phi_deg = phi * 180./np.pi
     
-                    print >> f,'%s,%.3f' % (triple['zid'],alpha_deg)
+                    print >> f,'%s,%.3f' % (triple['zooniverse_id'],alpha_deg,phi_deg)
                     break
             '''
             else:
@@ -584,10 +657,10 @@ def find_multipeaked_singles(subject,plot=False,verbose=True):
     # Find multi-peaked single component sources via binary kernels
 
     '''
-    zid = 'ARG000079s'
-    zid = 'ARG0002qyh'
-    zid = 'ARG0003l84'
-    sub = subjects.find_one({'zooniverse_id':zid})
+    zooniverse_id = 'ARG000079s'
+    zooniverse_id = 'ARG0002qyh'
+    zooniverse_id = 'ARG0003l84'
+    sub = subjects.find_one({'zooniverse_id':zooniverse_id})
     '''
     # Download contour data
     
@@ -726,10 +799,10 @@ def mps_cc(subject,plot=True,verbose=True):
     # Find multi-peaked single component sources via contour counting
 
     '''
-    zid = 'ARG0002qyh'
-    zid = 'ARG000079s'
-    zid = 'ARG0003l84'
-    subject = subjects.find_one({'zooniverse_id':zid})
+    zooniverse_id = 'ARG0002qyh'
+    zooniverse_id = 'ARG000079s'
+    zooniverse_id = 'ARG0003l84'
+    subject = subjects.find_one({'zooniverse_id':zooniverse_id})
     '''
 
     # Download contour data
@@ -836,7 +909,7 @@ def mps_cc(subject,plot=True,verbose=True):
             path = Path(verts_all, codes_all)
             patch_black = patches.PathPatch(path, facecolor = 'none', edgecolor='black', lw=1)
         except AssertionError:
-            print 'Users found no components for consensus match of %s' % zid
+            print 'Users found no components for consensus match of %s' % zooniverse_id
         
         # Plot contours identified as the consensus
         ax.add_patch(patch_black)
@@ -879,13 +952,13 @@ def batch_mps_cc():
 
     return None
 
-def plot_mps_cc():
+def hist_mps_cc():
 
     # How many of the single-contour sources actually have more than one peak?
 
     data = ascii.read('%s/bending_angles/multipeaked_singles_cc.csv' % rgz_dir,delimiter=' ',data_start=1,header_start=0)
 
-    c = Counter(data['zid'])
+    c = Counter(data['zooniverse_id'])
 
     fig = plt.figure(1,(12,6))
     ax1 = fig.add_subplot(121)
@@ -923,7 +996,7 @@ def mps_cc_bendingangle():
     data = ascii.read('%s/bending_angles/multipeaked_singles_cc.csv' % rgz_dir,delimiter=' ',data_start=1,header_start=0)
 
     mps_triples = data[data['ntotal'] == 3]
-    mps_triples_ids = set(mps_triples['zid'])
+    mps_triples_ids = set(mps_triples['zooniverse_id'])
 
     # Check if they had IR counterpart
 
@@ -933,7 +1006,7 @@ def mps_cc_bendingangle():
         cons = consensus_data[consensus_data['zooniverse_id'] == id3]
         # Only keep ones without IR counterpart
         if cons['ir_peak'] == '(-99, -99)':
-            t3 = mps_triples[mps_triples['zid'] == id3]
+            t3 = mps_triples[mps_triples['zooniverse_id'] == id3]
             alpha = bending_angle(t3[0]['xc'],t3[0]['yc'],t3[1]['xc'],t3[1]['yc'],t3[2]['xc'],t3[2]['yc'])
             alpha_deg.append(alpha * 180./np.pi)
         else:
@@ -964,7 +1037,7 @@ def mps_cc_bendingangle():
 
     return None
 
-def batch_multipeaked_singles():
+def batch_mps_kernel():
 
     # Run all multi-peaked singles using kernel technique
 
@@ -988,7 +1061,7 @@ def batch_multipeaked_singles():
 
 def mps_bending_angle():
 
-    df = pd.read_csv('%s/bending_angles/multipeaked_singles.csv' % rgz_dir)
+    df = pd.read_csv('%s/bending_angles/multipeaked_singles_cc.csv' % rgz_dir)
 
     # Part 1: select double-peaked, single-contour sources with optical counterparts
 
@@ -997,21 +1070,21 @@ def mps_bending_angle():
 
     with open('%s/bending_angles/angles_multipeaked_singles.csv' % rgz_dir,'w') as f:
 
-        print >> f,'zid,bending_angle'
+        print >> f,'zooniverse_id,bending_angle'
 
-        # get optical counterpart for zid (loop over eventually)
+        # get optical counterpart for zooniverse_id (loop over eventually)
 
         df2_pair1 = df2[::2]
         df2_pair2 = df2[1::2]
-        _zid = np.array(df2_pair1['zid'])
+        _zid = np.array(df2_pair1['zooniverse_id'])
         _x1 = np.array(df2_pair1['x'])
         _y1 = np.array(df2_pair1['y'])
         _x2 = np.array(df2_pair2['x'])
         _y2 = np.array(df2_pair2['y'])
 
-        for zid,cx1,cy1,cx2,cy2 in zip(_zid,_x1,_y1,_x2,_y2):
+        for zooniverse_id,cx1,cy1,cx2,cy2 in zip(_zid,_x1,_y1,_x2,_y2):
 
-            c = consensus.checksum(zid)
+            c = consensus.checksum(zooniverse_id)
             if (len(c['answer']) == 1) and (c['n_users']/float(c['n_total']) >= 0.75):
                 if c['answer'][c['answer'].keys()[0]].has_key('ir_peak'):
                     peak_x,peak_y = c['answer'][c['answer'].keys()[0]]['ir_peak']
@@ -1021,28 +1094,29 @@ def mps_bending_angle():
                     alpha = bending_angle(ir_x,ir_y,cx1,cy1,cx2,cy2)
                     alpha_deg = alpha * 180./np.pi
 
-                    print >> f,'%s,%.3f' % (zid,alpha_deg)
+                    print >> f,'%s,%.3f' % (zooniverse_id,alpha_deg)
                     #print ir_x,ir_y,cx1,cy1,cx2,cy2
                     #print alpha_deg
 
             else:
-                print "Had more than 1 IR sources and/or less than 75 percent consensus for %s" % zid
+                print "Had more than 1 IR sources and/or less than 75 percent consensus for %s" % zooniverse_id
 
     '''
     # Part 2: select triple-peaked, single-contour sources with no optical counterparts
 
     df3 = df[(df['nlobes'] == 3)]
+    imgcen_x,imgcen_y = FIRST_FITS_WIDTH,FIRST_FITS_HEIGHT 
 
     with open('%s/bending_angles/angles_multipeaked_singles_no_optical.csv' % rgz_dir,'w') as f:
 
-        print >> f,'zid,bending_angle'
+        print >> f,'zooniverse_id,bending_angle,position_angle'
 
-        # get optical counterpart for zid (loop over eventually)
+        # get optical counterpart for zooniverse_id (loop over eventually)
 
         df3_pair1 = df3[::3]
         df3_pair2 = df3[1::3]
         df3_pair3 = df3[2::3]
-        _zid = np.array(df3_pair1['zid'])
+        _zid = np.array(df3_pair1['zooniverse_id'])
         _x1 = np.array(df3_pair1['x'])
         _y1 = np.array(df3_pair1['y'])
         _x2 = np.array(df3_pair2['x'])
@@ -1051,24 +1125,38 @@ def mps_bending_angle():
         _y3 = np.array(df3_pair3['y'])
 
 
-        for zid,cx1,cy1,cx2,cy2,cx3,cy3 in zip(_zid,_x1,_y1,_x2,_y2,_x3,_y3):
+        for zooniverse_id,cx1,cy1,cx2,cy2,cx3,cy3 in zip(_zid,_x1,_y1,_x2,_y2,_x3,_y3):
 
-            c = consensus.checksum(zid)
+            c = consensus.checksum(zooniverse_id)
             try:
                 if (c['n_users']/float(c['n_total']) >= 0.75):
+
                     # Use the maximum of the three possible opening angles, since we don't know the "center" of the galaxy
                     
-                    # Pick optical IDs close to the center, as we do for the discrete sources?
                     alpha1 = bending_angle(cx1,cy1,cx2,cy2,cx3,cy3)
                     alpha2 = bending_angle(cx2,cy2,cx1,cy1,cx3,cy3)
-                    alpha3 = bending_angle(cx1,cy1,cx3,cy3,cx2,cy2)
-                    alpha_deg = max(alpha1,alpha2,alpha3) * 180./np.pi
+                    alpha3 = bending_angle(cx3,cy3,cx1,cy1,cx2,cy2)
+                    alpha_max = max(alpha1,alpha2,alpha3)
+
+                    # Compute position angle between angular bisector and north
+
+                    if alpha_max == alpha1:
+                        alpha_deg = alpha1 * 180/np.pi
+                        phi_deg = position_angle(cx1,cy1,cx2,cy2,cx3,cy3) * 180/np.pi
+                    elif alpha_max == alpha2:
+                        alpha_deg = alpha2 * 180/np.pi
+                        alpha2 = bending_angle(cx2,cy2,cx1,cy1,cx3,cy3) * 180/np.pi
+                    elif alpha_max == alpha3:
+                        alpha_deg = alpha3 * 180/np.pi
+                        alpha2 = bending_angle(cx3,cy3,cx1,cy1,cx2,cy2) * 180/np.pi
+                    else:
+                        print 'Warning: no match between opening angle and max angle'
                     
-                    print >> f,'%s,%.3f' % (zid,alpha_deg)
+                    print >> f,'%s,%.3f,%.3f' % (zooniverse_id,alpha_deg,phi_deg)
                 else:
-                    print "Had less than 75 percent consensus for %s" % zid
+                    print "Had less than 75 percent consensus for %s" % zooniverse_id
             except TypeError:
-                print "No 'answer' key for %s" % zid,c
+                print "No 'answer' key for %s" % zooniverse_id,c
 
     return None
 
