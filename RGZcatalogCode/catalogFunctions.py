@@ -1,7 +1,9 @@
+import logging
 import numpy as np
 import pandas as pd
 from StringIO import StringIO
 import mechanize
+import urllib2
 
 #creates a bounding box for a given contour path
 #loop = data['contours'][0][0]['arr'] #outermost contour (for testing)
@@ -41,16 +43,17 @@ def approx(a, b, uncertainty=1e-5):
    return np.abs(a-b) < uncertainty
 
 #pass an SQL query to SDSS and return a pandas dataframe
-def SDSS_select(sql, tryAgain=True):
-    br = mechanize.Browser()
-    try:
-        br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
-        br.select_form(name='sql')
-        br['cmd'] = sql
-        br['format'] = ['csv']
-        response = br.submit()
-        file_like = StringIO(response.get_data())
-        return pd.read_csv(file_like, skiprows=1)
-    except RuntimeError: #try connecting once more in case of time-out or robots.txt error
-        if tryAgain:
-            return SDSS_select(sql, False)
+def SDSS_select(sql):
+   logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+   br = mechanize.Browser()
+   try:
+      br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
+   except (urllib2.HTTPError, urllib2.URLError) as e: #try once more
+      logging.exception(e)
+      br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
+   br.select_form(name='sql')
+   br['cmd'] = sql
+   br['format'] = ['csv']
+   response = br.submit()
+   file_like = StringIO(response.get_data())
+   return pd.read_csv(file_like, skiprows=1)
