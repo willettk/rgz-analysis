@@ -54,8 +54,8 @@ def RGZcatalog():
     starttime = time.time()
 
     #iterate through all subjects
-    for subject in subjects.find().batch_size(30):
-    #for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
+    #for subject in subjects.find().batch_size(30):
+    for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
     #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct galaxies
     #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple components
 
@@ -66,12 +66,12 @@ def RGZcatalog():
             logging.info('Processing consensus object %s within subject field %s', consensusObject['label'].upper(), subject['zooniverse_id'])
 
             #skip if this object in this field is already in catalog
-            if catalog.find_one({'Zooniverse_id':subject['zooniverse_id']}) and \
-               catalog.find_one({'Zooniverse_id':subject['zooniverse_id']})['consensus']['label'] == consensusObject['label']:
-
-                logging.info('Entry already in catalog; skipping')
+            skip = False
+            for i in catalog.find({'Zooniverse_id':subject['zooniverse_id']}):
+                if i['consensus']['label'] == consensusObject['label']:
+                    skip = True
                 
-            else:
+            if not skip:
 
                 count += 1
                 IDnumber += 1
