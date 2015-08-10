@@ -71,22 +71,27 @@ def RGZcatalog():
                 if i['consensus']['label'] == consensusObject['label']:
                     skip = True
                 
-            if not skip:
+            if skip:
+                logging.info('Entry already in catalog; skipping')
+
+            else:
 
                 count += 1
                 IDnumber += 1
 
                 #display which entry is being processed to see how far the program is
                 print IDnumber
+
+                entry = {'catalog_id':IDnumber, 'Zooniverse_id':str(subject['zooniverse_id'])}
                 
                 #find location of FITS file
                 fid = consensusObject['FIRST_id']
                 if fid[0] == 'F':
                     fits_loc = pathdict[fid]
+                    entry.update({'FIRST_id':str(fid)})
                 else:
                     fits_loc = '/data/extragal/willett/rgz/raw_images/ATLAS/2x2/%s_radio.fits' % fid
-
-                entry = {'catalog_id':IDnumber, 'Zooniverse_id':str(subject['zooniverse_id']), 'FIRST_id':str(fid)}
+                    entry.update({'ATLAS_id':str(fid)})
                 
                 #find IR counterpart from consensus data, if present
                 w = wcs.WCS(fits.open(fits_loc)[0].header) #gets pixel-to-WCS conversion from header
@@ -114,11 +119,18 @@ def RGZcatalog():
                 if ir_pos:
                     
                     #get IR data from AllWISE Source Catalog
-                    try:
-                        table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
-                    except astroquery.exceptions.TimeoutError as e: #try once more
-                        logging.exception(e)
-                        table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
+                    tryCount = 0
+                    while(True): #in case of error, wait 10 sec and try again; give up after 5 tries
+                        tryCount += 1
+                        try:
+                            table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
+                            break
+                        except astroquery.exceptions.TimeoutError as e:
+                            if tryCount>5:
+                                logging.exception('Too many AllWISE query errors')
+                                raise
+                            logging.exception(e)
+                            time.sleep(10)
                     if len(table):
                         numberMatches = 0
                         if table[0]['w1snr']>5:
@@ -252,20 +264,29 @@ def RGZcatalog():
                                 sdss_match[key] = sdss_match[key].item()
                             elif sdss_match[key] == 0:
                                 sdss_match[key] = 0
-                        entry.update({'AllWISE':wise_match})
+                        entry.update({'SDSS':sdss_match})
                     else:
-                        logging.info('No AllWISE match found')
+                        logging.info('No SDSS match found')
 
                 #end of 'if IR peak'
 
                 #try block attempts to read JSON from web; if it exists, calculate data
                 try:
                     link = subject['location']['contours'] #gets url as Unicode string
-                    try:
-                        compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
-                    except (urllib2.URLError, urllib2.HTTPError) as e: #try once more
-                        logging.exception(e)
-                        compressed = urllib2.urlopen(str(link)).read()
+
+                    tryCount = 0
+                    while(True): #in case of error, wait 10 sec and try again; give up after 5 tries
+                        tryCount += 1
+                        try:
+                            compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
+                            break
+                        except (urllib2.URLError, urllib2.HTTPError) as e:
+                            if tryCount>5:
+                                logging.exception('Too many radio query errors')
+                                raise
+                            logging.exception(e)
+                            time.sleep(10)
+                        
                     tempfile = StringIO(compressed) #temporarily stores contents as file (emptied after unzipping)
                     uncompressed = GzipFile(fileobj=tempfile, mode='r').read() #unzips contents to str
                     data = json.loads(uncompressed) #loads JSON object
