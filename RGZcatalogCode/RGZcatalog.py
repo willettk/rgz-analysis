@@ -54,8 +54,8 @@ def RGZcatalog():
     starttime = time.time()
 
     #iterate through all subjects
-    #for subject in subjects.find().batch_size(30):
-    for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
+    for subject in subjects.find().batch_size(30):
+    #for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
     #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct galaxies
     #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple components
 
@@ -81,7 +81,10 @@ def RGZcatalog():
                 
                 #find location of FITS file
                 fid = consensusObject['FIRST_id']
-                fits_loc = pathdict[fid]
+                if fid[0] == 'F':
+                    fits_loc = pathdict[fid]
+                else:
+                    fits_loc = '/data/extragal/willett/rgz/raw_images/ATLAS/2x2/%s_radio.fits' % fid
 
                 entry = {'catalog_id':IDnumber, 'Zooniverse_id':str(subject['zooniverse_id']), 'FIRST_id':str(fid)}
                 
