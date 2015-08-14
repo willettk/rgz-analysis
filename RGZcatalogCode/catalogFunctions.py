@@ -26,13 +26,13 @@ def findBox(loop):
 #finds the coordinates of the bbox in DS9's system
 #and the imput values for drawing a box in DS9
 #bbox = tree.value['bbox'] #outermost bbox (for testing)
-def bboxToDS9(bbox):
+def bboxToDS9(bbox, imgSize):
    xmax = bbox[0]
    ymax = bbox[1]
    xmin = bbox[2]
    ymin = bbox[3]
-   temp = 133-ymax
-   ymax = 133-ymin
+   temp = imgSize+1-ymax
+   ymax = imgSize+1-ymin
    ymin = temp
    newBbox = [xmax, ymax, xmin, ymin]
    ds9Box = [ (xmax+xmin)/2., (ymax+ymin)/2., xmax-xmin, ymax-ymin ]

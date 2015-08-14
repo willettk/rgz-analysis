@@ -304,7 +304,7 @@ def RGZcatalog():
                     #get component fluxes and sizes
                     components = []
                     for tree in contourTrees:
-                        bboxP = fn.bboxToDS9(fn.findBox(tree.value['arr']))[0] #bbox in DS9 coordinate pixels
+                        bboxP = fn.bboxToDS9(fn.findBox(tree.value['arr']), tree.imgSize)[0] #bbox in DS9 coordinate pixels
                         bboxCornersRD = tree.w.wcs_pix2world( np.array( [[bboxP[0],bboxP[1]], [bboxP[2],bboxP[3]] ]), 1) #two opposite corners of bbox in ra and dec
                         raRange = [ min(bboxCornersRD[0][0], bboxCornersRD[1][0]), max(bboxCornersRD[0][0], bboxCornersRD[1][0]) ]
                         decRange = [ min(bboxCornersRD[0][1], bboxCornersRD[1][1]), max(bboxCornersRD[0][1], bboxCornersRD[1][1]) ]
