@@ -16,8 +16,9 @@ class Node(object):
             self.getFITS(fits_loc)
         else:
             self.img = img #FITS data as an array
+            self.imgSize = int(img.shape[0]) #size in pixels of FITS data
             self.w = w #WCS converter object
-        dec = self.w.wcs_pix2world( np.array( [[66, 66]] ), 1)[0][1] #dec of image center
+        dec = self.w.wcs_pix2world( np.array( [[self.imgSize/2, self.imgSize/2]] ), 1)[0][1] #dec of image center
         if dec > 4.5558: #northern region, above +4*33'21"
             self.beamAreaArcsec2 = 1.44*np.pi*5.4*5.4/4 #5.4" FWHM circle
         elif 4.5558 > dec > -2.5069: #middle region, between +4*33'21" and -2*30'25"
@@ -79,6 +80,7 @@ class Node(object):
     def getFITS(self, fits_loc):
         self.img = fits.getdata(fits_loc, 0) #imports data as array
         self.img[np.isnan(self.img)] = 0 #sets NANs to 0
+        self.imgSize = int(self.img.shape[0])
         self.w = wcs.WCS(fits.open(fits_loc)[0].header) #gets pixel-to-WCS conversion from header
         return self.img
 
@@ -86,9 +88,9 @@ class Node(object):
     def getTotalFlux(self):
         fluxDensityJyBeam = 0
         pixelCount = 0
-        for i in range(131):
-            for j in range(131):
-                if self.contains([i+1, 131-j+1]):
+        for i in range(self.imgSize-1):
+            for j in range(self.imgSize-1):
+                if self.contains([i+1, self.imgSize-j]):
                     fluxDensityJyBeam += self.img[j][i]
                     pixelCount += 1
         self.areaArcsec2 = pixelCount*self.pixelAreaArcsec2
@@ -102,7 +104,7 @@ class Node(object):
         if pList is None:
             pList = []
         if self.children == []:
-            bbox = fn.bboxToDS9(fn.findBox(self.value['arr']))[0] #bbox of innermost contour
+            bbox = fn.bboxToDS9(fn.findBox(self.value['arr']), self.imgSize)[0] #bbox of innermost contour
             fluxDensityJyBeam = self.img[ bbox[3]-1:bbox[1]+1, bbox[2]-1:bbox[0]+1 ].max() #peak flux in bbox, with 1 pixel padding
             locP = np.where(self.img == fluxDensityJyBeam) #location in pixels
             locRD = self.w.wcs_pix2world( np.array( [[locP[1][0]+1, locP[0][0]+1]] ), 1) #location in ra and dec

@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from StringIO import StringIO
 import mechanize
+import time
 
 #creates a bounding box for a given contour path
 #loop = data['contours'][0][0]['arr'] #outermost contour (for testing)
@@ -25,17 +26,17 @@ def findBox(loop):
 #finds the coordinates of the bbox in DS9's system
 #and the imput values for drawing a box in DS9
 #bbox = tree.value['bbox'] #outermost bbox (for testing)
-def bboxToDS9(bbox):
-    xmax = bbox[0]
-    ymax = bbox[1]
-    xmin = bbox[2]
-    ymin = bbox[3]
-    temp = 133-ymax
-    ymax = 133-ymin
-    ymin = temp
-    newBbox = [xmax, ymax, xmin, ymin]
-    ds9Box = [ (xmax+xmin)/2., (ymax+ymin)/2., xmax-xmin, ymax-ymin ]
-    return [newBbox, ds9Box]
+def bboxToDS9(bbox, imgSize):
+   xmax = bbox[0]
+   ymax = bbox[1]
+   xmin = bbox[2]
+   ymin = bbox[3]
+   temp = imgSize+1-ymax
+   ymax = imgSize+1-ymin
+   ymin = temp
+   newBbox = [xmax, ymax, xmin, ymin]
+   ds9Box = [ (xmax+xmin)/2., (ymax+ymin)/2., xmax-xmin, ymax-ymin ]
+   return [newBbox, ds9Box]
 
 #determines if two floats are approximately equal
 def approx(a, b, uncertainty=1e-5):
@@ -45,21 +46,22 @@ def approx(a, b, uncertainty=1e-5):
 def SDSS_select(sql):
    logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
    br = mechanize.Browser()
+   br.set_handle_robots(False)
    tryCount = 0
    while(True): #in case of error, wait 10 sec and try again; give up after 5 tries
-       tryCount += 1
-       try:
-           br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
-           break
-       except (mechanize.URLError, mechanize.HTTPError) as e:
-           if tryCount>5:
-               logging.exception('Too many SDSS query errors')
-               raise
-           logging.exception(e)
-           time.sleep(10)
-   br.select_form(name='sql')
-   br['cmd'] = sql
-   br['format'] = ['csv']
-   response = br.submit()
-   file_like = StringIO(response.get_data())
+      tryCount += 1
+      try:
+         br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
+         br.select_form(name='sql')
+         br['cmd'] = sql
+         br['format'] = ['csv']
+         response = br.submit()
+         file_like = StringIO(response.get_data())
+         break
+      except (mechanize.URLError, mechanize.HTTPError) as e:
+         if tryCount>5:
+            logging.exception('Too many SDSS query errors')
+            raise
+         logging.exception(e)
+         time.sleep(10)
    return pd.read_csv(file_like, skiprows=1)
