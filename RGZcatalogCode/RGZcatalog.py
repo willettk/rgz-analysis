@@ -12,8 +12,10 @@ from astropy import wcs, coordinates as coord, units as u
 import astroquery
 from astroquery.irsa import Irsa
 import time
+import argparse
 import catalogFunctions as fn #contains custom functions
 import contourNode as c #contains Node class
+from updateConsensus import updateConsensus #replaces the current consensus collection with a specified csv
 
 def RGZcatalog():
 
@@ -21,13 +23,17 @@ def RGZcatalog():
     logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s')
     logging.captureWarnings(True)
 
+    #check if consensus collection needs to be updated
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--consensus', help='replace the current consensus collection with a specified csv')
+    args = parser.parse_args()
+    if args.consensus:
+        updateConsensus(args.consensus)
+
     #connect to database of subjects
     logging.info('Connecting to MongoDB')
-    client = MongoClient('localhost', 27017)
-    db = client['radio']
+    db = MongoClient()['radio']
     subjects = db['radio_subjects']
-    #import consensus database with
-    #mongoimport -d radio -c consensus --file consensus_all_75percent.csv --type csv --headerline
     consensus = db['consensus']
     catalog = db['catalog'] #this is being populated by this program
 
