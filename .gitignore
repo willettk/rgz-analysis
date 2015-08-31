@@ -42,3 +42,11 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+# RGZ-specific
+
+RGZ-full*
+old/
+python/pyIBCC
+expert/expert100_comparison.csv
+expert/expert_random_zooniverse_ids.txt

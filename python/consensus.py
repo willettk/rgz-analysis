@@ -49,6 +49,9 @@ FITS_HEIGHT = 301.0			# number of pixels in the FITS image (?) along the y axis
 FITS_WIDTH = 301.0			# number of pixels in the FITS image (?) along the x axis
 FIRST_FITS_HEIGHT = 132.0       # number of pixels in the FITS image along the y axis
 FIRST_FITS_WIDTH = 132.0       # number of pixels in the FITS image along the y axis
+
+# Need to add parameters for ATLAS, both IR and radio.
+
 PIXEL_SIZE = 0.00016667#/3600.0		# the number of arcseconds per pixel in the FITS image
 xmin = 1.
 xmax = IMG_HEIGHT_NEW
@@ -234,7 +237,6 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
             answer[checksum2] = {}
             answer[checksum2]['ind'] = k
             answer[checksum2]['xmax'] = xmax_temp
-            # Add bounding box?
             answer[checksum2]['bbox'] = bbox_temp
         except KeyError:
             print gal, zid
@@ -274,7 +276,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
 
     # Perform a kernel density estimate on the data for each galaxy
     
-    scale_ir = 500./424.
+    scale_ir = IMG_HEIGHT_NEW/IMG_HEIGHT_OLD
 
     peak_data = []
 
@@ -535,7 +537,7 @@ def one_answer(zid,user_name):
 
 def plot_consensus(consensus,figno=1, save_fig=None):
 
-    # Plot image
+    # Plot 4-panel image of IR, radio, KDE estimate, and consensus
     
     zid = consensus['zid']
     answer = consensus['answer']
@@ -670,99 +672,9 @@ def plot_consensus(consensus,figno=1, save_fig=None):
 
     return None
 
-def make_75():
-
-    # Make the list of galaxies with 75% agreement completed so far
-
-    idx_start = 43600
-    
-    N = 0 + idx_start
-
-    '''
-    # Run once to make sure I have the same list to work off after crashes
-
-    zooniverse_ids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete'})]
-    with open('%s/rgz_75_completed_zid.csv' % rgz_dir,'w') as f:
-        for zid in zooniverse_ids:
-            print >> f,zid
-
-    Removed tutorial (ARG0003r15) manually. x_exists,y_exists off by one for some reason.
-    '''
-
-    with open('%s/csv/rgz_75_completed_zid.csv' % rgz_dir,'r') as f:
-        zid_read = f.readlines()
-
-    zooniverse_ids = [z.strip() for z in zid_read]
-    
-    # Get dictionary for finding the path to FITS files and WCS headers
-    
-    with open('%s/first_fits.txt' % rgz_dir) as f:
-        lines = f.readlines()
-    
-    pathdict = {}
-    for l in lines:
-        spl = l.split(' ')
-        pathdict[spl[1].strip()] = '/Volumes/3TB/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (int(spl[0]),spl[1].strip())
-
-    # Open CSV file to write results to
-
-    writefile = open('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/csv/rgz_75.csv','w')
-    print >> writefile,'first_id,zid,ra,dec,n_lobes,n_users,n_total,ratio'
-
-    # Loop over all completed galaxies
-
-    print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
-    for zid in zooniverse_ids[idx_start:]:
-
-        N += 1
-
-        # Find plurality response
-
-        consensus = checksum(zid)
-
-        if consensus is not None:
-
-            # Convert the pixel coordinates into RA,dec using the WCS object from the header
-
-            hdulist = fits.open(pathdict[consensus['source']])
-            w = wcs.WCS(hdulist[0].header)
-
-            first_ir_scale_x = FIRST_FITS_WIDTH / IMG_WIDTH_NEW
-            first_ir_scale_y = FIRST_FITS_HEIGHT / IMG_HEIGHT_NEW
-
-            for ans in consensus['answer'].itervalues():
-
-                if ans.has_key('ir_peak') or ans.has_key('ir'):
-                    try:
-                        xpeak,ypeak = ans['ir_peak']
-                    except KeyError:
-                        xpeak,ypeak = ans['ir']
-                        
-                    pixcrd = np.array([[xpeak * first_ir_scale_x,(IMG_HEIGHT_NEW-ypeak) * first_ir_scale_y]],np.float_)
-                    world = w.wcs_pix2world(pixcrd,0)
-
-                    n_lobes = len(ans['xmax'])
-
-                    n_users = consensus['n_users']
-                    n_total = consensus['n_total']
-                    ratio = float(n_users)/n_total
-
-                    # Write to file
-
-                    if ratio >= 0.75:
-                        print >> writefile, '%s,%s,%.4f,%.4f,%i,%i,%i,%.2f' % (consensus['source'], zid, world[0][0], world[0][1], n_lobes, n_users, n_total, ratio)
-
-            # Check progress by printing to screen every 100 classifications
-        if not N % 100:
-            print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
-
-    # Close file when finished
-
-    writefile.close()
-
-    return None
-
 def check_class(zid):
+
+    # Print list of users who have classified a particular subject
 
     sid = subjects.find_one({'zooniverse_id':zid})['_id']
     c_all = classifications.find({'subject_ids':sid,'user_name':{'$exists':True,'$nin':expert_names}}).sort([("updated_at", -1)])
@@ -777,6 +689,8 @@ def check_class(zid):
     return None
 
 def rc(zid):
+
+    # Visually compare the expert and volunteer consensus for a subject
     
     plt.ion()
 
@@ -793,9 +707,10 @@ def rc(zid):
 
 def run_sample(update=True,subset=None,do_plot=False):
 
-    # Run all galaxies in the expert sample
+    # Run the consensus algorithm for all completed RGZ subjects
+    # Only works on FIRST right now; adapt to run both.
 
-    filestem = "consensus_rgz"
+    filestem = "consensus_rgz_first"
     
     if subset is not None:
 
@@ -816,7 +731,7 @@ def run_sample(update=True,subset=None,do_plot=False):
         suffix = '_%s' % subset
 
     else:
-        all_completed_zids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','tutorial':{'$exists':False}})]
+        all_completed_zids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','tutorial':{'$exists':False},'metadata.survey':'first'})]
 
         if update:
             '''
@@ -919,7 +834,7 @@ def run_sample(update=True,subset=None,do_plot=False):
         with open(outfilename, 'wb') as outfile:
             for filename in (infile_master,infile_update):
                 if filename == outfilename:
-                    # don't want to copy the output into the output
+                    # don't want to copy the output into itself
                     continue
                 with open(filename, 'rb') as readfile:
                     shutil.copyfileobj(readfile, outfile)
@@ -965,4 +880,4 @@ def alphadict():
 
 if __name__ == "__main__":
     print 'No plotting',datetime.datetime.now().strftime('%H:%M:%S.%f')
-    run_sample(run_all=True,do_plot=False)
+    run_sample(update=True,do_plot=False)

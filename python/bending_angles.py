@@ -10,8 +10,6 @@ import pandas as pd
 
 from astropy.io import ascii,fits
 from astropy import wcs
-from astropy import units as u
-from astropy.coordinates import SkyCoord
 
 import requests
 from PIL import Image
@@ -31,6 +29,9 @@ from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
 
 import time
 import random
+import os
+
+from ast import literal_eval
 
 from astroML.plotting import hist as histML
     
@@ -38,7 +39,6 @@ from collections import Counter
 from pymongo.errors import CursorNotFound
 
 rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
-local_fits_path = '%s/RGZ-full.44/FIRST-IMGs' % rgz_dir
 
 IMG_HEIGHT_OLD = 424.0			# number of pixels in the original JPG image along the y axis
 IMG_WIDTH_OLD = 424.0			# number of pixels in the original JPG image along the x axis
@@ -60,7 +60,7 @@ ymax = IMG_WIDTH_NEW
 
 subjects,classifications,users = rgz.load_rgz_data()
 
-rgz_75_file = '%s/csv/consensus_rgz_75.csv' % rgz_dir
+rgz_75_file = '%s/csv/consensus_rgz_first_75.csv' % rgz_dir
 
 def get_doubles():
 
@@ -93,7 +93,7 @@ def get_singles_large():
 
     return singles_large
 
-def make_pathdict():
+def make_pathdict(local=False):
 
     with open(rgz_75_file,'r') as f:
         zid_read = f.readlines()
@@ -105,10 +105,22 @@ def make_pathdict():
     with open('%s/first_fits.txt' % rgz_dir) as f:
         lines = f.readlines()
     
+    img_filepath = rgz_dir if local else '/Volumes/3TB/rgz/raw_images'
+    if local:
+        img_filepath = rgz_dir
+    else:
+        if os.path.exists('/Volumes/REISEPASS'): 
+            img_filepath = '/Volumes/REISEPASS/rgz/raw_images'
+        elif os.path.exists('/Volumes/3TB'):
+            img_filepath = '/Volumes/3TB/rgz/raw_images'
+        else:
+            print "No external drives found for RGZ data"
+            return None
+
     pathdict = {}
     for l in lines:
         spl = l.split(' ')
-        pathdict[spl[1].strip()] = '/Volumes/3TB/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (int(spl[0]),spl[1].strip())
+        pathdict[spl[1].strip()] = '%s/RGZ-full.%i/FIRST-IMGS/%s.fits' % (img_filepath,int(spl[0]),spl[1].strip())
 
     return pathdict
 
@@ -117,15 +129,22 @@ def all_doubles_pixradio(doubles,pathdict):
     with open('%s/bending_angles/angles_double_pixradio.csv' % rgz_dir,'w') as f:
         print >> f,'zooniverse_id,bending_angle,position_angle'
         for double in doubles:
-            irx,iry,radio_components = pix_convert(double,pathdict)
-            if irx is not None:
-                xc,yc,radio_centroids = pix_radio(irx,iry,radio_components)
+            #irx,iry,radio_components = pix_convert(double,pathdict)
+            xc,yc = literal_eval(double['ir_peak'])
+            if xc is not None:
+                #xc,yc,radio_centroids = pix_radio(irx,iry,radio_components)
+                sub = subjects.find_one({'zooniverse_id':double['zooniverse_id']})
+                r = requests.get(sub['location']['contours'])
+                contours = r.json()
+                radio_components = contours['contours']
+
+                radio_centroids = pix_radio(radio_components)
                 alpha = bending_angle(xc,yc,radio_centroids[0][0],radio_centroids[0][1],radio_centroids[1][0],radio_centroids[1][1])
                 alpha_deg = alpha * 180./np.pi
                 phi = position_angle(xc,yc,radio_centroids[0][0],radio_centroids[0][1],radio_centroids[1][0],radio_centroids[1][1])
                 phi_deg = phi * 180./np.pi
                 if alpha is not None:
-                    print >> f,'%s,%.3f' % (double['zooniverse_id'],alpha_deg,phi_deg)
+                    print >> f,'%s,%.3f,%.3f' % (double['zooniverse_id'],alpha_deg,phi_deg)
 
     return None
 
@@ -180,14 +199,11 @@ def pix_convert(galaxy,pathdict,local=False):
         return None,None,None
 
     # Keep everything in pixel coordinates. Reverse what's done in consensus.py; 
-    # how can I transform an RA/dec pair into the radio component x/y pair?
+    # transform an RA/dec pair into the pixel x/y pair.
 
     # Convert the pixel coordinates into RA,dec using the WCS object from the header
 
-    if local:
-        hdulist = fits.open('%s/%s' % (local_fits_path,pathdict[galaxy['first_id']].split('/')[-1]))
-    else:
-        hdulist = fits.open(pathdict[galaxy['first_id']])
+    hdulist = fits.open(pathdict[galaxy['first_id']])
 
     w = wcs.WCS(hdulist[0].header)
 
@@ -230,14 +246,7 @@ def radio_to_wcs(galaxy,pathdict):
 
     return irx,iry,radio_components
 
-def centroid(bbox):
-
-    cent_x = np.median((bbox[0],bbox[2]))
-    cent_y = np.median((bbox[1],bbox[3]))
-
-    return cent_x,cent_y
-
-def bending_angle(xc,yc,cx1,cy1,cx2,cy2):
+def bending_angle(xc,yc,x1,y1,x2,y2):
 
     # Compute the bending angle between three points
 
@@ -245,15 +254,15 @@ def bending_angle(xc,yc,cx1,cy1,cx2,cy2):
     Points are:
 
         - xc,yc:    x,y center of IR counterpart
-        - cx1,cy1:  x,y center of 1st radio lobe
-        - cx2,cy2:  x,y center of 2nd radio lobe
+        - x1,y1:  x,y center of 1st radio lobe
+        - x2,y2:  x,y center of 2nd radio lobe
     '''
 
 
     # Alternate method of computing bending angle
 
-    r1 = np.array([cx1,cy1])
-    r2 = np.array([cx2,cy2])
+    r1 = np.array([x1,y1])
+    r2 = np.array([x2,y2])
     center = np.array([xc,yc])
 
     r1diff = r1-center
@@ -266,7 +275,7 @@ def bending_angle(xc,yc,cx1,cy1,cx2,cy2):
 
     return alpha
 
-def position_angle(xc,yc,cx1,cy1,cx2,cy2):
+def position_angle(xc,yc,x1,y1,x2,y2):
 
     # Compute the bending angle (in radians) between three points
 
@@ -274,12 +283,12 @@ def position_angle(xc,yc,cx1,cy1,cx2,cy2):
     Points are:
 
         - xc,yc:    x,y center of bending angle
-        - cx1,cy1:  x,y center of 1st component
-        - cx2,cy2:  x,y center of 2nd component
+        - x1,y1:  x,y center of 1st component
+        - x2,y2:  x,y center of 2nd component
     '''
 
-    r1 = np.array([cx1,cy1])
-    r2 = np.array([cx2,cy2])
+    r1 = np.array([x1,y1])
+    r2 = np.array([x2,y2])
     center = np.array([xc,yc])
 
     r12sum = (r1-center) + (r2-center)
@@ -297,22 +306,14 @@ def position_angle(xc,yc,cx1,cy1,cx2,cy2):
 
     return alpha
 
-def pix_radio(irx,iry,radio_components):
+def pix_radio(radio_components):
 
-    # Add centers of bounding boxes
+    # From list of bounding boxes in radio pixel coordinates,
+    # return the centroids of the boxes in IR pixel coordinates
 
     radio_centroids = []
     for comp in radio_components:
         bbox = comp[0]['bbox']
-
-        '''
-        cx = np.median((bbox[0],bbox[2])) / first_ir_scale_x
-        cy = np.median(((bbox[1]/first_ir_scale_y),(bbox[3]/first_ir_scale_y)))
-        '''
-
-        '''
-        cxu,cyu = centroid(bbox)
-        '''
 
         cxu = np.median((bbox[0],bbox[2]))
         cyu = np.median((bbox[1],bbox[3]))
@@ -320,10 +321,13 @@ def pix_radio(irx,iry,radio_components):
         cx,cy = cxu/first_ir_scale_x,cyu/first_ir_scale_y
         radio_centroids.append((cx,cy))
 
-    xc = irx / first_ir_scale_x
-    yc = IMG_HEIGHT_NEW - iry / first_ir_scale_y
+    return radio_centroids
 
-    return xc,yc,radio_centroids
+def bbox_radio_to_ir(bbox):
+
+    bbox_ir = [bbox[0]/first_ir_scale_x,bbox[1]/first_ir_scale_x,bbox[2]/first_ir_scale_x,bbox[3]/first_ir_scale_x]
+
+    return bbox_ir
 
 def load_angles(filename):
 
@@ -380,21 +384,11 @@ def plothist(savefig=False):
 
     return None
 
-def plot_one_double(dbl,pathdict,figno=1,save_fig=False):
+def plot_one_double(zooniverse_id,pathdict,figno=1,save_fig=False,anglepath=''):
 
-    cons = consensus.checksum(dbl['zooniverse_id'])
+    cons = consensus.checksum(zooniverse_id)
 
-    '''
-    if pathdict[dbl['first_id']].split('/')[5].split('.')[-1] == '35':
-        irx,iry,radio_components = pix_convert(dbl,pathdict,local=False)
-    else:
-        irx,iry,radio_components = pix_convert(dbl,pathdict)
-    '''
-
-    irx = float(dbl['ir_peak'][1:-1].split(',')[0]) / first_ir_scale_x
-    iry = float(dbl['ir_peak'][1:-1].split(',')[1]) / first_ir_scale_y
-
-    sub = subjects.find_one({'zooniverse_id':dbl['zooniverse_id']})
+    sub = subjects.find_one({'zooniverse_id':zooniverse_id})
     r = requests.get(sub['location']['contours'])
     contours = r.json()
     radio_components = contours['contours']
@@ -515,13 +509,13 @@ def plot_one_double(dbl,pathdict,figno=1,save_fig=False):
         # Add centers of bounding boxes
         bbox1 = components[0][0]['bbox']
         bbox2 = components[1][0]['bbox']
-        cx1 = np.median((bbox1[0],bbox1[2])) / first_ir_scale_x
-        cx2 = np.median((bbox2[0],bbox2[2])) / first_ir_scale_x
-        cy1 = np.median(((bbox1[1]/first_ir_scale_y),(bbox1[3]/first_ir_scale_y)))
-        cy2 = np.median(((bbox2[1]/first_ir_scale_y),(bbox2[3]/first_ir_scale_y)))
+        x1 = np.median((bbox1[0],bbox1[2])) / first_ir_scale_x
+        x2 = np.median((bbox2[0],bbox2[2])) / first_ir_scale_x
+        y1 = np.median(((bbox1[1]/first_ir_scale_y),(bbox1[3]/first_ir_scale_y)))
+        y2 = np.median(((bbox2[1]/first_ir_scale_y),(bbox2[3]/first_ir_scale_y)))
 
-        ax4.scatter(cx1,cy1, c='g', marker='s', s=15, alpha=1)
-        ax4.scatter(cx2,cy2, c='g', marker='s', s=15, alpha=1)
+        ax4.scatter(x1,y1, c='g', marker='s', s=15, alpha=1)
+        ax4.scatter(x2,y2, c='g', marker='s', s=15, alpha=1)
 
         # Draw bounding box
 
@@ -532,50 +526,55 @@ def plot_one_double(dbl,pathdict,figno=1,save_fig=False):
         ax4.plot([xmin1,xmin1,xmax1,xmax1,xmin1],[ymin1,ymax1,ymax1,ymin1,ymin1],color='g')
         ax4.plot([xmin2,xmin2,xmax2,xmax2,xmin2],[ymin2,ymax2,ymax2,ymin2,ymin2],color='g')
 
-        xc = ans['ir_peak'][0]
-        yc = ans['ir_peak'][1]
-        m1 = (cy1 - yc) / (cx1 - xc)
-        b1 = yc - m1*xc
-        m2 = (cy2 - yc) / (cx2 - xc)
-        b2 = yc - m2*xc
+        for ans in answer:
+            if answer[ans].has_key('ir_peak'):
+                xc,yc = answer[ans]['ir_peak']
+                m1 = (y1 - yc) / (x1 - xc)
+                b1 = yc - m1*xc
+                m2 = (y2 - yc) / (x2 - xc)
+                b2 = yc - m2*xc
 
-        if cy1 < yc:
-            xt,yt = -b1/m1,0
-            xb,yb = (500.-b2)/m2,500
-        else:
-            xt,yt = -b2/m2,0
-            xb,yb = (500.-b1)/m1,500
+                '''
+                if y1 < yc:
+                    xt,yt = -b1/m1,0
+                    xb,yb = (500.-b2)/m2,500
+                    print "y1 < yc"
+                else:
+                    xt,yt = -b2/m2,0
+                    xb,yb = (500.-b1)/m1,500
+                    print "y1 >= yc"
 
-        ax4.plot([xt,xc],[yt,yc],color='orange',linestyle='--')
-        ax4.plot([xb,xc],[yb,yc],color='orange',linestyle='--')
+                ax4.plot([xt,xc],[yt,yc],color='orange',linestyle='--')
+                ax4.plot([xb,xc],[yb,yc],color='orange',linestyle='--')
+                '''
 
-    alpha_deg = bending_angle(xc,yc,cx1,cy1,cx2,cy2) * 180/np.pi
-    ax4.text(550,0,r'$\alpha$ = %.1f deg' % alpha_deg,fontsize=11)
-    phi_deg = position_angle(xc,500-yc,cx1,500-cy1,cx2,500-cy2) * 180/np.pi
-    ax4.arrow(xc,yc,0,-250,head_width=20, head_length=40, fc='grey', ec='grey',ls='dotted')
-    ax4.text(550,50,r'$\phi$ = %.1f deg' % phi_deg,fontsize=11)
+                xedge1 = 0 if x1 < xc else 500
+                yedge1 = y1 - (x1-xedge1)*(yc-y1)/(xc-x1)
 
-    # Draw the bisector vector
+                xedge2 = 0 if x2 < xc else 500
+                yedge2 = y2 - (x2-xedge2)*(yc-y2)/(xc-x2)
 
-    print xt,yt
-    print xb,yb
-    print xc,yc
-    center = np.array([xc,yc])
-    r1 = np.array([xb,yb]) - center
-    r2 = np.array([xt,yt]) - center
-    r1norm = r1/np.hypot(r1[0],r1[1])
-    r2norm = r2/np.hypot(r2[0],r2[1])
-    r12 = r1+r2
-    r12norm = r1norm+r2norm
-    print r1norm
-    print r2norm
-    print r12norm
-    print r1
-    print r2
-    print r1+r2
+                # Draw and annotate the the bending angle
+                ax4.plot([xedge1,xc],[yedge1,yc],color='orange',linestyle='--')
+                ax4.plot([xedge2,xc],[yedge2,yc],color='orange',linestyle='--')
+                alpha_deg = bending_angle(xc,yc,x1,y1,x2,y2) * 180/np.pi
+                ax4.text(550,0,r'$\alpha$ = %.1f deg' % alpha_deg,fontsize=11)
 
-    ax4.arrow(xc,yc,r12[0],r12[1],head_width=20, head_length=40, fc='blue', ec='blue')
+                # Draw vector pointing north
 
+                # Draw the bisector vector
+                '''
+                yd = y_bisect(xc,yc,xedge1,yedge1,xedge2,yedge2)
+                ax4.arrow(xc,yc,-xc,yd-yc,head_width=20, head_length=40, fc='blue', ec='blue')
+                '''
+
+                # Compute the position angle with respect to north
+                phi_deg = position_angle(xc,500-yc,x1,500-y1,x2,500-y2) * 180/np.pi
+                ax4.text(550,50,r'$\phi$ = %.1f deg' % phi_deg,fontsize=11)
+                ax4.arrow(xc,yc,0,-yc,head_width=20, head_length=40, fc='grey', ec='grey',ls='dotted')
+
+            else:
+                print "No peak for %s" % zooniverse_id
 
 
     ax4.yaxis.tick_right()
@@ -589,7 +588,7 @@ def plot_one_double(dbl,pathdict,figno=1,save_fig=False):
     
     # Save hard copy of the figure
     if save_fig:
-        fig.savefig('%s/bending_angles/plots/individual/ba_%s.pdf' % (rgz_dir,zooniverse_id))
+        fig.savefig('%s/bending_angles/plots/individual/%sba_%s.pdf' % (rgz_dir,anglepath,zooniverse_id))
         plt.close()
     else:
         plt.show()
@@ -598,14 +597,221 @@ def plot_one_double(dbl,pathdict,figno=1,save_fig=False):
     
     return None
 
-def plot_some(n=100):
+def plot_one_triple(triple,pathdict,figno=1,save_fig=False):
 
-    doubles = get_doubles()
+    cons = consensus.checksum('zooniverse_id')
+
+    sub = subjects.find_one({'zooniverse_id':'zooniverse_id'})
+    r = requests.get(sub['location']['contours'])
+    contours = r.json()
+    radio_components = contours['contours']
+
+    # Plot image
+    
+    zooniverse_id = cons['zid']
+    answer = cons['answer']
+    sub = subjects.find_one({'zooniverse_id':zooniverse_id})
+
+    # Download contour data
+    
+    r = requests.get(sub['location']['contours'])
+    contours = r.json()
+    
+    sf_x = 500./contours['width']
+    sf_y = 500./contours['height']
+    
+    verts_all = []
+    codes_all = []
+    components = contours['contours']
+
+    for comp in components:
+    
+        # Order of bounding box components is (xmax,ymax,xmin,ymin)
+        comp_xmax,comp_ymax,comp_xmin,comp_ymin = comp[0]['bbox']
+        
+        # Only plot radio components identified by the users as the consensus;
+        # check on the xmax value to make sure
+        for v in answer.itervalues():
+            if comp_xmax in v['xmax']:
+    
+                for idx,level in enumerate(comp):
+                    verts = [((p['x'])*sf_x,(p['y']-1)*sf_y) for p in level['arr']]
+                    
+                    codes = np.ones(len(verts),int) * Path.LINETO
+                    codes[0] = Path.MOVETO
+                
+                    verts_all.extend(verts)
+                    codes_all.extend(codes)
+    
+    try:
+        path = Path(verts_all, codes_all)
+        patch_black = patches.PathPatch(path, facecolor = 'none', edgecolor='black', lw=1)
+    except AssertionError:
+        print 'Users found no components for consensus match of %s' % zooniverse_id
+    
+    # Plot the infrared results
+    
+    fig = plt.figure(figno,(15,4))
+    fig.clf()
+    ax3 = fig.add_subplot(143)
+    ax4 = fig.add_subplot(144)
+    
+    colormaparr = [cm.hot_r,cm.Blues,cm.RdPu,cm.Greens,cm.PuBu,cm.YlGn,cm.Greys][::-1]
+    colorarr = ['r','b','m','g','c','y','k'][::-1]
+    
+    if len(answer) > 0: # At least one galaxy was identified
+        for idx,ans in enumerate(answer.itervalues()):
+
+            if ans.has_key('peak_data'):
+
+                # Plot the KDE map
+                colormap = colormaparr.pop()
+                ax3.imshow(np.rot90(ans['peak_data']['Z']), cmap=colormap,extent=[xmin, xmax, ymin, ymax])
+        
+                # Plot individual sources
+                color = colorarr.pop()
+                x_plot,y_plot = ans['ir_x'],ans['ir_y']
+                ax3.scatter(x_plot, y_plot, c=color, marker='o', s=10, alpha=1./len(x_plot))
+
+                ax4.plot([ans['ir_peak'][0]],[ans['ir_peak'][1]],color=color,marker='*',markersize=12)
+    
+            elif ans.has_key('ir'):
+                color = colorarr.pop()
+                x_plot,y_plot = ans['ir']
+                ax3.plot([x_plot],[y_plot],color=color,marker='o',markersize=2)
+                ax4.plot([x_plot],[y_plot],color=color,marker='*',markersize=12)
+
+            else:
+                ax4.text(550,idx*25,'#%i - no IR host' % idx,fontsize=11)
+
+    
+    ax3.set_xlim([0, 500])
+    ax3.set_ylim([500, 0])
+    ax3.set_title(zooniverse_id)
+    ax3.set_aspect('equal')
+    
+    ax4.set_xlim([0, 500])
+    ax4.set_ylim([500, 0])
+    ax4.set_title('Consensus (%i/%i users)' % (cons['n_users'],cons['n_total']))
+    
+    ax4.set_aspect('equal')
+    
+    # Display IR and radio images
+    
+    url_standard = sub['location']['standard']
+    im_standard = Image.open(cStringIO.StringIO(urllib.urlopen(url_standard).read()))
+    ax1 = fig.add_subplot(141)
+    ax1.imshow(im_standard,origin='upper')
+    ax1.set_title('WISE')
+
+    url_radio = sub['location']['radio']
+    im_radio = Image.open(cStringIO.StringIO(urllib.urlopen(url_radio).read()))
+    ax2 = fig.add_subplot(142)
+    ax2.imshow(im_radio,origin='upper')
+    ax2.set_title(sub['metadata']['source'])
+    ax2.get_yaxis().set_ticklabels([])
+
+    ax3.get_yaxis().set_ticklabels([])
+
+    # Plot contours identified as the consensus
+    if len(answer) > 0:
+        ax4.add_patch(patch_black)
+        # Add centers of bounding boxes
+        for comp in components:
+            bbox_radio = comp[0]['bbox']
+            bbox_ir = bbox_radio_to_ir(bbox_radio)
+            xrad = np.median((bbox_ir[0],bbox_ir[2]))
+            yrad = np.median((bbox_ir[1],bbox_ir[3]))
+            ax4.scatter(xrad,yrad, c='g', marker='s', s=15, alpha=1)
+
+            dbx = [bbox_ir[i] for i in (2,2,0,0,2)]
+            dby = [bbox_ir[i] for i in (3,1,1,3,3)]
+            ax4.plot(dbx,dby,color='g')
+
+        '''
+        for ans in answer:
+            if answer[ans].has_key('ir_peak'):
+                xc,yc = answer[ans]['ir_peak']
+                m1 = (y1 - yc) / (x1 - xc)
+                b1 = yc - m1*xc
+                m2 = (y2 - yc) / (x2 - xc)
+                b2 = yc - m2*xc
+
+                xedge1 = 0 if x1 < xc else 500
+                yedge1 = y1 - (x1-xedge1)*(yc-y1)/(xc-x1)
+
+                xedge2 = 0 if x2 < xc else 500
+                yedge2 = y2 - (x2-xedge2)*(yc-y2)/(xc-x2)
+
+                ax4.plot([xedge1,xc],[yedge1,yc],color='orange',linestyle='--')
+                ax4.plot([xedge2,xc],[yedge2,yc],color='orange',linestyle='--')
+
+                alpha_deg = bending_angle(xc,yc,x1,y1,x2,y2) * 180/np.pi
+                ax4.text(550,0,r'$\alpha$ = %.1f deg' % alpha_deg,fontsize=11)
+                phi_deg = position_angle(xc,500-yc,x1,500-y1,x2,500-y2) * 180/np.pi
+                ax4.arrow(xc,yc,0,-yc,head_width=20, head_length=40, fc='grey', ec='grey',ls='dotted')
+                ax4.text(550,50,r'$\phi$ = %.1f deg' % phi_deg,fontsize=11)
+
+                # Draw the bisector vector
+                #yd = y_bisect(xc,yc,xt,yt,xb,yb)
+                yd = y_bisect(xc,yc,xedge1,yedge1,xedge2,yedge2)
+                ax4.arrow(xc,yc,-xc,yd-yc,head_width=20, head_length=40, fc='blue', ec='blue')
+            else:
+                print "No peak for %s" % zooniverse_id
+
+        '''
+
+    ax4.yaxis.tick_right()
+    
+    ax1.get_xaxis().set_ticks([0,100,200,300,400])
+    ax2.get_xaxis().set_ticks([0,100,200,300,400])
+    ax3.get_xaxis().set_ticks([0,100,200,300,400])
+    ax4.get_xaxis().set_ticks([0,100,200,300,400,500])
+
+    plt.subplots_adjust(wspace=0.02)
+    
+    # Save hard copy of the figure
+    if save_fig:
+        fig.savefig('%s/bending_angles/plots/individual/triples/ba_%s.pdf' % (rgz_dir,zooniverse_id))
+        plt.close()
+    else:
+        plt.show()
+
+    # Close figure after it's done; otherwise mpl complains about having thousands of stuff open
+    
+    return None
+
+def y_bisect(xc,yc,xt,yt,xb,yb):
+
+    # Finds the point yd such that the vector (xc,yc) -> (0,yd)
+    # bisects the angle formed by the vectors (xb,yb) -> (xc,yc)
+    #                                     and (xt,yt) -> (xc,yc)
+
+    bc_length = np.hypot(xb - xc,yb - yc)
+    tc_length = np.hypot(xt - xc,yt - yc)
+    numerator = ((xb - xc)*xc + (yb - yc)*yc)/bc_length - (xc*(xt - xc) + yc*(yt - yc))/tc_length
+    denominator = (yb - yc)/bc_length - (yt - yc)/tc_length
+
+    return numerator/denominator
+
+
+def plot_some(n,random_selection=False):
+
     pathdict = make_pathdict()
-    somedoubles = random.sample(doubles,n)
 
-    for dbl in doubles:
-        plot_one_double(dbl,pathdict,save_fig=True)
+    # Doubles
+    '''
+    doubles = get_doubles()
+    somedoubles = random.sample(doubles,n) if random_selection else doubles[:n]
+
+    for dbl in somedoubles:
+        plot_one_double(dbl['zooniverse_id'],pathdict,save_fig=True)
+    '''
+
+    # Triples
+    sometriples = get_triples()
+    for triple in sometriples:
+        plot_one_triple(triple['zooniverse_id'],pathdict,save_fig=True)
 
     return None
 
@@ -627,14 +833,21 @@ def all_triples_pixradio(triples,pathdict):
     with open('%s/bending_angles/angles_triple_pixradio.csv' % rgz_dir,'w') as f:
         print >> f,'zooniverse_id,bending_angle,position_angle'
         for triple in triples:
-            irx,iry,radio_components = pix_convert(triple,pathdict)
-            xc,yc,radio_centroids = pix_radio(irx,iry,radio_components)
+            irx,iry = literal_eval(triple['ir_peak'])
+
+            sub = subjects.find_one({'zooniverse_id':triple['zooniverse_id']})
+            r = requests.get(sub['location']['contours'])
+            contours = r.json()
+            radio_components = contours['contours']
+
+            # Measure all positions in radio pixel coordinates
+            radio_centroids = pix_radio(radio_components)
     
             maxdist = 0
             for centroid in radio_centroids:
-                pd = pix_dist(xc,yc,centroid[0],centroid[1])
-                maxdist = pd if pd > maxdist else maxdist
-                if pd <= radio_tol:
+                d = pix_dist(irx,iry,centroid[0],centroid[1])
+                maxdist = d if d > maxdist else maxdist
+                if d <= radio_tol:
                     middle_radio = centroid
                     radio_centroids.remove(middle_radio)
     
@@ -643,13 +856,11 @@ def all_triples_pixradio(triples,pathdict):
                     phi = position_angle(middle_radio[0],middle_radio[1],radio_centroids[0][0],radio_centroids[0][1],radio_centroids[1][0],radio_centroids[1][1])
                     phi_deg = phi * 180./np.pi
     
-                    print >> f,'%s,%.3f' % (triple['zooniverse_id'],alpha_deg,phi_deg)
+                    print >> f,'%s,%.3f,%.3f' % (triple['zooniverse_id'],alpha_deg,phi_deg)
                     break
-            '''
-            else:
-                print '%s; No radio match to optical ID; closest is %i pixels' % (triple['first_id'],maxdist)
-            '''
-    
+                else:
+                    "Couldn't match the optical ID within 1 beam size of center for %s" % triple['zooniverse_id']
+
     return None
 
 def find_multipeaked_singles(subject,plot=False,verbose=True):
@@ -929,20 +1140,24 @@ def batch_mps_cc():
     # Run all multi-peaked singles using contour-counting technique
 
     '''
-    5013.01 seconds for 38750 images
+    5013.01 seconds (~83 minutes) for 38750 images
     7.73 images per second
     '''
 
     tstart = time.time()
-    mps = subjects.find({'state':'complete','metadata.contour_count':1},timeout=False)
+    mps = subjects.find({'state':'complete','metadata.contour_count':1,'metadata.survey':'first'},timeout=False)
     n = mps.count()
 
     with open('%s/bending_angles/multipeaked_singles_cc.csv' % rgz_dir,'w') as f:
+        print >> f,"zooniverse_id,nlobe,ntotal,xc,yc"
         for subject in mps:
             local_maxima = mps_cc(subject,plot=False,verbose=False)
             if len(local_maxima) > 0:
                 for idx,lm in enumerate(local_maxima):
-                    print >> f,subject['zooniverse_id'],idx+1,len(local_maxima),lm[1][0],lm[1][1]
+                    try:
+                        print >> f,"{0:},{1:d},{2:d},{3:.4d},{4:.4d}".format(subject['zooniverse_id'],idx+1,len(local_maxima),lm[1][0],lm[1][1])
+                    except ValueError:
+                        print subject['zooniverse_id'],idx+1,len(local_maxima),lm[1][0],lm[1][1]
         
     mps.close()
     tend = time.time()
@@ -1061,12 +1276,12 @@ def batch_mps_kernel():
 
 def mps_bending_angle():
 
-    df = pd.read_csv('%s/bending_angles/multipeaked_singles_cc.csv' % rgz_dir)
-
-    # Part 1: select double-peaked, single-contour sources with optical counterparts
+    df = pd.read_csv('%s/bending_angles/multipeaked_singles_cc.csv' % rgz_dir,delim_whitespace=True)
 
     '''
-    df2 = df[(df['nlobes'] == 2)]
+    # Part 1: select double-peaked, single-contour sources with optical counterparts
+
+    df2 = df[(df['nlobe'] == 2)]
 
     with open('%s/bending_angles/angles_multipeaked_singles.csv' % rgz_dir,'w') as f:
 
@@ -1077,34 +1292,37 @@ def mps_bending_angle():
         df2_pair1 = df2[::2]
         df2_pair2 = df2[1::2]
         _zid = np.array(df2_pair1['zooniverse_id'])
-        _x1 = np.array(df2_pair1['x'])
-        _y1 = np.array(df2_pair1['y'])
-        _x2 = np.array(df2_pair2['x'])
-        _y2 = np.array(df2_pair2['y'])
+        _x1 = np.array(df2_pair1['xc'])
+        _y1 = np.array(df2_pair1['yc'])
+        _x2 = np.array(df2_pair2['xc'])
+        _y2 = np.array(df2_pair2['yc'])
 
-        for zooniverse_id,cx1,cy1,cx2,cy2 in zip(_zid,_x1,_y1,_x2,_y2):
+        for zooniverse_id,x1,y1,x2,y2 in zip(_zid,_x1,_y1,_x2,_y2):
 
             c = consensus.checksum(zooniverse_id)
-            if (len(c['answer']) == 1) and (c['n_users']/float(c['n_total']) >= 0.75):
-                if c['answer'][c['answer'].keys()[0]].has_key('ir_peak'):
-                    peak_x,peak_y = c['answer'][c['answer'].keys()[0]]['ir_peak']
+            try:
+                if (len(c['answer']) == 1) and (c['n_users']/float(c['n_total']) >= 0.75):
+                    if c['answer'][c['answer'].keys()[0]].has_key('ir_peak'):
+                        peak_x,peak_y = c['answer'][c['answer'].keys()[0]]['ir_peak']
 
-                    ir_x = peak_x * first_ir_scale_x
-                    ir_y = peak_y * first_ir_scale_y
-                    alpha = bending_angle(ir_x,ir_y,cx1,cy1,cx2,cy2)
-                    alpha_deg = alpha * 180./np.pi
+                        ir_x = peak_x * first_ir_scale_x
+                        ir_y = peak_y * first_ir_scale_y
+                        alpha = bending_angle(ir_x,ir_y,x1,y1,x2,y2)
+                        alpha_deg = alpha * 180./np.pi
+                        phi = position_angle(ir_x,ir_y,x1,y1,x2,y2)
+                        phi_deg = phi * 180./np.pi
 
-                    print >> f,'%s,%.3f' % (zooniverse_id,alpha_deg)
-                    #print ir_x,ir_y,cx1,cy1,cx2,cy2
-                    #print alpha_deg
+                        print >> f,'%s,%.3f' % (zooniverse_id,alpha_deg,phi_deg)
 
-            else:
-                print "Had more than 1 IR sources and/or less than 75 percent consensus for %s" % zooniverse_id
-
+                else:
+                    print "Had more than 1 IR sources and/or less than 75 percent consensus for %s" % zooniverse_id
+            except TypeError:
+                print "No 'answer' key for %s" % zooniverse_id
     '''
+
     # Part 2: select triple-peaked, single-contour sources with no optical counterparts
 
-    df3 = df[(df['nlobes'] == 3)]
+    df3 = df[(df['nlobe'] == 3)]
     imgcen_x,imgcen_y = FIRST_FITS_WIDTH,FIRST_FITS_HEIGHT 
 
     with open('%s/bending_angles/angles_multipeaked_singles_no_optical.csv' % rgz_dir,'w') as f:
@@ -1117,15 +1335,14 @@ def mps_bending_angle():
         df3_pair2 = df3[1::3]
         df3_pair3 = df3[2::3]
         _zid = np.array(df3_pair1['zooniverse_id'])
-        _x1 = np.array(df3_pair1['x'])
-        _y1 = np.array(df3_pair1['y'])
-        _x2 = np.array(df3_pair2['x'])
-        _y2 = np.array(df3_pair2['y'])
-        _x3 = np.array(df3_pair3['x'])
-        _y3 = np.array(df3_pair3['y'])
+        _x1 = np.array(df3_pair1['xc'])
+        _y1 = np.array(df3_pair1['yc'])
+        _x2 = np.array(df3_pair2['xc'])
+        _y2 = np.array(df3_pair2['yc'])
+        _x3 = np.array(df3_pair3['xc'])
+        _y3 = np.array(df3_pair3['yc'])
 
-
-        for zooniverse_id,cx1,cy1,cx2,cy2,cx3,cy3 in zip(_zid,_x1,_y1,_x2,_y2,_x3,_y3):
+        for zooniverse_id,x1,y1,x2,y2,cx3,cy3 in zip(_zid,_x1,_y1,_x2,_y2,_x3,_y3):
 
             c = consensus.checksum(zooniverse_id)
             try:
@@ -1133,22 +1350,22 @@ def mps_bending_angle():
 
                     # Use the maximum of the three possible opening angles, since we don't know the "center" of the galaxy
                     
-                    alpha1 = bending_angle(cx1,cy1,cx2,cy2,cx3,cy3)
-                    alpha2 = bending_angle(cx2,cy2,cx1,cy1,cx3,cy3)
-                    alpha3 = bending_angle(cx3,cy3,cx1,cy1,cx2,cy2)
+                    alpha1 = bending_angle(x1,y1,x2,y2,cx3,cy3)
+                    alpha2 = bending_angle(x2,y2,x1,y1,cx3,cy3)
+                    alpha3 = bending_angle(cx3,cy3,x1,y1,x2,y2)
                     alpha_max = max(alpha1,alpha2,alpha3)
 
                     # Compute position angle between angular bisector and north
 
                     if alpha_max == alpha1:
                         alpha_deg = alpha1 * 180/np.pi
-                        phi_deg = position_angle(cx1,cy1,cx2,cy2,cx3,cy3) * 180/np.pi
+                        phi_deg = position_angle(x1,y1,x2,y2,cx3,cy3) * 180/np.pi
                     elif alpha_max == alpha2:
                         alpha_deg = alpha2 * 180/np.pi
-                        alpha2 = bending_angle(cx2,cy2,cx1,cy1,cx3,cy3) * 180/np.pi
+                        phi_deg = position_angle(x2,y2,x1,y1,cx3,cy3) * 180/np.pi
                     elif alpha_max == alpha3:
                         alpha_deg = alpha3 * 180/np.pi
-                        alpha2 = bending_angle(cx3,cy3,cx1,cy1,cx2,cy2) * 180/np.pi
+                        phi_deg = position_angle(cx3,cy3,x1,y1,x2,y2) * 180/np.pi
                     else:
                         print 'Warning: no match between opening angle and max angle'
                     
@@ -1156,10 +1373,23 @@ def mps_bending_angle():
                 else:
                     print "Had less than 75 percent consensus for %s" % zooniverse_id
             except TypeError:
-                print "No 'answer' key for %s" % zooniverse_id,c
+                print "No 'answer' key for %s" % zooniverse_id
 
     return None
 
 if __name__ == '__main__':
 
+    pathdict = make_pathdict()
+
+    '''
+    triples = get_triples()
+    all_triples_pixradio(triples,pathdict)
+    '''
+
+    doubles = get_doubles()
+    all_doubles_pixradio(doubles,pathdict)
+
+    '''
+    batch_mps_cc()
     mps_bending_angle()
+    '''
