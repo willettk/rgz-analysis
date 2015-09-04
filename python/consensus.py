@@ -1,10 +1,25 @@
 from __future__ import division
 
-from pymongo import MongoClient
-from collections import Counter
+# Local RGZ modules
+
+import collinearity
+from load_contours import get_contours,make_pathdict
+
+# Default packages
+
 import datetime
-import numpy as np
 import operator
+from collections import Counter
+import cStringIO
+import urllib
+import json
+import os.path
+import time
+import shutil
+
+# Other packages
+
+import numpy as np
 
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import cm
@@ -19,16 +34,9 @@ from scipy.linalg.basic import LinAlgError
 from astropy.io import fits
 from astropy import wcs
 
-import requests
-from PIL import Image
-import cStringIO
-import urllib
+from pymongo import MongoClient
 
-import json
-import collinearity
-import os.path
-import time
-import shutil
+from PIL import Image
 
 # MongoDB parameters
 
@@ -65,6 +73,7 @@ expert_names = [u'42jkb', u'ivywong', u'stasmanian', u'klmasters', u'Kevin', u'a
 # Paths
 
 rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
+pathdict = make_pathdict()
 
 # Find the consensus classification for a single subject
 
@@ -535,7 +544,7 @@ def one_answer(zid,user_name):
         
     return cons
 
-def plot_consensus(consensus,figno=1, save_fig=None):
+def plot_consensus(consensus,figno=1,save_fig=None):
 
     # Plot 4-panel image of IR, radio, KDE estimate, and consensus
     
@@ -543,10 +552,8 @@ def plot_consensus(consensus,figno=1, save_fig=None):
     answer = consensus['answer']
     sub = subjects.find_one({'zooniverse_id':zid})
 
-    # Download contour data
-    
-    r = requests.get(sub['location']['contours'])
-    contours = r.json()
+    # Get contour data
+    contours = get_contours(sub,pathdict)
     
     sf_x = 500./contours['width']
     sf_y = 500./contours['height']
