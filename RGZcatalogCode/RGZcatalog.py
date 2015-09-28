@@ -17,7 +17,11 @@ import catalogFunctions as fn #contains custom functions
 import contourNode as c #contains Node class
 from updateConsensus import updateConsensus #replaces the current consensus collection with a specified csv
 
+rgz_path = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
+data_path = '/Volumes/REISEPASS/'
+
 def RGZcatalog():
+
 
     #begin logging even if not run from command line
     logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s')
@@ -41,12 +45,12 @@ def RGZcatalog():
         logging.info('Catalog contains entries; appending')
 
     #get dictionary for finding the path to FITS files and WCS headers
-    with open('/data/extragal/willett/rgz/first_fits.txt') as f:
+    with open('%s/first_fits.txt' % rgz_path) as f:
         lines = f.readlines()
     pathdict = {}
     for l in lines:
         spl = l.split(' ')
-        pathdict[spl[1].strip()] = '/data/extragal/willett/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (int(spl[0]), spl[1].strip())
+        pathdict[spl[1].strip()] = '%s/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (data_path,int(spl[0]), spl[1].strip())
 
     #count the number of entries from this run and how many entries are in the catalog total
     count = 0
@@ -96,7 +100,7 @@ def RGZcatalog():
                     fits_loc = pathdict[fid]
                     entry.update({'FIRST_id':str(fid)})
                 else:
-                    fits_loc = '/data/extragal/willett/rgz/raw_images/ATLAS/2x2/%s_radio.fits' % fid
+                    fits_loc = '%s/rgz/raw_images/ATLAS/2x2/%s_radio.fits' % (data_path,fid)
                     entry.update({'ATLAS_id':str(fid)})
                 
                 #find IR counterpart from consensus data, if present
