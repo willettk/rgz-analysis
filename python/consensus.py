@@ -669,7 +669,7 @@ def plot_consensus(consensus,figno=1,save_fig=None):
     if save_fig is not None:
         if save_fig == True:
             save_fig = zid
-        writefile = '/Volumes/3TB/rgz/plots/%s.pdf' % save_fig
+        writefile = '/Volumes/REISEPASS/rgz/plots/%s.pdf' % save_fig
         fig.savefig('%s' % (writefile))
         plt.close()
     else:

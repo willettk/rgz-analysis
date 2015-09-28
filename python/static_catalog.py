@@ -5,6 +5,11 @@ path = '/Users/willettk/Astronomy/Research/GalaxyZoo'
 
 consensus_level = 0.50
 
+if consensus_level == 0.:
+    suffix = '_full'
+else:
+    suffix = ''
+
 def load_data():
 
     client = MongoClient('localhost', 27017)
@@ -14,8 +19,8 @@ def load_data():
 
     return catalog
 
-def run_static(catalog):
-    filename = '%s/rgz-analysis/csv/static_catalog.csv' % path
+def run_static(catalog,full=False):
+    filename = '%s/rgz-analysis/csv/static_catalog%s.csv' % (path,suffix)
 
     wise_default_dict = catalog.find_one({'AllWISE':{'$exists':True}})['AllWISE']
     for k in wise_default_dict:
@@ -32,7 +37,7 @@ def run_static(catalog):
     with open(filename,'w') as f:
 
         # Header
-        print >> f,'source_id zooniverse_id peak1_ra peak1_dec peak1_flux peak2_ra peak2_dec peak2_flux wise_designation wise_ra wise_dec wise_w1mag redshift redshift_err redshift_type sdss_id consensus_level'
+        print >> f,'source_id zooniverse_id peak1_ra peak1_dec peak1_flux peak2_ra peak2_dec peak2_flux max_angular_extent total_solid_angle wise_designation wise_ra wise_dec wise_w1mag redshift redshift_err redshift_type sdss_id sdss_ra sdss_dec consensus_level'
         # Data requested by Larry for double-peaked sources
         #for c in catalog.find({'radio.numberComponents':2}):
         bad_entry = 0
@@ -44,7 +49,7 @@ def run_static(catalog):
             sdssredshifttype = c['SDSS'].setdefault('redshift_type',-99)
 
             try:
-                print >> f,'RGZ_{0:} {14:} {1:.5f} {2:.5f} {3:.2f} {4:.5f} {5:.5f} {6:.2f} {10:} {7:.5f} {8:.5f} {9:.2f} {11:.4f} {12:.4f} {13:d} {16:} {15:.2f}'.format(\
+                print >> f,'RGZ_{0:} {14:} {1:.5f} {2:.5f} {3:.2f} {4:.5f} {5:.5f} {6:.2f} {17:.3f} {18:.3f} {10:} {7:.5f} {8:.5f} {9:.2f} {11:.4f} {12:.4f} {13:d} {16:} {19:.5f} {20:.5f} {15:.2f}'.format(\
                 c['catalog_id'], 
                 c['radio']['peaks'][0]['ra'],
                 c['radio']['peaks'][0]['dec'],
@@ -61,7 +66,11 @@ def run_static(catalog):
                 c['SDSS']['redshift_type'],
                 c['Zooniverse_id'],
                 c['consensus']['level'],
-                c['SDSS']['objID'])
+                c['SDSS']['objID'],
+                c['radio']['maxAngularExtent'],
+                c['radio']['totalSolidAngle'],
+                c['SDSS']['ra'],
+                c['SDSS']['dec'])
             except IndexError:
                 bad_entry += 1
 
@@ -72,7 +81,7 @@ def run_static(catalog):
 def match_clusters():
 
     df1 = pd.read_csv('%s/radiogalaxyzoo/cluster_matching/MATCHED_PAIRS.tsv' % path,delim_whitespace=True)
-    df2 = pd.read_csv('%s/rgz-analysis/csv/static_catalog.csv' % path,delim_whitespace=True)
+    df2 = pd.read_csv('%s/rgz-analysis/csv/static_catalog%s.csv' % (path,suffix),delim_whitespace=True)
 
     # Keep only columns that Larry is interested in
 
@@ -88,7 +97,7 @@ def match_clusters():
     dfm = df2.merge(df1,on='rgz_id')
 
     # Saves file as hard copy, but not directly used
-    dfm.to_csv('%s/rgz-analysis/csv/static_catalog2.csv' % path,sep = ' ', index=False)
+    dfm.to_csv('%s/rgz-analysis/csv/static_catalog2%s.csv' % (path,suffix),sep = ' ', index=False)
 
     return dfm
 
@@ -112,7 +121,7 @@ def match_bending_angle(dfm):
     dfall = pd.concat([df1,df3],ignore_index=True)
 
     dfba = dfm.merge(dfall,on='zooniverse_id')
-    dfba.to_csv('%s/rgz-analysis/csv/static_catalog3.csv' % path,sep = ' ', index=False)
+    dfba.to_csv('%s/rgz-analysis/csv/static_catalog3%s.csv' % (path,suffix),sep = ' ', index=False)
 
     print "\n%i sources in static catalog" % len(dfba)
 

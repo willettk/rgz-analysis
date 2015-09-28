@@ -21,11 +21,12 @@ def make_pathdict(local=False):
     data_found = False
     for dp in paths:
         if os.path.exists(dp):
-            img_filepath = "{0:s}/rgz/raw_images".format(dp)
+            rgz_filepath = "{0:s}/rgz".format(dp)
+            img_filepath = "{0:s}/raw_images".format(rgz_filepath)
             print "Using RGZ data from {0:s}".format(dp)
             data_found = True
             break 
-    if ~data_found:
+    if not data_found:
         print "No external drives found for RGZ data"
         return None
 
@@ -33,7 +34,7 @@ def make_pathdict(local=False):
 
     # FIRST
 
-    with open('%s/first_fits.txt' % img_filepath) as f:
+    with open('%s/first_fits.txt' % rgz_filepath) as f:
         lines = f.readlines()
     
     for l in lines:
@@ -46,7 +47,7 @@ def make_pathdict(local=False):
 
     # ATLAS
 
-    with open('%s/atlas_subjects.txt' % img_filepath) as f:
+    with open('%s/atlas_subjects.txt' % rgz_filepath) as f:
         lines = f.readlines()
     
     for l in lines:
