@@ -610,6 +610,19 @@ def load_rgz_data():
 
     return subjects,classifications,users
 
+def load_catalog():
+
+    # Connect to Mongo database
+    # Make sure to run mongorestore /path/to/database to restore the updated files
+    # mongod client must be running locally
+    
+    client = MongoClient('localhost', 27017)
+    db = client['radio'] 
+
+    catalog = db['catalog']
+    
+    return catalog
+
 def overall_stats(subjects,classifications,users, verbose=True):
 
     # Retrieve RGZ data, convert into data frames
