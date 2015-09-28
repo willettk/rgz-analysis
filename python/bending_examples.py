@@ -27,4 +27,21 @@ def bending_examples():
                 except ValueError as inst:
                     print "ValueError,",inst.args,zid
                     errcount += 1
-        print '{:d} galaxies with bending angle, {:d} with errors for angles between {:.0f} and {:.0f}'.format(count,errcount,a,a+10)
+        print '{:d} galaxies with bending angle, {:d} with errors for angles between {:.0f} and {:.0f} deg'.format(count,errcount,a,a+10)
+
+def triples():
+
+    # Triples
+
+    data = ascii.read('{:}/rgz-analysis/bending_angles/angles_triple_pixradio.csv'.format(path),delimiter=',')
+
+    print '{:d} triple galaxies with a bending angle'.format(len(data))
+
+    for a in np.linspace(0,170,18):
+        bdata = data[(data['bending_angle'] >= a) & (data['bending_angle'] < a+10.)]
+        if len(bdata) > 0:
+            for t in bdata:
+                zid = t['zooniverse_id']
+                ba.plot_one_triple(zid,pathdict,save_fig=True,anglepath='{0:.0f}_{1:.0f}/'.format(a,a+10))
+        print '{:d} triple galaxies with bending angle for angles between {:.0f} and {:.0f} deg'.format(len(bdata),a,a+10)
+
