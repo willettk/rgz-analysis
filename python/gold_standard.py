@@ -20,10 +20,14 @@ subjects,classifications,users = rgz.load_rgz_data()
 
 experts=("42jkb", "ivywong", "stasmanian", "klmasters", "Kevin", "akapinska", "enno.middelberg", "xDocR", "DocR", "vrooje", "KWillett")
     
-def get_galaxies():
+def get_galaxies(expert=False):
     
-    #with open('%s/goldstandard/gs_zids.txt' % rgz_dir) as f:
-    with open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir) as f:
+    if expert:
+        filename = "expert/expert_all_zooniverse_ids.txt"
+    else:
+        filename = "goldstandard/gs_zids.txt"
+
+    with open('{0:}/{1:}'.format(rgz_dir,filename)) as f:
         gs = f.readlines()
     
     gals = [g.strip() for g in gs]
@@ -204,4 +208,24 @@ def plot_gs_volunteers():
 
     return None
 
+def count_finishers():
 
+    # How many users have completed all galaxies in the gold standard set of 20 subjects? (raised by Ivy during Sep 2015 telecon)
+
+    counts = []
+    for gal in subjects.find({'goldstandard':True}):
+        counts.append(gal['classification_count'])
+
+    print counts
+
+    fig = plt.figure(figsize=(8,8))
+    ax = fig.add_subplot(111)
+
+    arr = np.array(counts)
+    arr.sort()
+
+    ax.plot(arr)
+
+    plt.show()
+
+    return None
