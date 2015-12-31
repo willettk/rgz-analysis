@@ -46,6 +46,10 @@ db = client['radio']
 subjects = db['radio_subjects'] 		# subjects = images
 classifications = db['radio_classifications']	# classifications = classifications of each subject per user
 
+# Create index on subject IDs so that queries run faster
+
+classifications.create_index({'subject_ids':1},name='subject_ids_1')
+
 # General variables for the RGZ sample
 
 main_release_date = datetime.datetime(2013, 12, 17, 0, 0, 0, 0)
@@ -106,20 +110,23 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
         else:
             class_params['user_name'] = {"$exists":True}
 
-    clist_all = list(classifications.find(class_params))
+    _c = classifications.find(class_params)
 
     # Empty dicts and lists 
     cdict = {}
-    checksum_list = []
 
     unique_users = set()
     
-    clen_start = len(clist_all)
+    clen_start = 0
+    clist_all = []
     listcount = []
 
     # Compute the most popular combination for each NUMBER of galaxies identified in image
     for c in clist_all:
 
+        clist_all.append(c)
+        clen_start += 1
+        
         # Skip classification if they already did one?
 
         try:
@@ -164,7 +171,6 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
             else:
                 checksum = -99
 
-            checksum_list.append(checksum)
             c['checksum'] = checksum
     
             # Insert checksum into dictionary with number of galaxies as the index
@@ -336,7 +342,9 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
             # Even if there are more than 2 sets of points, if they are mutually co-linear, 
             # matrix can't invert and kernel returns NaNs. 
 
-            if np.isnan(kernel(positions)).sum() > 0:
+            kp = kernel(positions)
+
+            if np.isnan(kp).sum() > 0:
                 acp = collinearity.collinear(x_exists,y_exists)
                 if len(acp) > 0:
                     print 'There are %i unique points for %s (source no. %i in the field), but all are co-linear; KDE estimate does not work.' % (len(Counter(x_exists)),zid,xk)
@@ -349,7 +357,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
         
             else:
 
-                Z = np.reshape(kernel(positions).T, X.shape)
+                Z = np.reshape(kp.T, X.shape)
                 
                 # Find the number of peaks
                 # http://stackoverflow.com/questions/3684484/peak-detection-in-a-2d-array
@@ -413,7 +421,6 @@ def one_answer(zid,user_name):
   
     # Empty dicts and lists 
     cdict = {}
-    checksum_list = []
     
     for c in clist:
         # Want most popular combination for each NUMBER of galaxies identified in image
@@ -442,7 +449,6 @@ def one_answer(zid,user_name):
             sumlist.append(round(product,3))
     
         checksum = round(sum(sumlist),3)
-        checksum_list.append(checksum)
         c['checksum'] = checksum
     
         # Insert checksum into dictionary with number of galaxies as the index
@@ -786,23 +792,23 @@ def run_sample(update=True,subset=None,do_plot=False):
         if not idx % 100:
             print idx, datetime.datetime.now().strftime('%H:%M:%S.%f')
 
-        consensus = checksum(zid,write_peak_data=do_plot)
+        cons = checksum(zid,write_peak_data=do_plot)
         if do_plot:
-            plot_consensus(consensus,save_fig=True)
+            plot_consensus(cons,save_fig=True)
 
         # Save results to files
 
-        if consensus is not None:
+        if cons is not None:
 
-            consensus['consensus_level'] = (consensus['n_users']/consensus['n_total'])
+            cons['consensus_level'] = (cons['n_users']/cons['n_total'])
 
             # JSON
 
-            json_output.append(consensus)
+            json_output.append(cons)
 
             # CSV
 
-            for ans in consensus['answer'].itervalues():
+            for ans in cons['answer'].itervalues():
                 try:
                     ir_peak = ans['ir_peak']
                 except KeyError:
@@ -811,14 +817,14 @@ def run_sample(update=True,subset=None,do_plot=False):
                 try:
                     fc.write('%s,%s,%4i,%4i,%.3f,%2i,%s,"%s","%s"\n' % 
                         (
-                            consensus['zid'],consensus['source'],
-                            consensus['n_users'],consensus['n_total'],consensus['consensus_level'],
+                            cons['zid'],cons['source'],
+                            cons['n_users'],cons['n_total'],cons['consensus_level'],
                             len(ans['xmax']),ad[ans['ind']],bbox_unravel(ans['bbox']),ir_peak
                             )
                         )
                 except KeyError:
                     print zid
-                    print consensus
+                    print cons
 
     fc.close()
 
@@ -886,5 +892,9 @@ def alphadict():
     return ad
 
 if __name__ == "__main__":
-    print 'No plotting',datetime.datetime.now().strftime('%H:%M:%S.%f')
-    run_sample(update=True,do_plot=False)
+    if pathdict != None:
+        print 'No plotting',datetime.datetime.now().strftime('%H:%M:%S.%f')
+        run_sample(update=True,do_plot=False)
+        print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
+    else:
+        print "\nAborting consensus.py - could not locate raw RGZ image data.\n"
