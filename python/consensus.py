@@ -77,7 +77,7 @@ expert_names = [u'42jkb', u'ivywong', u'stasmanian', u'klmasters', u'Kevin', u'a
 
 # Paths
 
-paths = ('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis','/data/tabernacle/larry/RGZdata')
+paths = ('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis','/data/tabernacle/larry/RGZdata/rgz-analysis')
 rgz_dir = '../'
 for path in paths:
     if os.path.exists(path):
