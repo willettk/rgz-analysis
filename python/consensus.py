@@ -34,6 +34,7 @@ from scipy.linalg.basic import LinAlgError
 from astropy.io import fits
 from astropy import wcs
 
+import pymongo 
 from pymongo import MongoClient
 
 from PIL import Image
@@ -48,7 +49,7 @@ classifications = db['radio_classifications']	# classifications = classification
 
 # Create index on subject IDs so that queries run faster
 
-classifications.create_index({'subject_ids':1},name='subject_ids_1')
+subindex = classifications.create_index([('subject_ids',pymongo.ASCENDING)],name='subject_ids_1')
 
 # General variables for the RGZ sample
 
