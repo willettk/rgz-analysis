@@ -77,7 +77,14 @@ expert_names = [u'42jkb', u'ivywong', u'stasmanian', u'klmasters', u'Kevin', u'a
 
 # Paths
 
-rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
+paths = ('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis','/data/tabernacle/larry/RGZdata')
+rgz_dir = '../'
+for path in paths:
+    if os.path.exists(path):
+        rgz_dir = path
+if rgz_dir == '':
+    print "Unable to find the hardcoded local path to store outputs."
+
 pathdict = make_pathdict()
 
 # Find the consensus classification for a single subject
