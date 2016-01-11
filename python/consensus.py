@@ -1,10 +1,25 @@
 from __future__ import division
 
-from pymongo import MongoClient
-from collections import Counter
+# Local RGZ modules
+
+import collinearity
+from load_contours import get_contours,make_pathdict
+
+# Default packages
+
 import datetime
-import numpy as np
 import operator
+from collections import Counter
+import cStringIO
+import urllib
+import json
+import os.path
+import time
+import shutil
+
+# Other packages
+
+import numpy as np
 
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import cm
@@ -19,13 +34,10 @@ from scipy.linalg.basic import LinAlgError
 from astropy.io import fits
 from astropy import wcs
 
-import requests
-from PIL import Image
-import cStringIO
-import urllib
+import pymongo 
+from pymongo import MongoClient
 
-import json
-import collinearity
+from PIL import Image
 
 # MongoDB parameters
 
@@ -34,6 +46,10 @@ db = client['radio']
 
 subjects = db['radio_subjects'] 		# subjects = images
 classifications = db['radio_classifications']	# classifications = classifications of each subject per user
+
+# Create index on subject IDs so that queries run faster
+
+subindex = classifications.create_index([('subject_ids',pymongo.ASCENDING)],name='subject_ids_1')
 
 # General variables for the RGZ sample
 
@@ -46,6 +62,9 @@ FITS_HEIGHT = 301.0			# number of pixels in the FITS image (?) along the y axis
 FITS_WIDTH = 301.0			# number of pixels in the FITS image (?) along the x axis
 FIRST_FITS_HEIGHT = 132.0       # number of pixels in the FITS image along the y axis
 FIRST_FITS_WIDTH = 132.0       # number of pixels in the FITS image along the y axis
+
+# Need to add parameters for ATLAS, both IR and radio.
+
 PIXEL_SIZE = 0.00016667#/3600.0		# the number of arcseconds per pixel in the FITS image
 xmin = 1.
 xmax = IMG_HEIGHT_NEW
@@ -58,7 +77,15 @@ expert_names = [u'42jkb', u'ivywong', u'stasmanian', u'klmasters', u'Kevin', u'a
 
 # Paths
 
-rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
+paths = ('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis','/data/tabernacle/larry/RGZdata/rgz-analysis')
+rgz_dir = '../'
+for path in paths:
+    if os.path.exists(path):
+        rgz_dir = path
+if rgz_dir == '':
+    print "Unable to find the hardcoded local path to store outputs."
+
+pathdict = make_pathdict()
 
 # Find the consensus classification for a single subject
 
@@ -91,20 +118,23 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
         else:
             class_params['user_name'] = {"$exists":True}
 
-    clist_all = list(classifications.find(class_params))
+    _c = classifications.find(class_params)
 
     # Empty dicts and lists 
     cdict = {}
-    checksum_list = []
 
     unique_users = set()
     
-    clen_start = len(clist_all)
+    clen_start = 0
+    clist_all = []
     listcount = []
 
     # Compute the most popular combination for each NUMBER of galaxies identified in image
     for c in clist_all:
 
+        clist_all.append(c)
+        clen_start += 1
+        
         # Skip classification if they already did one?
 
         try:
@@ -123,29 +153,32 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
             goodann = [x for x in c['annotations'] if (x.keys()[0] not in bad_keys)]
             n_galaxies = len(goodann)
     
-            for idx,ann in enumerate(goodann):
+            if n_galaxies > 0:  # There must be at least one galaxy!
+                for idx,ann in enumerate(goodann):
     
-                xmaxlist = []
-                try:
-                    radio_comps = ann['radio']
+                    xmaxlist = []
+                    try:
+                        radio_comps = ann['radio']
 
-                    # loop over all the radio components within an galaxy
-                    if radio_comps != 'No Contours':
-                        for rc in radio_comps:
-                            xmaxlist.append(float(radio_comps[rc]['xmax']))
-                    # or make the value -99 if there are no contours
-                    else:
+                        # loop over all the radio components within an galaxy
+                        if radio_comps != 'No Contours':
+                            for rc in radio_comps:
+                                xmaxlist.append(float(radio_comps[rc]['xmax']))
+                        # or make the value -99 if there are no contours
+                        else:
+                            xmaxlist.append(-99)
+                    except KeyError:
                         xmaxlist.append(-99)
-                except KeyError:
-                    xmaxlist.append(-99)
     
-                # To create a unique ID for the combination of radio components,
-                # take the product of all the xmax coordinates and sum them together.
-                product = reduce(operator.mul, xmaxlist, 1)
-                sumlist.append(round(product,3))
-    
-            checksum = sum(sumlist)
-            checksum_list.append(checksum)
+                    # To create a unique ID for the combination of radio components,
+                    # take the product of all the xmax coordinates and sum them together.
+                    product = reduce(operator.mul, xmaxlist, 1)
+                    sumlist.append(round(product,3))
+
+                checksum = sum(sumlist)
+            else:
+                checksum = -99
+
             c['checksum'] = checksum
     
             # Insert checksum into dictionary with number of galaxies as the index
@@ -227,7 +260,6 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
             answer[checksum2] = {}
             answer[checksum2]['ind'] = k
             answer[checksum2]['xmax'] = xmax_temp
-            # Add bounding box?
             answer[checksum2]['bbox'] = bbox_temp
         except KeyError:
             print gal, zid
@@ -267,7 +299,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
 
     # Perform a kernel density estimate on the data for each galaxy
     
-    scale_ir = 500./424.
+    scale_ir = IMG_HEIGHT_NEW/IMG_HEIGHT_OLD
 
     peak_data = []
 
@@ -318,7 +350,9 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
             # Even if there are more than 2 sets of points, if they are mutually co-linear, 
             # matrix can't invert and kernel returns NaNs. 
 
-            if np.isnan(kernel(positions)).sum() > 0:
+            kp = kernel(positions)
+
+            if np.isnan(kp).sum() > 0:
                 acp = collinearity.collinear(x_exists,y_exists)
                 if len(acp) > 0:
                     print 'There are %i unique points for %s (source no. %i in the field), but all are co-linear; KDE estimate does not work.' % (len(Counter(x_exists)),zid,xk)
@@ -331,7 +365,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
         
             else:
 
-                Z = np.reshape(kernel(positions).T, X.shape)
+                Z = np.reshape(kp.T, X.shape)
                 
                 # Find the number of peaks
                 # http://stackoverflow.com/questions/3684484/peak-detection-in-a-2d-array
@@ -368,6 +402,9 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
                             answer[k]['ir_y'] = y_exists
         else:
 
+            # Note: need to actually put a limit in if less than half of users selected IR counterpart.
+            # Right now it still IDs a sources even if only 1/10 users said it was there.
+
             for k,v in answer.iteritems():
                 if v['ind'] == xk:
                     # Case 1: multiple users selected IR source, but not enough unique points to pinpoint peak
@@ -392,7 +429,6 @@ def one_answer(zid,user_name):
   
     # Empty dicts and lists 
     cdict = {}
-    checksum_list = []
     
     for c in clist:
         # Want most popular combination for each NUMBER of galaxies identified in image
@@ -421,7 +457,6 @@ def one_answer(zid,user_name):
             sumlist.append(round(product,3))
     
         checksum = round(sum(sumlist),3)
-        checksum_list.append(checksum)
         c['checksum'] = checksum
     
         # Insert checksum into dictionary with number of galaxies as the index
@@ -523,18 +558,16 @@ def one_answer(zid,user_name):
         
     return cons
 
-def plot_consensus(consensus,figno=1, save_fig=None):
+def plot_consensus(consensus,figno=1,save_fig=None):
 
-    # Plot image
+    # Plot 4-panel image of IR, radio, KDE estimate, and consensus
     
     zid = consensus['zid']
     answer = consensus['answer']
     sub = subjects.find_one({'zooniverse_id':zid})
 
-    # Download contour data
-    
-    r = requests.get(sub['location']['contours'])
-    contours = r.json()
+    # Get contour data
+    contours = get_contours(sub,pathdict)
     
     sf_x = 500./contours['width']
     sf_y = 500./contours['height']
@@ -647,11 +680,11 @@ def plot_consensus(consensus,figno=1, save_fig=None):
     plt.subplots_adjust(wspace=0.02)
     
     # Save hard copy of the figure
-    if save_fig:
-        writefile = '/Volumes/3TB/rgz/plots/expert_%s.pdf' % zid
-        #writefile = '%s/plots/expert/expert_all/expert_%s.pdf' % (rgz_dir,zid)
-        #writefile = '%s/goldstandard/volunteer_gs/volunteer_%s.pdf' % (rgz_dir,zid)
-        #fig.savefig('%s' % (writefile))
+    if save_fig is not None:
+        if save_fig == True:
+            save_fig = zid
+        writefile = '/Volumes/REISEPASS/rgz/plots/%s.pdf' % save_fig
+        fig.savefig('%s' % (writefile))
         plt.close()
     else:
         plt.show()
@@ -660,99 +693,9 @@ def plot_consensus(consensus,figno=1, save_fig=None):
 
     return None
 
-def make_75():
-
-    # Make the list of galaxies with 75% agreement completed so far
-
-    idx_start = 43600
-    
-    N = 0 + idx_start
-
-    '''
-    # Run once to make sure I have the same list to work off after crashes
-
-    zooniverse_ids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete'})]
-    with open('%s/rgz_75_completed_zid.csv' % rgz_dir,'w') as f:
-        for zid in zooniverse_ids:
-            print >> f,zid
-
-    Removed tutorial (ARG0003r15) manually. x_exists,y_exists off by one for some reason.
-    '''
-
-    with open('%s/csv/rgz_75_completed_zid.csv' % rgz_dir,'r') as f:
-        zid_read = f.readlines()
-
-    zooniverse_ids = [z.strip() for z in zid_read]
-    
-    # Get dictionary for finding the path to FITS files and WCS headers
-    
-    with open('/Volumes/3TB/rgz/first_fits.txt') as f:
-        lines = f.readlines()
-    
-    pathdict = {}
-    for l in lines:
-        spl = l.split(' ')
-        pathdict[spl[1].strip()] = '/Volumes/3TB/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (int(spl[0]),spl[1].strip())
-
-    # Open CSV file to write results to
-
-    writefile = open('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/csv/rgz_75.csv','w')
-    print >> writefile,'first_id,zid,ra,dec,n_lobes,n_users,n_total,ratio'
-
-    # Loop over all completed galaxies
-
-    print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
-    for zid in zooniverse_ids[idx_start:]:
-
-        N += 1
-
-        # Find plurality response
-
-        consensus = checksum(zid)
-
-        if consensus is not None:
-
-            # Convert the pixel coordinates into RA,dec using the WCS object from the header
-
-            hdulist = fits.open(pathdict[consensus['source']])
-            w = wcs.WCS(hdulist[0].header)
-
-            first_ir_scale_x = FIRST_FITS_WIDTH / IMG_WIDTH_NEW
-            first_ir_scale_y = FIRST_FITS_HEIGHT / IMG_HEIGHT_NEW
-
-            for ans in consensus['answer'].itervalues():
-
-                if ans.has_key('ir_peak') or ans.has_key('ir'):
-                    try:
-                        xpeak,ypeak = ans['ir_peak']
-                    except KeyError:
-                        xpeak,ypeak = ans['ir']
-                        
-                    pixcrd = np.array([[xpeak * first_ir_scale_x,(IMG_HEIGHT_NEW-ypeak) * first_ir_scale_y]],np.float_)
-                    world = w.wcs_pix2world(pixcrd,0)
-
-                    n_lobes = len(ans['xmax'])
-
-                    n_users = consensus['n_users']
-                    n_total = consensus['n_total']
-                    ratio = float(n_users)/n_total
-
-                    # Write to file
-
-                    if ratio >= 0.75:
-                        print >> writefile, '%s,%s,%.4f,%.4f,%i,%i,%i,%.2f' % (consensus['source'], zid, world[0][0], world[0][1], n_lobes, n_users, n_total, ratio)
-
-            # Check progress by printing to screen every 100 classifications
-        if not N % 100:
-            print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
-
-    # Close file when finished
-
-    writefile.close()
-
-    return None
-
 def check_class(zid):
+
+    # Print list of users who have classified a particular subject
 
     sid = subjects.find_one({'zooniverse_id':zid})['_id']
     c_all = classifications.find({'subject_ids':sid,'user_name':{'$exists':True,'$nin':expert_names}}).sort([("updated_at", -1)])
@@ -767,6 +710,8 @@ def check_class(zid):
     return None
 
 def rc(zid):
+
+    # Visually compare the expert and volunteer consensus for a subject
     
     plt.ion()
 
@@ -781,54 +726,97 @@ def rc(zid):
 
     return None
 
-def run_sample(run_all=False,do_plot=False):
+def run_sample(update=True,subset=None,do_plot=False):
 
-    # Run all galaxies in the expert sample
+    # Run the consensus algorithm for all completed RGZ subjects
+    # Only works on FIRST right now; adapt to run both.
+
+    filestem = "consensus_rgz_first"
     
-    if run_all:
-        zooniverse_ids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','tutorial':{'$exists':False}})]
-    else:
-        # Expert classifications of gold sample
-        #with open('%s/goldstandard/gs_zids.txt' % rgz_dir,'rb') as f:
-        with open('%s/expert/expert_all_zooniverse_ids.txt' % rgz_dir,'rb') as f:
+    if subset is not None:
+
+        '''
+        Only run consensus for classifications of 
+            expert100: the sample of 100 galaxies classified by science team
+            gs: the gold standard sample of 20 galaxies classified by all users
+        '''
+
+        assert subset in ('expert100','gs'), \
+            "subset is %s; must be either 'expert100' or 'gs100'" % subset
+
+        pathd = {'expert100':'expert/expert_all_zooniverse_ids.txt',
+                    'gs':'goldstandard/gs_zids.txt'}
+        with open('%s/%s' % (rgz_dir,pathd[subset]),'rb') as f:
             zooniverse_ids = [line.rstrip() for line in f]
-    
-    N = 0
-    restart_idx = 0
-    N += restart_idx
-    zooniverse_ids = zooniverse_ids[restart_idx:]
-    print 'Loaded data; running on %i completed RGZ subjects' % len(zooniverse_ids)
+
+        suffix = '_%s' % subset
+
+    else:
+        all_completed_zids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','tutorial':{'$exists':False},'metadata.survey':'first'})]
+
+        if update:
+            '''
+            Check to see which subjects have already been completed --
+                only run on subjects without an existing consensus.
+            '''
+
+            master_json = '%s/json/%s.json' % (rgz_dir,filestem)
+
+            with open(master_json,'r') as fm:
+                jmaster = json.load(fm)
+
+            already_finished_zids = []
+            for gal in jmaster:
+                already_finished_zids.append(gal['zid'])
+
+            zooniverse_ids = list(set(all_completed_zids) - set(already_finished_zids))
+
+            print "\n%i RGZ subjects already in master catalog" % len(already_finished_zids)
+            print "%i RGZ subjects completed since last consensus catalog generation on %s" % \
+                (len(zooniverse_ids),time.ctime(os.path.getmtime(master_json)))
+
+            suffix = '_update'
+
+        else:
+
+            # Rerun consensus for every completed subject in RGZ.
+            zooniverse_ids = all_completed_zids
+
+    print '\nLoaded data; running consensus algorithm on %i completed RGZ subjects' % len(zooniverse_ids)
 
     ad = alphadict()
 
-    for zid in zooniverse_ids:
+    # Empty files and objects for CSV, JSON output
+    fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'w')
+    json_output = []
+
+    # CSV header
+    if not update:
+        fc.write('zooniverse_id,first_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
+
+    for idx,zid in enumerate(zooniverse_ids):
     
-        # Check progress and save every 1000 classifications
-        if not N % 1000:
-            print N, datetime.datetime.now().strftime('%H:%M:%S.%f')
-            fj = open('%s/json/consensus_%i.json' % (rgz_dir,N),'w')
-            fc = open('%s/csv/consensus_%i.csv' % (rgz_dir,N),'w')
+        # Check progress to screen
+        if not idx % 100:
+            print idx, datetime.datetime.now().strftime('%H:%M:%S.%f')
 
-            # CSV header
-            fc.write('zooniverse_id,FIRST_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
-
-        consensus = checksum(zid,write_peak_data=do_plot)
+        cons = checksum(zid,write_peak_data=do_plot)
         if do_plot:
-            plot_consensus(consensus,save_fig=True)
+            plot_consensus(cons,save_fig=True)
 
         # Save results to files
 
-        if consensus is not None:
+        if cons is not None:
+
+            cons['consensus_level'] = (cons['n_users']/cons['n_total'])
 
             # JSON
 
-            json.dump(consensus,fj)
-            fj.write('\n')
+            json_output.append(cons)
 
             # CSV
 
-            ratio = (consensus['n_users']/consensus['n_total'])
-            for ans in consensus['answer'].itervalues():
+            for ans in cons['answer'].itervalues():
                 try:
                     ir_peak = ans['ir_peak']
                 except KeyError:
@@ -837,21 +825,57 @@ def run_sample(run_all=False,do_plot=False):
                 try:
                     fc.write('%s,%s,%4i,%4i,%.3f,%2i,%s,"%s","%s"\n' % 
                         (
-                            consensus['zid'],consensus['source'],consensus['n_users'],consensus['n_total'],ratio,
+                            cons['zid'],cons['source'],
+                            cons['n_users'],cons['n_total'],cons['consensus_level'],
                             len(ans['xmax']),ad[ans['ind']],bbox_unravel(ans['bbox']),ir_peak
                             )
                         )
                 except KeyError:
                     print zid
-                    print consensus
+                    print cons
 
+    fc.close()
 
-        if not (N+1) % 1000:
-            fc.close()
-            fj.close()
+    # Merge the update with master
 
-        N += 1
+    # JSON
+    if update:
+        jmaster.extend(json_output)
+        with open('%s/json/%s.json' % (rgz_dir,filestem),'w') as fj:
+            json.dump(jmaster,fj)
+    else:
+        with open('%s/json/%s%s.json' % (rgz_dir,filestem,suffix),'w') as fj:
+            json.dump(json_output,fj)
 
+    # CSV
+
+    if update:
+        outfilename,infile_master,infile_update = ['%s/csv/%s%s.csv' % (rgz_dir,filestem,x) for x in ('_all','','_update')]
+
+        with open(outfilename, 'wb') as outfile:
+            for filename in (infile_master,infile_update):
+                if filename == outfilename:
+                    # don't want to copy the output into itself
+                    continue
+                with open(filename, 'rb') as readfile:
+                    shutil.copyfileobj(readfile, outfile)
+
+        shutil.move(outfilename,infile_master)
+        os.remove(infile_update)
+
+    # Make 75% version for full catalog
+
+    if subset is None:
+        # JSON
+        jmaster75 = filter(lambda a: (a['n_users']/a['n_total']) >= 0.75, jmaster)
+        with open('%s/json/%s_75.json' % (rgz_dir,filestem),'w') as fj:
+            json.dump(jmaster75,fj)
+        # CSV
+        import pandas as pd
+        cmaster = pd.read_csv('%s/csv/%s.csv' % (rgz_dir,filestem))
+        cmaster75 = cmaster[cmaster['consensus_level'] >= 0.75]
+        cmaster75.to_csv('%s/csv/%s_75.csv' % (rgz_dir,filestem),index=False)
+        
     print '\nCompleted consensus.'
 
     return None
@@ -876,5 +900,9 @@ def alphadict():
     return ad
 
 if __name__ == "__main__":
-    print 'No plotting',datetime.datetime.now().strftime('%H:%M:%S.%f')
-    run_sample(run_all=True,do_plot=False)
+    if pathdict != None:
+        print 'No plotting',datetime.datetime.now().strftime('%H:%M:%S.%f')
+        run_sample(update=True,do_plot=False)
+        print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
+    else:
+        print "\nAborting consensus.py - could not locate raw RGZ image data.\n"

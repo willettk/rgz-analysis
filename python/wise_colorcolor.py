@@ -80,7 +80,7 @@ def compare_density():
     xall = np.append(xab,np.append(xat,xal))
     yall = np.append(yab,np.append(yat,yal))
     
-    with open('%s/agn_wedge.txt' % rgz_dir,'w') as f:
+    with open('%s/csv/agn_wedge.csv' % rgz_dir,'w') as f:
         for x,y in zip(xall,yall):
             print >> f,x,y
     '''
