@@ -1,3 +1,9 @@
+'''
+RGZcatalog is a pipeline that takes all of the completed RGZ subjects and creates a Mongo database containing
+consensus matching information, radio morphology, IR counterpart location, and data from corresponding
+AllWISE and SDSS catalogs.
+'''
+
 import logging
 from pymongo import MongoClient
 import numpy as np
@@ -21,7 +27,6 @@ rgz_path = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 data_path = '/Volumes/REISEPASS/'
 
 def RGZcatalog():
-
 
     #begin logging even if not run from command line
     logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s')
@@ -50,7 +55,7 @@ def RGZcatalog():
     pathdict = {}
     for l in lines:
         spl = l.split(' ')
-        pathdict[spl[1].strip()] = '%s/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (data_path,int(spl[0]), spl[1].strip())
+        pathdict[spl[1].strip()] = '%s/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (data_path, int(spl[0]), spl[1].strip())
 
     #count the number of entries from this run and how many entries are in the catalog total
     count = 0
@@ -73,18 +78,15 @@ def RGZcatalog():
 
         for consensusObject in consensus.find({'zooniverse_id':subject['zooniverse_id']}):
             
-            logging.info('Processing consensus object %s within subject field %s', consensusObject['label'].upper(), subject['zooniverse_id'])
-
-            #skip if this object in this field is already in catalog
-            skip = False
+            #do not process if this object in this field is already in the catalog
+            process = True
             for i in catalog.find({'Zooniverse_id':subject['zooniverse_id']}):
                 if i['consensus']['label'] == consensusObject['label']:
-                    skip = True
-                
-            if skip:
-                logging.info('Entry already in catalog; skipping')
+                    process = False
 
-            else:
+            logging.info('Processing consensus object %s within subject field %s', consensusObject['label'].upper(), subject['zooniverse_id'])
+
+            if process:
 
                 count += 1
                 IDnumber += 1
