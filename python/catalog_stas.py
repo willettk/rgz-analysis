@@ -1,7 +1,7 @@
 from pymongo import MongoClient
 import pandas as pd
 
-path = '/Users/willettk/Astronomy/Research/GalaxyZoo'
+path = '.'
 
 consensus_level = 0.50
 
