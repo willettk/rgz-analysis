@@ -17,8 +17,8 @@ import catalogFunctions as fn #contains custom functions
 import contourNode as c #contains Node class
 from updateConsensus import updateConsensus #replaces the current consensus collection with a specified csv
 
-rgz_path = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
-data_path = '/Volumes/REISEPASS/'
+rgz_path = 'rgz-analysis'
+data_path = '/data/extragal/willett'
 
 def RGZcatalog():
 
@@ -64,7 +64,7 @@ def RGZcatalog():
     starttime = time.time()
 
     #iterate through all subjects
-    for subject in subjects.find().batch_size(30):
+    for subject in subjects.find().batch_size(10):
     #for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
     #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct galaxies
     #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple components
