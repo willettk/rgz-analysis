@@ -78,11 +78,10 @@ expert_names = [u'42jkb', u'ivywong', u'stasmanian', u'klmasters', u'Kevin', u'a
 # Paths
 
 paths = ('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis','/data/tabernacle/larry/RGZdata/rgz-analysis')
-rgz_dir = '../'
 for path in paths:
     if os.path.exists(path):
         rgz_dir = path
-if rgz_dir == '':
+if rgz_dir == None:
     print "Unable to find the hardcoded local path to store outputs."
 
 pathdict = make_pathdict()
@@ -130,7 +129,8 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
     listcount = []
 
     # Compute the most popular combination for each NUMBER of galaxies identified in image
-    for c in clist_all:
+    
+    for c in _c:
 
         clist_all.append(c)
         clen_start += 1
@@ -558,7 +558,7 @@ def one_answer(zid,user_name):
         
     return cons
 
-def plot_consensus(consensus,figno=1,save_fig=None):
+def plot_consensus(consensus,figno=1,save_fig=False):
 
     # Plot 4-panel image of IR, radio, KDE estimate, and consensus
     
@@ -680,16 +680,13 @@ def plot_consensus(consensus,figno=1,save_fig=None):
     plt.subplots_adjust(wspace=0.02)
     
     # Save hard copy of the figure
-    if save_fig is not None:
-        if save_fig == True:
-            save_fig = zid
-        writefile = '/Volumes/REISEPASS/rgz/plots/%s.pdf' % save_fig
-        fig.savefig('%s' % (writefile))
-        plt.close()
+    if save_fig == True:
+        fig.savefig('/Volumes/REISEPASS/rgz/plots/%s.pdf' % zid)
     else:
         plt.show()
 
     # Close figure after it's done; otherwise mpl complains about having thousands of stuff open
+    plt.close()
 
     return None
 
@@ -738,14 +735,14 @@ def run_sample(update=True,subset=None,do_plot=False):
         '''
         Only run consensus for classifications of 
             expert100: the sample of 100 galaxies classified by science team
-            gs: the gold standard sample of 20 galaxies classified by all users
+            goldstandard: the gold standard sample of 20 galaxies classified by all users
         '''
 
-        assert subset in ('expert100','gs'), \
-            "subset is %s; must be either 'expert100' or 'gs100'" % subset
+        assert subset in ('expert100','goldstandard'), \
+            "subset is %s; must be either 'expert100' or 'goldstandard'" % subset
 
         pathd = {'expert100':'expert/expert_all_zooniverse_ids.txt',
-                    'gs':'goldstandard/gs_zids.txt'}
+                    'goldstandard':'goldstandard/gs_zids.txt'}
         with open('%s/%s' % (rgz_dir,pathd[subset]),'rb') as f:
             zooniverse_ids = [line.rstrip() for line in f]
 
@@ -841,7 +838,7 @@ def run_sample(update=True,subset=None,do_plot=False):
     # JSON
     if update:
         jmaster.extend(json_output)
-        with open('%s/json/%s.json' % (rgz_dir,filestem),'w') as fj:
+        with open('%s/json/%s%s.json' % (rgz_dir,filestem,suffix),'w') as fj:
             json.dump(jmaster,fj)
     else:
         with open('%s/json/%s%s.json' % (rgz_dir,filestem,suffix),'w') as fj:
@@ -882,6 +879,8 @@ def run_sample(update=True,subset=None,do_plot=False):
 
 def bbox_unravel(bbox):
 
+    # Turn an array of tuple strings into floats
+
     bboxes = []
     for lobe in bbox:
         t = [float(x) for x in lobe]
@@ -892,6 +891,8 @@ def bbox_unravel(bbox):
 
 def alphadict():
 
+    # Create a dictionary enumerating each letter of the alphabet.
+
     alphabet_str = 'abcdefghijklmnopqrstuvwxyz'
     ad = {}
     for idx,letter in enumerate(alphabet_str):
@@ -899,9 +900,35 @@ def alphadict():
 
     return ad
 
+def update_experts(classifications): 
+
+    # Add field to classifications made by members of the expert science team. Takes ~1 minute to run.
+
+    import dateutil.parser
+
+    # Load saved data from the test runs
+    json_data = open('{0}/expert/expert_params.json'.format(rgz_dir)).read() 
+    experts = json.loads(json_data)
+
+    for ex in experts:
+        expert_dates = (dateutil.parser.parse(ex['started_at']),dateutil.parser.parse(ex['ended_at']))
+        classifications.update({"updated_at": {"$gt": expert_dates[0],"$lt":expert_dates[1]},"user_name":ex['expert_user']},{'$set':{'expert':True}},multi=True)
+
+    return None
+
+def update_gs_subjects(subjects): 
+
+    # Add field to the Mongo database designating the gold standard subjects.
+
+    with open('{0:}/goldstandard/gs_zids.txt'.format(rgz_dir),'r') as f:
+        for gal in f:
+            subjects.update({'zooniverse_id':gal.strip()},{'$set':{'goldstandard':True}})
+
+    return None
+
 if __name__ == "__main__":
     if pathdict != None:
-        print 'No plotting',datetime.datetime.now().strftime('%H:%M:%S.%f')
+        print 'Starting at',datetime.datetime.now().strftime('%H:%M:%S.%f')
         run_sample(update=True,do_plot=False)
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
     else:

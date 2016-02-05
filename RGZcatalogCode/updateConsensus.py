@@ -2,6 +2,7 @@ import logging
 from pymongo import MongoClient
 import csv
 
+@profile
 def updateConsensus(csvPath):
 
     logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s')
