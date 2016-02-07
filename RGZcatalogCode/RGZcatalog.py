@@ -4,21 +4,16 @@ consensus matching information, radio morphology, IR counterpart location, and d
 AllWISE and SDSS catalogs.
 '''
 
-import logging
+import logging, urllib2, time, argparse, json, os
 from pymongo import MongoClient
 import numpy as np
-import urllib2
 from StringIO import StringIO
 from gzip import GzipFile
-import json
 from ast import literal_eval
-import os
 from astropy.io import fits
 from astropy import wcs, coordinates as coord, units as u
 import astroquery
 from astroquery.irsa import Irsa
-import time
-import argparse
 import catalogFunctions as fn #contains custom functions
 import contourNode as c #contains Node class
 from updateConsensus import updateConsensus #replaces the current consensus collection with a specified csv
@@ -93,7 +88,6 @@ def RGZcatalog():
 
                 #display which entry is being processed to see how far the program is
                 print IDnumber
-
                 entry = {'catalog_id':IDnumber, 'Zooniverse_id':str(subject['zooniverse_id'])}
                 
                 #find location of FITS file
@@ -216,56 +210,40 @@ def RGZcatalog():
                         sdss_match = None
 
                     #only get more data from SDSS if a postional match exists
+                    #get photo redshift and uncertainty from Photoz table
+                    #get spectral lines from GalSpecLine table
+                    #get spectral class and spec redshift and uncertainty from SpecPhoto table
                     if sdss_match:
 
-                        #get photo redshift and uncertainty from Photoz table
-                        query = 'select z, zErr from Photoz where objID=' + str(sdss_match['objID'])
+                        query = '''select p.z as photoZ, p.zErr as photoZErr, s.z as specZ, s.zErr as specZErr,
+                                     oiii_5007_flux, oiii_5007_flux_err, h_beta_flux, h_beta_flux_err,
+                                     nii_6584_flux, nii_6584_flux_err, h_alpha_flux, h_alpha_flux_err,
+                                     case when class like 'GALAXY' then 0
+                                          when class like 'QSO' then 1
+                                          when class like 'STAR' then 2 end as spectralClass
+                                   from Photoz as p
+                                     full outer join SpecObj as s on p.objID = s.bestObjID
+                                     full outer join GalSpecLine as g on s.specobjid = g.specobjid
+                                   where p.objID = ''' + str(sdss_match['objID'])
                         df = fn.SDSS_select(query)
                         if len(df):
-                            photoZ = df['z'][0]
-                            photoZErr = df['zErr'][0]
-                        else:
-                            photoZ = None
-                            photoZErr = None
-
-                        #get spectral lines from GalSpecLine tables
-                        query = '''select oiii_5007_flux, oiii_5007_flux_err, h_beta_flux, h_beta_flux_err,
-                                          nii_6584_flux, nii_6584_flux_err, h_alpha_flux, h_alpha_flux_err
-                                   from GalSpecLine AS g
-                                      join SpecObj AS s ON s.specobjid = g.specobjid
-                                   where s.bestObjID = ''' + str(sdss_match['objID'])
-                        df = fn.SDSS_select(query)
-                        if len(df):
-                            sdss_match.update({'oiii_5007_flux':df['oiii_5007_flux'][0], 'oiii_5007_flux_err':df['oiii_5007_flux_err'][0], \
-                                               'h_beta_flux':df['h_beta_flux'][0], 'h_beta_flux_err':df['h_beta_flux_err'][0], \
-                                               'nii_6584_flux':df['nii_6584_flux'][0], 'nii_6584_flux_err':df['nii_6584_flux_err'][0], \
-                                               'h_alpha_flux':df['h_alpha_flux'][0], 'h_alpha_flux_err':df['h_alpha_flux_err'][0]})
-
-                        #get spectral class and redshiftfrom SpecPhoto table
-                        query = '''select z, zErr, case when class like 'GALAXY' then 0
-                                                        when class like 'QSO' then 1
-                                                        when class like 'STAR' then 2 end as classNum
-                                   from SpecObj
-                                   where bestObjID = ''' + str(sdss_match['objID'])
-                        df = fn.SDSS_select(query)
-                        if len(df):
-                            sdss_match.update({'spectralClass':np.int16(df['classNum'][0])})
-                            specZ = df['z'][0]
-                            specZErr = df['zErr'][0]
-                        else:
-                            specZ = None
-
-                        #use specZ is present, otherwise use photoZ
-                        if specZ:
-                            sdss_match.update({'redshift':specZ, 'redshift_err':specZErr, 'redshift_type':np.int16(1)})
-                        else:
-                            sdss_match.update({'redshift':photoZ, 'redshift_err':photoZErr, 'redshift_type':np.int16(0)})
-                        if sdss_match['redshift'] == -9999:
-                            sdss_match.pop('redshift')
-                            sdss_match.pop('redshift_err')
-                            sdss_match.pop('redshift_type')
-
-                    #end of 'if SDSS match'
+                            if not np.isnan(df['specZ'][0]):
+                                redshift = df['specZ'][0]
+                                redshift_err = df['specZErr'][0]
+                                redshift_type = np.int16(1)
+                            else:
+                                redshift = df['photoZ'][0]
+                                redshift_err = df['photoZErr'][0]
+                                redshift_type = np.int16(0)
+                            if redshift != -9999:
+                                moreData = {'redshift':redshift, 'redshift_err':redshift_err, 'redshift_type':redshift_type}
+                            else:
+                                moreData = {}
+                            for key in ['oiii_5007_flux', 'oiii_5007_flux_err', 'h_beta_flux', 'h_beta_flux_err', \
+                                        'nii_6584_flux', 'nii_6584_flux_err', 'h_alpha_flux', 'h_alpha_flux_err', 'spectralClass']:
+                                if not np.isnan(df[key][0]):
+                                    moreData[key] = df[key][0]
+                            sdss_match.update(moreData)
 
                     if sdss_match:
                         logging.info('SDSS match found')
