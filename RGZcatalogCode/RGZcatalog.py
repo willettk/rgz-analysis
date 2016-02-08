@@ -1,27 +1,49 @@
 import logging
-from pymongo import MongoClient
-import numpy as np
 import urllib2
+import json
+import os
+import time
+import argparse
+import numpy as np
 from StringIO import StringIO
 from gzip import GzipFile
-import json
 from ast import literal_eval
-import os
+
+from pymongo import MongoClient
 from astropy.io import fits
 from astropy import wcs, coordinates as coord, units as u
 import astroquery
 from astroquery.irsa import Irsa
-import time
-import argparse
+
+# Custom modules for the RGZ catalog
+
 import catalogFunctions as fn #contains custom functions
 import contourNode as c #contains Node class
 from updateConsensus import updateConsensus #replaces the current consensus collection with a specified csv
 
-rgz_path = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
-data_path = '/Volumes/REISEPASS/'
 
+# Set up the local data paths. Currently works from UMN servers on tabernacle, plus
+# Kyle Willett's laptop.
+
+def determine_paths(paths):
+
+    found_path = False
+    for path in paths:
+        if os.path.exists(path):
+            found_path = True
+            return path
+
+    if found_path == False:
+        print "Unable to find the hardcoded local path:"
+        print paths
+        return None
+
+rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis',
+                           '/data/tabernacle/larry/RGZdata/rgz-analysis'))
+data_path = determine_paths(('/Volumes/REISEPASS/','/data/extragal/willett'))
+
+@profile
 def RGZcatalog():
-
 
     #begin logging even if not run from command line
     logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s')
@@ -31,6 +53,8 @@ def RGZcatalog():
     parser = argparse.ArgumentParser()
     parser.add_argument('--consensus', help='replace the current consensus collection with a specified csv')
     args = parser.parse_args()
+
+    # Drop entire consensus collection and replace it with entries from the designated CSV file
     if args.consensus:
         updateConsensus(args.consensus)
 
@@ -64,7 +88,7 @@ def RGZcatalog():
     starttime = time.time()
 
     #iterate through all subjects
-    for subject in subjects.find().batch_size(30):
+    for subject in subjects.find().batch_size(10):
     #for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
     #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct galaxies
     #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple components
@@ -239,7 +263,7 @@ def RGZcatalog():
                                                'nii_6584_flux':df['nii_6584_flux'][0], 'nii_6584_flux_err':df['nii_6584_flux_err'][0], \
                                                'h_alpha_flux':df['h_alpha_flux'][0], 'h_alpha_flux_err':df['h_alpha_flux_err'][0]})
 
-                        #get spectral class and redshiftfrom SpecPhoto table
+                        #get spectral class and redshift from SpecPhoto table
                         query = '''select z, zErr, case when class like 'GALAXY' then 0
                                                         when class like 'QSO' then 1
                                                         when class like 'STAR' then 2 end as classNum
