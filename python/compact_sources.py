@@ -8,7 +8,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from astroML.plotting import hist as histML
     
-subjects,classifications,users = rgz.load_rgz_data()
+subjects,classifications = rgz.load_rgz_data()
 
 # Find the distribution of areas and/or max sizes 
 

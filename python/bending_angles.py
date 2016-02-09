@@ -67,7 +67,7 @@ xmax = IMG_HEIGHT_NEW
 ymin = 1.
 ymax = IMG_WIDTH_NEW
 
-subjects,classifications,users = rgz.load_rgz_data()
+subjects,classifications = rgz.load_rgz_data()
 
 def get_doubles(consensus_level=0.50):
 

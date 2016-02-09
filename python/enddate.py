@@ -158,7 +158,7 @@ def plot_time_left(all_dates,all_class,remaining_classifications,finished_classi
 if __name__ == '__main__':
 
     # Load the data
-    subjects,classifications,users = rgz.load_rgz_data()
+    subjects,classifications = rgz.load_rgz_data()
 
     # Find out how many classifications per day the project averages
     rate = find_rate(classifications)
