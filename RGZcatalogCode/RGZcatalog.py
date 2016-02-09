@@ -21,6 +21,7 @@ import catalogFunctions as fn #contains custom functions
 import contourNode as c #contains Node class
 from updateConsensus import updateConsensus #replaces the current consensus collection with a specified csv
 
+
 # Set up the local data paths. Currently works from UMN servers on tabernacle, plus
 # Kyle Willett's laptop.
 
