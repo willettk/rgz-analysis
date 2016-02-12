@@ -20,8 +20,24 @@ import catalogFunctions as fn #contains custom functions
 import contourNode as c #contains Node class
 from updateConsensus import updateConsensus #replaces the current consensus collection with a specified csv
 
-rgz_path = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
-data_path = '/Volumes/REISEPASS/'
+# Set up the local data paths. Currently works from UMN servers on tabernacle, plus
+# Kyle Willett's laptop.
+
+def determine_paths(paths):
+
+    found_path = False
+    for path in paths:
+        if os.path.exists(path):
+            found_path = True
+            return path
+
+    if found_path == False:
+        print "Unable to find the hardcoded local path:"
+        print paths
+        return None
+
+rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis','/data/tabernacle/larry/RGZdata/rgz-analysis'))
+data_path = determine_paths(('/Volumes/REISEPASS/','/data/extragal/willett'))
 
 @profile
 def RGZcatalog():
