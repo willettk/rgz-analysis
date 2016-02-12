@@ -1,46 +1,27 @@
-import logging
-import urllib2
-import json
-import os
-import time
-import argparse
+'''
+RGZcatalog is a pipeline that takes all of the completed RGZ subjects and creates a Mongo database containing
+consensus matching information, radio morphology, IR counterpart location, and data from corresponding
+AllWISE and SDSS catalogs.
+'''
+
+import logging, urllib2, time, argparse, json, os
+from pymongo import MongoClient
 import numpy as np
 from StringIO import StringIO
 from gzip import GzipFile
 from ast import literal_eval
-
-from pymongo import MongoClient
 from astropy.io import fits
 from astropy import wcs, coordinates as coord, units as u
 import astroquery
 from astroquery.irsa import Irsa
 
-# Custom modules for the RGZ catalog
-
+#custom modules for the RGZ catalog
 import catalogFunctions as fn #contains custom functions
 import contourNode as c #contains Node class
 from updateConsensus import updateConsensus #replaces the current consensus collection with a specified csv
 
-
-# Set up the local data paths. Currently works from UMN servers on tabernacle, plus
-# Kyle Willett's laptop.
-
-def determine_paths(paths):
-
-    found_path = False
-    for path in paths:
-        if os.path.exists(path):
-            found_path = True
-            return path
-
-    if found_path == False:
-        print "Unable to find the hardcoded local path:"
-        print paths
-        return None
-
-rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis',
-                           '/data/tabernacle/larry/RGZdata/rgz-analysis'))
-data_path = determine_paths(('/Volumes/REISEPASS/','/data/extragal/willett'))
+rgz_path = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
+data_path = '/Volumes/REISEPASS/'
 
 @profile
 def RGZcatalog():
@@ -49,12 +30,10 @@ def RGZcatalog():
     logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s')
     logging.captureWarnings(True)
 
-    #check if consensus collection needs to be updated
+    #check if consensus collection needs to be updated; if so, drop entire consensus collection and replace it with entries from the designated CSV file
     parser = argparse.ArgumentParser()
     parser.add_argument('--consensus', help='replace the current consensus collection with a specified csv')
     args = parser.parse_args()
-
-    # Drop entire consensus collection and replace it with entries from the designated CSV file
     if args.consensus:
         updateConsensus(args.consensus)
 
@@ -74,7 +53,7 @@ def RGZcatalog():
     pathdict = {}
     for l in lines:
         spl = l.split(' ')
-        pathdict[spl[1].strip()] = '%s/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (data_path,int(spl[0]), spl[1].strip())
+        pathdict[spl[1].strip()] = '%s/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (data_path, int(spl[0]), spl[1].strip())
 
     #count the number of entries from this run and how many entries are in the catalog total
     count = 0
@@ -97,25 +76,21 @@ def RGZcatalog():
 
         for consensusObject in consensus.find({'zooniverse_id':subject['zooniverse_id']}):
             
-            logging.info('Processing consensus object %s within subject field %s', consensusObject['label'].upper(), subject['zooniverse_id'])
-
-            #skip if this object in this field is already in catalog
-            skip = False
+            #do not process if this object in this field is already in the catalog
+            process = True
             for i in catalog.find({'Zooniverse_id':subject['zooniverse_id']}):
                 if i['consensus']['label'] == consensusObject['label']:
-                    skip = True
-                
-            if skip:
-                logging.info('Entry already in catalog; skipping')
+                    process = False
 
-            else:
+            logging.info('Processing consensus object %s within subject field %s', consensusObject['label'].upper(), subject['zooniverse_id'])
+
+            if process:
 
                 count += 1
                 IDnumber += 1
 
                 #display which entry is being processed to see how far the program is
                 print IDnumber
-
                 entry = {'catalog_id':IDnumber, 'Zooniverse_id':str(subject['zooniverse_id'])}
                 
                 #find location of FITS file
@@ -238,56 +213,40 @@ def RGZcatalog():
                         sdss_match = None
 
                     #only get more data from SDSS if a postional match exists
+                    #get photo redshift and uncertainty from Photoz table
+                    #get spectral lines from GalSpecLine table
+                    #get spectral class and spec redshift and uncertainty from SpecPhoto table
                     if sdss_match:
 
-                        #get photo redshift and uncertainty from Photoz table
-                        query = 'select z, zErr from Photoz where objID=' + str(sdss_match['objID'])
+                        query = '''select p.z as photoZ, p.zErr as photoZErr, s.z as specZ, s.zErr as specZErr,
+                                     oiii_5007_flux, oiii_5007_flux_err, h_beta_flux, h_beta_flux_err,
+                                     nii_6584_flux, nii_6584_flux_err, h_alpha_flux, h_alpha_flux_err,
+                                     case when class like 'GALAXY' then 0
+                                          when class like 'QSO' then 1
+                                          when class like 'STAR' then 2 end as spectralClass
+                                   from Photoz as p
+                                     full outer join SpecObj as s on p.objID = s.bestObjID
+                                     full outer join GalSpecLine as g on s.specobjid = g.specobjid
+                                   where p.objID = ''' + str(sdss_match['objID'])
                         df = fn.SDSS_select(query)
                         if len(df):
-                            photoZ = df['z'][0]
-                            photoZErr = df['zErr'][0]
-                        else:
-                            photoZ = None
-                            photoZErr = None
-
-                        #get spectral lines from GalSpecLine tables
-                        query = '''select oiii_5007_flux, oiii_5007_flux_err, h_beta_flux, h_beta_flux_err,
-                                          nii_6584_flux, nii_6584_flux_err, h_alpha_flux, h_alpha_flux_err
-                                   from GalSpecLine AS g
-                                      join SpecObj AS s ON s.specobjid = g.specobjid
-                                   where s.bestObjID = ''' + str(sdss_match['objID'])
-                        df = fn.SDSS_select(query)
-                        if len(df):
-                            sdss_match.update({'oiii_5007_flux':df['oiii_5007_flux'][0], 'oiii_5007_flux_err':df['oiii_5007_flux_err'][0], \
-                                               'h_beta_flux':df['h_beta_flux'][0], 'h_beta_flux_err':df['h_beta_flux_err'][0], \
-                                               'nii_6584_flux':df['nii_6584_flux'][0], 'nii_6584_flux_err':df['nii_6584_flux_err'][0], \
-                                               'h_alpha_flux':df['h_alpha_flux'][0], 'h_alpha_flux_err':df['h_alpha_flux_err'][0]})
-
-                        #get spectral class and redshift from SpecPhoto table
-                        query = '''select z, zErr, case when class like 'GALAXY' then 0
-                                                        when class like 'QSO' then 1
-                                                        when class like 'STAR' then 2 end as classNum
-                                   from SpecObj
-                                   where bestObjID = ''' + str(sdss_match['objID'])
-                        df = fn.SDSS_select(query)
-                        if len(df):
-                            sdss_match.update({'spectralClass':np.int16(df['classNum'][0])})
-                            specZ = df['z'][0]
-                            specZErr = df['zErr'][0]
-                        else:
-                            specZ = None
-
-                        #use specZ is present, otherwise use photoZ
-                        if specZ:
-                            sdss_match.update({'redshift':specZ, 'redshift_err':specZErr, 'redshift_type':np.int16(1)})
-                        else:
-                            sdss_match.update({'redshift':photoZ, 'redshift_err':photoZErr, 'redshift_type':np.int16(0)})
-                        if sdss_match['redshift'] == -9999:
-                            sdss_match.pop('redshift')
-                            sdss_match.pop('redshift_err')
-                            sdss_match.pop('redshift_type')
-
-                    #end of 'if SDSS match'
+                            if not np.isnan(df['specZ'][0]):
+                                redshift = df['specZ'][0]
+                                redshift_err = df['specZErr'][0]
+                                redshift_type = np.int16(1)
+                            else:
+                                redshift = df['photoZ'][0]
+                                redshift_err = df['photoZErr'][0]
+                                redshift_type = np.int16(0)
+                            if redshift != -9999:
+                                moreData = {'redshift':redshift, 'redshift_err':redshift_err, 'redshift_type':redshift_type}
+                            else:
+                                moreData = {}
+                            for key in ['oiii_5007_flux', 'oiii_5007_flux_err', 'h_beta_flux', 'h_beta_flux_err', \
+                                        'nii_6584_flux', 'nii_6584_flux_err', 'h_alpha_flux', 'h_alpha_flux_err', 'spectralClass']:
+                                if not np.isnan(df[key][0]):
+                                    moreData[key] = df[key][0]
+                            sdss_match.update(moreData)
 
                     if sdss_match:
                         logging.info('SDSS match found')

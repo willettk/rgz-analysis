@@ -1,3 +1,7 @@
+'''
+Updates the consensus database in Mongo so that new entries may be added to the catalog.
+'''
+
 import logging
 from pymongo import MongoClient
 import csv
