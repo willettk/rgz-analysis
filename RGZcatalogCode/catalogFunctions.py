@@ -1,10 +1,20 @@
-'''This file contains miscellaneous functions for the catalog pipeline, namely findBox, bboxToDS9, approx, and SDSS_select.'''
+'''This file contains miscellaneous functions for the catalog pipeline, namely determine_paths, findBox, bboxToDS9, and approx.'''
 
-import logging
+import logging, os
 import numpy as np
-import pandas as pd
-from StringIO import StringIO
-import mechanize, httplib, time
+
+def determinePaths(paths):
+   '''Set up the local data paths. Currently works from UMN servers on tabernacle, plus Kyle Willett's laptop.'''
+   found_path = False
+   for path in paths:
+      if os.path.exists(path):
+         found_path = True
+         return path
+   if found_path == False:
+      output = 'Unable to find the hardcoded local path: %s' % paths
+      print output
+      logging.warning(output)
+      raise IOError(output)
 
 def findBox(loop):
    '''
@@ -45,28 +55,3 @@ def bboxToDS9(bbox, imgSize):
 def approx(a, b, uncertainty=1e-5):
    '''determines if two floats are approximately equal'''
    return np.abs(a-b) < uncertainty
-
-def SDSS_select(sql):
-   '''pass an SQL query to SDSS and return a pandas dataframe
-   in case of error, wait 10 seconds and try again; give up after 5 tries'''
-   logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-   br = mechanize.Browser()
-   br.set_handle_robots(False)
-   tryCount = 0
-   while(True):
-      tryCount += 1
-      try:
-         br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
-         br.select_form(name='sql')
-         br['cmd'] = sql
-         br['format'] = ['csv']
-         response = br.submit()
-         file_like = StringIO(response.get_data())
-         break
-      except (mechanize.URLError, mechanize.HTTPError, httplib.BadStatusLine) as e:
-         if tryCount>5:
-            logging.exception('Too many SDSS query errors')
-            raise
-         logging.exception(e)
-         time.sleep(10)
-   return pd.read_csv(file_like, skiprows=1)
