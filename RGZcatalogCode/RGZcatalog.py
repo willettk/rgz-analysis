@@ -201,10 +201,18 @@ if __name__ == '__main__':
     logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
     logging.info('Catalog run from command line')
-    try:
-        output = '%i entries added.' % RGZcatalog()
-        logging.info(output)
-        print output
-    except BaseException as e:
-        logging.exception(e)
-        raise
+    done = False
+    while not done:
+        try:
+            output = '%i entries added.' % RGZcatalog()
+            logging.info(output)
+            print output
+            done = True
+        except pymongo.errors.CursorNotFound as c:
+            time.sleep(10)
+            output = 'Cursor timed out; starting again."
+            logging.info(output)
+            print output
+        except BaseException as e:
+            logging.exception(e)
+            raise
