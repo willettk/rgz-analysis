@@ -220,7 +220,7 @@ def getRadio(data, fits_loc, consensusObject):
     totalFluxErrmJy2 = 0
     for component in components:
         totalFluxmJy += component['flux']
-        totalFluxErrmJy2 += pow(component['fluxErr'], 2)
+        totalFluxErrmJy2 += np.square(component['fluxErr'])
     totalFluxErrmJy = np.sqrt(totalFluxErrmJy2)
     
     #finds total area enclosed by contours in arcminutes

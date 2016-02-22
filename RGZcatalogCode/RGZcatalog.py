@@ -27,7 +27,7 @@ def RGZcatalog():
 
     #check if consensus collection needs to be updated; if so, drop entire consensus collection and replace it with entries from the designated CSV file
     parser = argparse.ArgumentParser()
-    parser.add_argument('--consensus', help='replace the current consensus collection with a specified csv')
+    parser.add_argument('-c', '--consensus', help='replace the current consensus collection with a specified csv')
     args = parser.parse_args()
     if args.consensus:
         updateConsensus(args.consensus)
@@ -62,8 +62,8 @@ def RGZcatalog():
     starttime = time.time()
 
     #iterate through all subjects
-    #for subject in subjects.find().limit(10).batch_size(10):
-    for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
+    for subject in subjects.find().batch_size(10):
+    #for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
     #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct galaxies
     #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple components
 
@@ -94,11 +94,11 @@ def RGZcatalog():
                     fits_loc = pathdict[fid]
                     entry.update({'FIRST_id':str(fid)})
                 else:
-                    fits_loc = '%s/rgz/raw_images/ATLAS/2x2/%s_radio.fits' % (data_path,fid)
+                    fits_loc = '%s/rgz/raw_images/ATLAS/2x2/%s_radio.fits' % (data_path, fid)
                     entry.update({'ATLAS_id':str(fid)})
                 
                 #find IR counterpart from consensus data, if present
-                w = wcs.WCS(fits.open(fits_loc)[0].header) #gets pixel-to-WCS conversion from header
+                w = wcs.WCS(fits.getheader(fits_loc, 0)) #gets pixel-to-WCS conversion from header
                 ir_coords = ast.literal_eval(consensusObject['ir_peak'])
                 if ir_coords == (-99, -99):
                     ir_pos = None
@@ -159,19 +159,19 @@ def RGZcatalog():
                         z = sdss_match['redshift']
                         lz = np.log10(z)
                         DAkpc = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)*1000 #angular size distance approximation in kpc
-                        DLkpc = DAkpc*pow(1+z, 2) #luminosity distance approximation in kpc
+                        DLkpc = DAkpc*np.square(1+z) #luminosity distance approximation in kpc
                         maxPhysicalExtentKpc = DAkpc*radio_data['radio']['maxAngularExtent']*np.pi/180/60 #arcminutes to radians
-                        totalCrossSectionKpc2 = pow(DAkpc,2)*radio_data['radio']['totalSolidAngle']*pow(np.pi/180/3600,2) #arcseconds^2 to radians^2
-                        totalLuminosityWHz = radio_data['radio']['totalFlux']*1e-29*4*np.pi*pow(DLkpc*3.09e19,2) #mJy to W/(m^2 Hz), kpc to m
-                        totalLuminosityErrWHz = radio_data['radio']['totalFluxErr']*1e-29*4*np.pi*pow(DLkpc*3.09e19,2)
-                        peakLuminosityErrWHz = radio_data['radio']['peakFluxErr']*1e-29*4*np.pi*pow(DLkpc*3.09e19,2)
+                        totalCrossSectionKpc2 = np.square(DAkpc)*radio_data['radio']['totalSolidAngle']*np.square(np.pi/180/3600) #arcseconds^2 to radians^2
+                        totalLuminosityWHz = radio_data['radio']['totalFlux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19) #mJy to W/(m^2 Hz), kpc to m
+                        totalLuminosityErrWHz = radio_data['radio']['totalFluxErr']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                        peakLuminosityErrWHz = radio_data['radio']['peakFluxErr']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
                         for component in radio_data['radio']['components']:
                             component['physicalExtent'] = DAkpc*component['angularExtent']*np.pi/180/3600
-                            component['crossSection'] = pow(DAkpc,2)*component['solidAngle']*pow(np.pi/180/3600,2)
-                            component['luminosity'] = component['flux']*1e-29*4*np.pi*pow(DLkpc*3.09e19,2)
-                            component['luminosityErr'] = component['fluxErr']*1e-29*4*np.pi*pow(DLkpc*3.09e19,2)
+                            component['crossSection'] = np.square(DAkpc)*component['solidAngle']*np.square(np.pi/180/3600)
+                            component['luminosity'] = component['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                            component['luminosityErr'] = component['fluxErr']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
                         for peak in radio_data['radio']['peaks']:
-                            peak['luminosity'] = peak['flux']*1e-29*4*np.pi*pow(DLkpc*3.09e19,2)
+                            peak['luminosity'] = peak['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
                         entry['radio'].update({'maxPhysicalExtent':maxPhysicalExtentKpc, 'totalCrossSection':totalCrossSectionKpc2, \
                                                'totalLuminosity':totalLuminosityWHz, 'totalLuminosityErr':totalLuminosityErrWHz, \
                                                'peakLuminosityErr':peakLuminosityErrWHz})

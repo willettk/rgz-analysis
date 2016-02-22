@@ -11,10 +11,10 @@ def determinePaths(paths):
          found_path = True
          return path
    if found_path == False:
-      output = 'Unable to find the hardcoded local path: %s' % paths
+      output = 'Unable to find the hardcoded local path: %s; exiting' % paths
       print output
       logging.warning(output)
-      raise IOError(output)
+      exit()
 
 def findBox(loop):
    '''
