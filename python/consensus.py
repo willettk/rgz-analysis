@@ -749,7 +749,7 @@ def run_sample(update=True,subset=None,do_plot=False):
         suffix = '_%s' % subset
 
     else:
-        all_completed_zids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','tutorial':{'$exists':False},'metadata.survey':'first'})]
+        all_completed_zids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','metadata.survey':'first'})]
 
         if update:
             '''
@@ -780,6 +780,16 @@ def run_sample(update=True,subset=None,do_plot=False):
             zooniverse_ids = all_completed_zids
 
     print '\nLoaded data; running consensus algorithm on %i completed RGZ subjects' % len(zooniverse_ids)
+
+   
+    
+    # Remove the tutorial subject(s)
+
+    tutorial_zid = "ARG0003r15"
+    try:
+        zooniverse_ids.remove(tutorial_zid)
+    except ValueError:
+        print '\nTutorial subject {0} not in list'.format(tutorial_zid)
 
     ad = alphadict()
 
