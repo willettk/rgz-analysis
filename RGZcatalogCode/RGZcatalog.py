@@ -210,7 +210,7 @@ if __name__ == '__main__':
             done = True
         except pymongo.errors.CursorNotFound as c:
             time.sleep(10)
-            output = 'Cursor timed out; starting again."
+            output = 'Cursor timed out; starting again.'
             logging.info(output)
             print output
         except BaseException as e:
