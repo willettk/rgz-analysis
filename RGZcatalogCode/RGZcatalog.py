@@ -5,7 +5,7 @@ AllWISE and SDSS catalogs.
 '''
 
 import logging, urllib2, time, argparse, json
-from pymongo import MongoClient
+import pymongo
 import numpy as np
 import StringIO, gzip, ast
 from astropy.io import fits
@@ -34,7 +34,7 @@ def RGZcatalog():
 
     #connect to database of subjects
     logging.info('Connecting to MongoDB')
-    db = MongoClient()['radio']
+    db = pymongo.MongoClient()['radio']
     subjects = db['radio_subjects']
     consensus = db['consensus']
     catalog = db['catalog'] #this is being populated by this program
