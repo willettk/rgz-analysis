@@ -1,0 +1,282 @@
+\documentclass[a4,useAMS,usenatbib]{mn2e}
+%%%%% AUTHORS - PLACE YOUR OWN MACROS HERE %%%%%
+\usepackage[letterpaper,total={17.8cm,24.0cm},centering]{geometry}
+%\usepackage[dvips]{graphicx}
+%\usepackage{times}
+
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage{deluxetable}
+\usepackage{verbatim}
+\usepackage{natbib}
+\usepackage{amsmath,amssymb}
+\usepackage{color}
+%\usepackage[draft]{hyperref}
+\bibliographystyle{mn2e}
+
+
+\input macros.tex
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\title[Radio Galaxy Zoo]{Radio Galaxy Zoo: Data Release 1 of 82,071 radio sources}
+\author[RGZ team]{Radio Galaxy Zoo science team et al.
+    %\newauthor J.~K.~Banfield$^{1,2}$, O.~I.~Wong$^{3}$, K.~W.~Willett${^4}$, R.~P.~Norris$^{1}$, L.~Rudnick$^{4}$,
+    %\newauthor S.~S.~Shabala$^{5}$, B.~D.~Simmons$^{6}$, C.~Snyder$^{7}$, A.~Garon$^{4}$, N.~Seymour${^8}$, E.~Middelberg$^{9}$,
+    %\newauthor H.~Andernach$^{10}$, C.~J.~Lintott$^{6}$, K.~Jacob$^{4}$, A.~D.~Kapi\'{n}ska$^{3,11}$, M.~Y.~Mao$^{12}$,
+    %\newauthor K.~L.~Masters$^{13,14}$, M.~J.~Jarvis$^{6,15}$, K.~Schawinski$^{16}$, E.~Paget$^{7}$, R.~Simpson$^{6}$,
+    %\newauthor H.-R.~Kl\"ockner$^{17}$, S.~Bamford$^{18}$, T.~Burchell$^{12}$, K.~E.~Chow$^{1}$, G.~Cotter$^{6}$, L. Fortson$^{4}$,
+    %\newauthor I.~Heywood$^{1,19}$,  T.~W.~Jones$^{4}$, S.~Kaviraj$^{20}$, \'A.~R.~L\'opez-S\'anchez$^{21,22}$, W.~P.~Maksym$^{23}$,
+    %\newauthor K.~Polsterer$^{24}$, K.~Borden$^{7}$, R.~P.~Hollow$^{1}$,   L.~Whyte$^{7}$ \newauthor\\
+    % affiliations
+    %$^{1}$CSIRO Astronomy and Space Science, Australia Telescope National Facility, PO Box 76, Epping, NSW 1710, Australia\\
+    %$^{2}$Research School of Astronomy and Astrophysics, Australian National University, Weston Creek, ACT 2611, Australia\\
+    %$^{3}$International Centre for Radio Astronomy Research-M468, The University of Western Australia, 35 Stirling Hwy, Crawley, WA 6009, Australia\\
+    %$^{4}$School of Physics and Astronomy, University of Minnesota, 116 Church St. SE, Minneapolis, MN 55455, USA\\
+    %$^{5}$School of Physical Sciences, University of Tasmania, Private Bag 37, Hobart, Tasmania 7001, Australia\\
+    %$^{6}$Oxford Astrophysics, Denys Wilkinson Building, Keble Road, Oxford OX1 3RH, UK\\
+    %$^{7}$Adler Planetarium, 1300 S Lake Shore Dr, Chicago, IL 60605, USA\\
+    %$^{8}$International Centre for Radio Astronomy Research, Curtin University, Perth, Australia\\
+    %$^{9}$Astronomisches Institut, Ruhr-Universit\"at, Universit\"atsstr. 150, 44801 Bochum, Germany\\
+    %$^{10}$Departamento de Astronom\'ia, DCNE, Universidad de Guanajuato, Apdo.\ Postal 144, CP 36000, Guanajuato, Gto., Mexico\\
+    %$^{11}$ARC Centre of Excellence for All-Sky Astrophysics (CAASTRO)\\
+    %$^{12}$National Radio Astronomy Observatory, PO Box O, Socorro, NM 87801, USA\\
+    %$^{13}$Institute of Cosmology \& Gravitation, University of Portsmouth, Dennis Sciama Building, PO1 3FX, UK\\
+    %$^{14}$South East Physics Network (SEPNet), {\tt{http://www.sepnet.ac.uk}}\\
+    %$^{15}$Department of Physics, University of the Western Cape, Private Bag X17, Bellville 7535, South Africa\\
+    %$^{16}$Institute for Astronomy, Department of Physics, ETH Z\"urich, Wolfgang-Pauli-Strasse 27, CH-8093 Z\"urich, Switzerland\\
+    %$^{17}$Max-Planck Institut f\"ur Radioastronomie, Auf dem H\"ugel 69, D-53121 Bonn, Germany\\
+    %$^{18}$School of Physics and Astronomy, University of Nottingham, Nottingham NG7 2RD, UK\\
+    %$^{19}$Department of Physics and Electronics, Rhodes University, PO Box 94, Grahamstown 6140, South Africa\\
+    %$^{20}$Centre for Astrophysics Research, University of Hertfordshire, College Lane, Hatfield, Herts, AL10 9AB, UK\\
+    %$^{21}$Australian Astronomical Observatory, PO Box 915, North Ryde, NSW 1670, Australia \\
+    %$^{22}$Department of Physics and Astronomy, Macquarie University, NSW 2109, Australia \\
+    %$^{23}$University of Alabama, Department of Physics and Astronomy, Tuscaloosa, AL 35487, USA\\
+    %$^{24}$Heidelberg Institute for Theoretical Studies gGmbH, Astroinformatics, Heidelberg, Germany\\
+}
+
+\begin{document}
+
+\date{Accepted year month day. Received year month day; in original form year month day}
+
+\pagerange{\pageref{firstpage}--\pageref{lastpage}} \pubyear{2016}
+
+\maketitle
+
+\label{firstpage}
+%-------------------------------------------------------------------------
+%                               ABSTRACT
+%-------------------------------------------------------------------------
+
+\begin{abstract}
+Data Release 1 for the Radio Galaxy Zoo (RGZ) project.
+\end{abstract}
+%-------------------------------------------------------------------------
+%                               KEYWORDS
+%-------------------------------------------------------------------------
+\begin{keywords}
+methods: data analysis --- radio continuum: galaxies --- infrared: galaxies. 
+\end{keywords}
+
+%-------------------------------------------------------------------------
+%                             INTRODUCTION
+%-------------------------------------------------------------------------
+\section{Introduction}\label{sec:intro}
+
+A complete introduction and description of the project is provided in \citet[][hereafter B15]{ban15}. 
+
+%-------------------------------------------------------------------------
+%                             SAMPLE 
+%-------------------------------------------------------------------------
+\section{Radio Galaxy Zoo}\label{sec:sample}
+
+%-------------------------------------------------------------------------
+%                             DATA REDUCTION 
+%-------------------------------------------------------------------------
+\section{Data reduction}\label{sec:data_reduction}
+
+Images in RGZ are presented for classification by independent users. The users are treated as having equivalent levels of skill, with consensus accomplished by a simple majority vote. 
+
+Current statistics of the project.
+
+%-------------------------------------------------------------------------
+%                             CATALOG 
+%-------------------------------------------------------------------------
+\section{Catalog}\label{sec:catalog}
+
+There are three basic types of data products for Radio Galaxy Zoo: raw classifications, consensus catalogs, and static versions. 
+ 
+Raw classifications are the individual clicks that each user performs; they contain the raw pixel information corresponding to the selection of radio components and the IR counterpart, if available. These are unlikely to be used by most science team members, since they don't have consensus or weighting, require linking to the subject, and are stored only in MongoDB format. Raw classifications are updated daily on the Zooniverse servers. 
+ 
+The consensus catalog is the aggregated classifications over all users, sorted for each subject. This is run throug a Python pipeline, combining the 20~total votes (or 5, in the case of single-component radio sources) and finding the most common answer. Only retired subjects with the full number of classifications are analyzed. We then add physical parameters to each match by measuring the properties in the radio image and positionally cross-matching to the AllWISE \citep{cut13} and SDSS~DR12 \citep{ala15} catalogs. The consensus is updated whenever the latest raw classifications are re-run against the consensus algorithm (every couple weeks, usually). The data is stored in MongoDB format. 
+ 
+Static versions of the catalogs can be generated from the MongoDB versions. These are ``flat'' versions that are more like the data products typically used in astronomy; a data table in CSV or FITS format where each row corresponds to a unique source and each column is a measured parameter. It's different from the consensus catalog in two ways: firstly, it's not updated as often and so represents a ``static'' version of the total classifications. Secondly, there are parameters that will have different numbers of elements for each source --- for example, the number of distinct radio sources or peaks in a given source. Since that can't be included in a flat table, these data are not included --- use the MongoDB version of the consensus if you want data on that. 
+ 
+Neither the consensus nor static catalogs have the ATLAS subjects incorporated yet; they only contain FIRST images.
+
+The fundamental entry in the DR1 catalog is a radio source, which contains one or more radio components and a possible IR counterpart (Tables~\ref{tbl:catalog_first} and \ref{tbl:catalog_atlas}). 
+
+Column~1 contains the unique ID for the RGZ source. Columns 2 and 3 contain the J2000.0 coordinates for the infrared counterpart of the radio source. Column 4 gives the kernel width (in arcsec) of the aggregate clicks used to pinpoint the IR source, providing a measure of positional uncertainty for the host identification. Columns 2-4 are only populated if at least 50\% of the users positively identified an infrared counterpart from the WISE data. Columns 5-6 give the total integrated flux and error (in mJy) for all radio components associated with this source. Columns 7-8 give the peak integrated flux density and error (in mJy/beam) for the brightest radio peak in the source. Columns 9-10 give the integrated luminosity and error for all radio components associated with the source. Column 11 gives the maximum angular extent (in arcsec) of the bounding boxes for all radio components, as measured corner-to-corner. Column 12 is the transverse physical size (in kpc) corresponding to the maximum angular extent. Column 13 is the total solid angle for the radio source, calculated by summing the individual solid angles subtended by the outermost contours for each radio component. Column 14 gives the cross-sectional area (in kpc$^2$) corresponding to the total solid angle. Column 15 gives the total number of radio peaks in the source, defined as the sum of the number of individual components plus any additional local maxima within a single component. 
+
+All components relating to the radio luminosity, transverse size, or cross-sectional area are only calculated if a redshift has been detected for the radio source's optical counterpart, since all such values require a distance.
+
+\newpage
+
+\tabletypesize{\scriptsize}
+\begin{deluxetable}{rccrcrc}
+\rotate
+\tablecolumns{7}
+\tablewidth{0pc}
+\tablecaption{RGZ consensus classifications of FIRST radio morphologies\label{tbl:consensus_first}}
+\tabletypesize{\scriptsize}
+\tablehead{
+\colhead{RGZ ID} & 
+\colhead{FIRST ID} &
+\colhead{Zooniverse ID} &
+\colhead{$N_{class}$} &
+\colhead{$C_l$} &
+\colhead{$N_{comp}$} & 
+\colhead{IR counterpart}
+}
+\startdata
+1 & FIRSTJ145834.5+140942 & ARG0002qe4 & 18 & 0.833 & 1 & Y \\
+2 & FIRSTJ130905.4+433849 & ARG0000yc4 &  5 & 1.000 & 1 & Y \\
+3 & FIRSTJ102805.7+542412 & ARG0000dcs &  4 & 0.800 & 1 & Y \\
+\enddata
+\tablecomments{The full, machine-readable version of this table is available at on the journal website and at http://data.galaxyzoo.org/radio. A portion is shown here for guidance on form and content.}
+\end{deluxetable}
+
+\tabletypesize{\scriptsize}
+\begin{deluxetable}{r|ccc|ccccccccccc}
+\rotate
+\tablecolumns{15}
+\tablewidth{0pc}
+\tablecaption{Matched catalog for RGZ-FIRST consensus sources\label{tbl:catalog_first}}
+\tabletypesize{\scriptsize}
+\tablehead{
+ & 
+ \multicolumn{3}{c}{\underline{IR counterpart}} &
+ \multicolumn{11}{c}{\underline{Radio}}
+\\
+\colhead{RGZ ID} & 
+\colhead{RA} &
+\colhead{dec} &
+\colhead{$e_{IR}$} &
+\colhead{$S_\nu$} &
+\colhead{$\sigma_{S_\nu}$} &
+\colhead{$S_{\nu,\textrm{peak}}$} &
+\colhead{$\sigma_{S_{\nu,\textrm{peak}}}$} &
+\colhead{$L_\nu$} &
+\colhead{$\sigma_{L_\nu}$} &
+\colhead{$\theta_\textrm{max}$} &
+\colhead{$D_\textrm{A,max}$} &
+\colhead{$\Omega_\textrm{tot}$} &
+\colhead{$A_\textrm{tot}$} &
+\colhead{$N_\textrm{peaks}$}
+\\
+\colhead{} &
+\colhead{J2000} &
+\colhead{J2000} &
+\colhead{[arcsec]} &
+\colhead{[mJy]} &
+\colhead{[mJy]} &
+\colhead{[mJy beam$^{-1}$]} &
+\colhead{[mJy beam$^{-1}$]} &
+\colhead{[W/Hz]} &
+\colhead{[W/Hz]} &
+\colhead{[arcmin]} &
+\colhead{[kpc]} &
+\colhead{[arcsec$^2$]} &
+\colhead{[kpc$^2$]} &
+\colhead{}
+}
+\startdata
+1 &  23.38219 & 251.6794 & err & 10.37 & 0.20 & 7.21 & 0.02 & 2.06e+24 & 3.92e+22 & 0.28 & 65.80 & 105.9 & 1666.7 & 1 \\
+\enddata
+\tablecomments{The full, machine-readable version of this table is available at on the journal website and at http://data.galaxyzoo.org/radio. A portion is shown here for guidance on form and content.}
+\end{deluxetable}
+
+\tabletypesize{\scriptsize}
+\begin{deluxetable}{rccrcrc}
+\rotate
+\tablecolumns{7}
+\tablewidth{0pc}
+\tablecaption{RGZ consensus classifications of ATLAS radio morphologies\label{tbl:consensus_atlas}}
+\tabletypesize{\scriptsize}
+\tablehead{
+\colhead{RGZ ID} & 
+\colhead{ATLAS ID} &
+\colhead{Zooniverse ID} &
+\colhead{$N_{class}$} &
+\colhead{$C_l$} &
+\colhead{$N_{comp}$} & 
+\colhead{IR counterpart}
+}
+\startdata
+1 & CI002 & ARG0002qe4 & 18 & 0.833 & 1 & Y \\
+2 & CI003 & ARG0000yc4 &  5 & 1.000 & 1 & Y \\
+3 & CI004 & ARG0000dcs &  4 & 0.800 & 1 & Y \\
+\enddata
+\tablecomments{The full, machine-readable version of this table is available at on the journal website and at http://data.galaxyzoo.org/radio. A portion is shown here for guidance on form and content.}
+\end{deluxetable}
+
+\tabletypesize{\scriptsize}
+\begin{deluxetable}{r|ccc|ccccccccccc}
+\rotate
+\tablecolumns{15}
+\tablewidth{0pc}
+\tablecaption{Matched catalog for RGZ-ATLAS consensus sources\label{tbl:catalog_atlas}}
+\tabletypesize{\scriptsize}
+\tablehead{
+ & 
+ \multicolumn{3}{c}{\underline{IR counterpart}} &
+ \multicolumn{11}{c}{\underline{Radio}}
+\\
+\colhead{RGZ ID} & 
+\colhead{RA} &
+\colhead{dec} &
+\colhead{$e_{IR}$} &
+\colhead{$S_\nu$} &
+\colhead{$\sigma_{S_\nu}$} &
+\colhead{$S_{\nu,\textrm{peak}}$} &
+\colhead{$\sigma_{S_{\nu,\textrm{peak}}}$} &
+\colhead{$L_\nu$} &
+\colhead{$\sigma_{L_\nu}$} &
+\colhead{$\theta_\textrm{max}$} &
+\colhead{$D_\textrm{A,max}$} &
+\colhead{$\Omega_\textrm{tot}$} &
+\colhead{$A_\textrm{tot}$} &
+\colhead{$N_\textrm{peaks}$}
+\\
+\colhead{} &
+\colhead{J2000} &
+\colhead{J2000} &
+\colhead{[arcsec]} &
+\colhead{[mJy]} &
+\colhead{[mJy]} &
+\colhead{[mJy beam$^{-1}$]} &
+\colhead{[mJy beam$^{-1}$]} &
+\colhead{[W/Hz]} &
+\colhead{[W/Hz]} &
+\colhead{[arcmin]} &
+\colhead{[kpc]} &
+\colhead{[arcsec$^2$]} &
+\colhead{[kpc$^2$]} &
+\colhead{}
+}
+\startdata
+1 &  23.38219 & 251.6794 & err & 10.37 & 0.20 & 7.21 & 0.02 & 2.06e+24 & 3.92e+22 & 0.28 & 65.80 & 105.9 & 1666.7 & 1 \\
+\enddata
+\tablecomments{The full, machine-readable version of this table is available at on the journal website and at http://data.galaxyzoo.org/radio. A portion is shown here for guidance on form and content.}
+\end{deluxetable}
+
+
+%-------------------------------------------------------------------------
+%                             SUMMARY 
+%-------------------------------------------------------------------------
+\section{Summary}\label{sec:summary}
+
+\bibliography{kwrefs}
+
+\label{lastpage}
+
+\end{document}
