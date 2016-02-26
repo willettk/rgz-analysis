@@ -855,6 +855,7 @@ def run_sample(update=True,subset=None,do_plot=False):
     else:
         with open('%s/json/%s%s.json' % (rgz_dir,filestem,suffix),'w') as fj:
             json.dump(json_output,fj)
+        jmaster = json_output
 
     # Make 75% version for full catalog
 
