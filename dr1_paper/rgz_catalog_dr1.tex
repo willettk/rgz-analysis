@@ -89,6 +89,12 @@ A complete introduction and description of the project is provided in \citet[][h
 %-------------------------------------------------------------------------
 \section{Radio Galaxy Zoo}\label{sec:sample}
 
+\subsection{FIRST + WISE}\label{ssec:sample_first}
+
+\subsection{ATLAS + SWIRE}\label{ssec:sample_atlas}
+
+ATLAS images are $2\times2$~arcmin. 
+
 %-------------------------------------------------------------------------
 %                             DATA REDUCTION 
 %-------------------------------------------------------------------------
@@ -118,6 +124,8 @@ The fundamental entry in the DR1 catalog is a radio source, which contains one o
 Column~1 contains the unique ID for the RGZ source. Columns 2 and 3 contain the J2000.0 coordinates for the infrared counterpart of the radio source. Column 4 gives the kernel width (in arcsec) of the aggregate clicks used to pinpoint the IR source, providing a measure of positional uncertainty for the host identification. Columns 2-4 are only populated if at least 50\% of the users positively identified an infrared counterpart from the WISE data. Columns 5-6 give the total integrated flux and error (in mJy) for all radio components associated with this source. Columns 7-8 give the peak integrated flux density and error (in mJy/beam) for the brightest radio peak in the source. Columns 9-10 give the integrated luminosity and error for all radio components associated with the source. Column 11 gives the maximum angular extent (in arcsec) of the bounding boxes for all radio components, as measured corner-to-corner. Column 12 is the transverse physical size (in kpc) corresponding to the maximum angular extent. Column 13 is the total solid angle for the radio source, calculated by summing the individual solid angles subtended by the outermost contours for each radio component. Column 14 gives the cross-sectional area (in kpc$^2$) corresponding to the total solid angle. Column 15 gives the total number of radio peaks in the source, defined as the sum of the number of individual components plus any additional local maxima within a single component. 
 
 All components relating to the radio luminosity, transverse size, or cross-sectional area are only calculated if a redshift has been detected for the radio source's optical counterpart, since all such values require a distance.
+
+LR: List and give examples of the failure points in the catalog (contrast with success points, too!) 
 
 \newpage
 
@@ -274,9 +282,13 @@ All components relating to the radio luminosity, transverse size, or cross-secti
 %-------------------------------------------------------------------------
 \section{Results}\label{sec:results}
 
+Emphasis of the analysis should be on the \emph{statistics} of the sample.
+
 \subsection{FIRST}\label{ssec:first}
 
 \subsection{ATLAS}\label{ssec:atlas}
+
+Suggestion from LR: Plot number of agreements between RGZ, \citet{nor06} for multi-component sources as a function of minimum flux level in components. There's an explicit floor in RGZ depending on the noise level we set, and likely an \emph{implicit} one based on visual classification in \citet{nor06}.
 
 
 %-------------------------------------------------------------------------
