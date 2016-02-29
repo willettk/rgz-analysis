@@ -1,5 +1,5 @@
-import logging
-from astropy import wcs, coordinates as coord, units as u
+import logging, time
+from astropy import coordinates as coord, units as u
 import mechanize, httplib, StringIO, ast
 from astroquery.exceptions import TimeoutError
 from astroquery.irsa import Irsa
@@ -62,7 +62,7 @@ def getWISE(entry):
         logging.info('AllWISE match found')
         for key in wise_match.keys():
             if wise_match[key] is np.ma.masked:
-                    wise_match.pop(key)
+                wise_match.pop(key)
             elif wise_match[key] and type(wise_match[key]) is not str:
                 wise_match[key] = wise_match[key].item()
             elif wise_match[key] == 0:
