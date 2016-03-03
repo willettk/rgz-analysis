@@ -1,7 +1,7 @@
 import logging, time
 from astropy import coordinates as coord, units as u
 import mechanize, httplib, StringIO, ast
-from astroquery.exceptions import TimeoutError
+from astroquery.exceptions import TimeoutError, TableParseError
 from astroquery.irsa import Irsa
 import numpy as np
 import pandas as pd
@@ -25,7 +25,7 @@ def getWISE(entry):
         try:
             table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
             break
-        except TimeoutError as e:
+        except (TimeoutError, TableParseError) as e:
             if tryCount>5:
                 logging.exception('Too many AllWISE query errors')
                 raise
