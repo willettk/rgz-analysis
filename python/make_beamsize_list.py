@@ -4,7 +4,7 @@
 
 import rgz
 
-subjects,classifications,users = rgz.load_rgz_data()
+subjects,classifications = rgz.load_rgz_data()
 
 first_ids = []
 for s in subjects.find():

@@ -606,9 +606,8 @@ def load_rgz_data():
     
     subjects = db['radio_subjects'] 		# subjects = images
     classifications = db['radio_classifications']	# classifications = classifications of each subject per user
-    users = db['radio_users']	# volunteers doing each classification (can be anonymous)
 
-    return subjects,classifications,users
+    return subjects,classifications
 
 def load_catalog():
 
@@ -623,7 +622,7 @@ def load_catalog():
     
     return catalog
 
-def overall_stats(subjects,classifications,users, verbose=True):
+def overall_stats(subjects,classifications,verbose=True):
 
     # Retrieve RGZ data, convert into data frames
     batch_classifications = classifications.find({"updated_at": {"$gt": main_release_date}})
@@ -635,7 +634,8 @@ def overall_stats(subjects,classifications,users, verbose=True):
     # Get some quick statistics on the dataset so far
     n_subjects = subjects.count()		# determine the number of images in the data set
     n_classifications = classifications.find({"updated_at": {"$gt": main_release_date}}).count() # total number of classifications
-    n_users = users.count()
+    users = classifications.distinct('user_name')
+    n_users = len(users)
     
     # Find the most recent classification in this data dump
     mrc = classifications.find().sort([("updated_at", -1)]).limit(1)
@@ -698,6 +698,9 @@ def run_sample(subjects,classifications,n_subjects=1000,completed=False):
 
 def onemillion(classifications,users):
 
+    # DEPRECATED
+    # Does not work with new sanitized RGZ dumps (starting Feb 2016)
+
     '''
     Discrepancy between the API count and the number of classifications in MongoDB. 
     For example, on 14 Jan 2015, the counts were:
@@ -753,7 +756,7 @@ def onemillion(classifications,users):
 
 if __name__ == '__main__':
 
-    subjects,classifications,users = load_rgz_data()
+    subjects,classifications = load_rgz_data()
     run_sample(subjects,classifications)
     plot_npeaks()
 

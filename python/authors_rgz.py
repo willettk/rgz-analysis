@@ -1,3 +1,6 @@
+# DEPRECATED
+# As of 7 Feb 2016, RGZ data dumps do not include the users collection.
+
 from pymongo import MongoClient
 import json
 

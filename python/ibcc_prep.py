@@ -113,7 +113,7 @@ def rgz_goldstandard_input(subjects,classifications):
 
 if __name__ == '__main__':
 
-    subjects,classifications,users = rgz.load_rgz_data()
+    subjects,classifications = rgz.load_rgz_data()
     #rgz_sample_input(subjects,classifications)
     rgz_goldstandard_input(subjects,classifications)
 

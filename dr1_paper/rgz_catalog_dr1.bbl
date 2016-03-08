@@ -1,0 +1,21 @@
+\begin{thebibliography}{3}
+\expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
+
+\bibitem[{{Alam} {et~al}\mbox{.}(2015){Alam}, {Albareti}, {Allende Prieto},
+  {Anders}, {Anderson}, {Anderton}, {Andrews}, {Armengaud}, {Aubourg},
+  {Bailey}, \& et~al.}]{ala15}
+{Alam} S. {et~al.}, 2015, \apjs, 219, 12
+
+\bibitem[{{Banfield} {et~al}\mbox{.}(2015){Banfield}, {Wong}, {Willett},
+  {Norris}, {Rudnick}, {Shabala}, {Simmons}, {Snyder}, {Garon}, {Seymour},
+  {Middelberg}, {Andernach}, {Lintott}, {Jacob}, {Kapi{\'n}ska}, {Mao},
+  {Masters}, {Jarvis}, {Schawinski}, {Paget}, {Simpson}, {Kl{\"o}ckner},
+  {Bamford}, {Burchell}, {Chow}, {Cotter}, {Fortson}, {Heywood}, {Jones},
+  {Kaviraj}, {L{\'o}pez-S{\'a}nchez}, {Maksym}, {Polsterer}, {Borden},
+  {Hollow}, \& {Whyte}}]{ban15}
+{Banfield} J.~K. {et~al.}, 2015, \mnras, 453, 2326
+
+\bibitem[{{Cutri}(2013)}]{cut13}
+{Cutri} R.~M., 2013, VizieR Online Data Catalog, 2328
+
+\end{thebibliography}

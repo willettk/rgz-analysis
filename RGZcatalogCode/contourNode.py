@@ -23,7 +23,7 @@ class Node(object):
             self.img = img #FITS data as an array
             self.imgSize = int(img.shape[0]) #size in pixels of FITS data
             self.w = w #WCS converter object
-        dec = self.w.wcs_pix2world( np.array( [[self.imgSize/2, self.imgSize/2]] ), 1)[0][1] #dec of image center
+        dec = self.w.wcs_pix2world( np.array( [[self.imgSize/2., self.imgSize/2.]] ), 1)[0][1] #dec of image center
         if dec > 4.5558: #northern region, above +4*33'21"
             self.beamAreaArcsec2 = 1.44*np.pi*5.4*5.4/4 #5.4" FWHM circle
         elif 4.5558 > dec > -2.5069: #middle region, between +4*33'21" and -2*30'25"
@@ -85,7 +85,7 @@ class Node(object):
         self.img = fits.getdata(fits_loc, 0) #imports data as array
         self.img[np.isnan(self.img)] = 0 #sets NANs to 0
         self.imgSize = int(self.img.shape[0])
-        self.w = wcs.WCS(fits.open(fits_loc)[0].header) #gets pixel-to-WCS conversion from header
+        self.w = wcs.WCS(fits.getheader(fits_loc, 0)) #gets pixel-to-WCS conversion from header
         return self.img
     
     def getTotalFlux(self):

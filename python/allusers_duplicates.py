@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import datetime
 
-subjects,classifications,users = rgz.load_rgz_data()
+subjects,classifications = rgz.load_rgz_data()
 
 javascript_fix_date = datetime.datetime(2014, 3, 24, 0, 0, 0, 0)
 

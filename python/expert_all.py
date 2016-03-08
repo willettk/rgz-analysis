@@ -480,9 +480,8 @@ def load_rgz_data():
     
     subjects = db['radio_subjects'] 		# subjects = images
     classifications = db['radio_classifications']	# classifications = classifications of each subject per user
-    users = db['radio_users']	# volunteers doing each classification (can be anonymous)
 
-    return subjects,classifications,users
+    return subjects,classifications
 
 def load_expert_parameters():
 
@@ -673,7 +672,7 @@ def compare_expert_consensus():
 
     return ir_array
 
-def compare_volunteer_consensus(subjects,classifications,users):
+def compare_volunteer_consensus(subjects,classifications):
 
     # Just looks at the total number of IR sources per subject as measured by volunteers. 
     # Should be able to get this by querying MongoDB directly.
@@ -708,12 +707,6 @@ def compare_volunteer_consensus(subjects,classifications,users):
             try:
                 user_name = c['user_name']
 
-                '''
-                # Only set to analyze the "robust" users with at least 10 total classifications
-                if (user_name not in usernames_bad) and \
-                    # Only set for robust results
-                    (users.find_one({'name':user_name})['projects']['52afdb804d69636532000001']['classification_count'] > 10):
-                '''
                 if user_name not in usernames_bad:
 
                     annotations = c['annotations']
@@ -837,7 +830,10 @@ def expert_vs_volunteer():
 
     return None
 
-def histogram_experts(classifications,users):
+def histogram_experts(classifications):
+
+    # DEPRECATED
+    # As of 7 Feb 2016, RGZ data dumps do not include the users collection.
 
     # Goal: find the distribution and average number of IR sources per image for the science team
 
@@ -1028,7 +1024,7 @@ if __name__ == '__main__':
 
     plt.ioff()
 
-    subjects,classifications,users = load_rgz_data()
+    subjects,classifications = load_rgz_data()
     experts = load_expert_parameters()
     update_experts(classifications,experts)
 

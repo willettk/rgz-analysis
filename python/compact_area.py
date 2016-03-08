@@ -5,7 +5,7 @@ import numpy as np
 import cPickle as pickle
 
 zid = 'ARG0001n7u'
-subjects,classifications,users = rgz.load_rgz_data()
+subjects,classifications = rgz.load_rgz_data()
 sublist = list(subjects.find({'metadata.contour_count':1,'state':'complete'}))      # 26,950 as of the 2014-09-04 data dump
 
 path = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/pkl'

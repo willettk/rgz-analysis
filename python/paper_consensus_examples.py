@@ -48,7 +48,7 @@ bad_keys = ('finished_at','started_at','user_agent','lang','pending')
 
 expert_names = [u'42jkb', u'ivywong', u'stasmanian', u'klmasters', u'Kevin', u'akapinska', u'enno.middelberg', u'xDocR', u'vrooje', u'KWillett', u'DocR']
 
-subjects,classifications,users = rgz.load_rgz_data()
+subjects,classifications = rgz.load_rgz_data()
 
 # Paths
 

@@ -22,7 +22,7 @@ curated_zid = open('%s/expert/expert_curated_zooniverse_ids.txt' % rgz_dir).read
 n_random = 100 - len(curated_zid)
 
 # Load in the RGZ database through pymongo
-subjects,classifications,users = rgz.load_rgz_data()
+subjects,classifications = rgz.load_rgz_data()
 
 # Completed RGZ subjects
 batch = subjects.find({'state':'complete','classification_count':20}).limit(n_random)

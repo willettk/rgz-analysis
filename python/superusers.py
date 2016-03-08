@@ -12,7 +12,9 @@ names = []
 ccu = []
 ccc = []
 
-for idx,u in enumerate(list(users.find())):
+users = classifications.distinct('user_name')
+
+for idx,u in enumerate(users):
 
     names.append(u['name'])
 
@@ -26,7 +28,7 @@ for idx,u in enumerate(list(users.find())):
         ccu.append(0)
 
     if not idx % 100:
-        print '%i/%i' % (idx,users.count())
+        print '%i/%i' % (idx,len(users))
 
 d = {'names':names,'cc_usercount':ccu,'cc_classcount':ccc}
 df = pd.DataFrame(d)

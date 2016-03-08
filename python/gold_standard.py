@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 import scipy.stats.distributions as dist
 from collections import Counter
 
-subjects,classifications,users = rgz.load_rgz_data()
+subjects,classifications = rgz.load_rgz_data()
 
 experts=("42jkb", "ivywong", "stasmanian", "klmasters", "Kevin", "akapinska", "enno.middelberg", "xDocR", "DocR", "vrooje", "KWillett")
     

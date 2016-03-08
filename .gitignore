@@ -50,3 +50,12 @@ old/
 python/pyIBCC
 expert/expert100_comparison.csv
 expert/expert_random_zooniverse_ids.txt
+
+# TeX
+
+*.aux
+*.blg
+*.log
+*.dvi
+*.synctex.gz
+*Notes.bib
