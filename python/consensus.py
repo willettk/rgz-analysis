@@ -44,28 +44,40 @@ from PIL import Image
 client = MongoClient('localhost', 27017)
 db = client['radio'] 
 
-subjects = db['radio_subjects'] 		# subjects = images
-classifications = db['radio_classifications']	# classifications = classifications of each subject per user
+subjects = db['radio_subjects'] # subjects = images
+classifications = db['radio_classifications']# classifications = classifications of each subject per user
 
 # Create index on subject IDs so that queries run faster
 
 subindex = classifications.create_index([('subject_ids',pymongo.ASCENDING)],name='subject_ids_1')
 
 # General variables for the RGZ sample
+# Need to add separate parameters for ATLAS vs FIRST, both IR and radio.
 
 main_release_date = datetime.datetime(2013, 12, 17, 0, 0, 0, 0)
-IMG_HEIGHT_OLD = 424.0			# number of pixels in the original JPG image along the y axis
-IMG_WIDTH_OLD = 424.0			# number of pixels in the original JPG image along the x axis
-IMG_HEIGHT_NEW = 500.0			# number of pixels in the downloaded JPG image along the y axis
-IMG_WIDTH_NEW = 500.0			# number of pixels in the downloaded JPG image along the x axis
-FITS_HEIGHT = 301.0			# number of pixels in the FITS image (?) along the y axis
-FITS_WIDTH = 301.0			# number of pixels in the FITS image (?) along the x axis
-FIRST_FITS_HEIGHT = 132.0       # number of pixels in the FITS image along the y axis
-FIRST_FITS_WIDTH = 132.0       # number of pixels in the FITS image along the y axis
 
-# Need to add parameters for ATLAS, both IR and radio.
+# Note: none of these are 
+img_params = {
+    'first':{
+        'IMG_HEIGHT_OLD':424.0    ,         # number of pixels in the original JPG image along the y axis
+        'IMG_WIDTH_OLD':424.0     ,         # number of pixels in the original JPG image along the x axis
+        'IMG_HEIGHT_NEW':500.0    ,         # number of pixels in the downloaded JPG image along the y axis
+        'IMG_WIDTH_NEW':500.0     ,         # number of pixels in the downloaded JPG image along the x axis
+        'FITS_HEIGHT':132.0       ,         # number of pixels in the FITS image along the y axis
+        'FITS_WIDTH':132.0        ,         # number of pixels in the FITS image along the y axis
+        'PIXEL_SIZE':0.00016667             # the number of arcseconds per pixel in the FITS image
+    },
+    'atlas':{
+        'IMG_HEIGHT_OLD':424.0    ,         # number of pixels in the original JPG image along the y axis
+        'IMG_WIDTH_OLD':424.0     ,         # number of pixels in the original JPG image along the x axis
+        'IMG_HEIGHT_NEW':500.0    ,         # number of pixels in the downloaded JPG image along the y axis
+        'IMG_WIDTH_NEW':500.0     ,         # number of pixels in the downloaded JPG image along the x axis
+        'FITS_HEIGHT':201.0       ,         # number of pixels in the FITS image along the y axis
+        'FITS_WIDTH':201.0        ,         # number of pixels in the FITS image along the x axis
+        'PIXEL_SIZE':0.00016667             # the number of arcseconds per pixel in the FITS image
+    }
+}
 
-PIXEL_SIZE = 0.00016667#/3600.0		# the number of arcseconds per pixel in the FITS image
 xmin = 1.
 xmax = IMG_HEIGHT_NEW
 ymin = 1.
@@ -85,10 +97,11 @@ if rgz_dir == None:
     print "Unable to find the hardcoded local path to store outputs."
 
 pathdict = make_pathdict()
+plot_path = "/".join(pathdict[pathdict.keys()[0]]['contours'].split("/")[:-4])+"/plots"
 
 # Find the consensus classification for a single subject
 
-def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_data=True):
+def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_data=True):
 
     # Find the consensus for all users who have classified a particular galaxy
 
@@ -242,6 +255,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
     cons = {}
     cons['zid'] = zid
     cons['source'] = sub['metadata']['source']
+    cons['survey'] = sub['metadata']['survey']
     ir_x,ir_y = {},{}
     cons['answer'] = {}
     cons['n_users'] = maxval
@@ -396,7 +410,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,write_peak_da
                     if v['ind'] == xk:
                         answer[k]['ir_peak'] = (xpeak,ypeak)
                         # Don't write to consensus for serializable JSON object 
-                        if write_peak_data:
+                        if include_peak_data:
                             answer[k]['peak_data'] = pd
                             answer[k]['ir_x'] = x_exists
                             answer[k]['ir_y'] = y_exists
@@ -558,7 +572,7 @@ def one_answer(zid,user_name):
         
     return cons
 
-def plot_consensus(consensus,figno=1,save_fig=False):
+def plot_consensus(consensus,figno=1,savefig=False):
 
     # Plot 4-panel image of IR, radio, KDE estimate, and consensus
     
@@ -685,8 +699,8 @@ def plot_consensus(consensus,figno=1,save_fig=False):
     plt.subplots_adjust(wspace=0.02)
     
     # Save hard copy of the figure
-    if save_fig == True:
-        fig.savefig('/Volumes/REISEPASS/rgz/plots/%s.pdf' % zid)
+    if savefig == True:
+        fig.savefig('%s/%s/%s.pdf' % (plot_path,consensus['survey'],zid))
     else:
         plt.show()
 
@@ -719,21 +733,20 @@ def rc(zid):
 
     check_class(zid)
     cons = checksum(zid,excluded=expert_names,no_anonymous=True)
-    plot_consensus(cons,figno=1,save_fig=False)
+    plot_consensus(cons,figno=1,savefig=False)
     print '\nVolunteers: %i sources' % len(cons['answer'])
 
     cons_ex = checksum(zid,experts_only=True)
-    plot_consensus(cons_ex,figno=2,save_fig=False)
+    plot_consensus(cons_ex,figno=2,savefig=False)
     print '   Experts: %i sources' % len(cons_ex['answer'])
 
     return None
 
-def run_sample(update=True,subset=None,do_plot=False):
+def run_sample(survey,update=True,subset=None,do_plot=False):
 
-    # Run the consensus algorithm for all completed RGZ subjects
-    # Only works on FIRST right now; adapt to run both.
+    # Run the consensus algorithm on the ATLAS subjects
 
-    filestem = "consensus_rgz_first"
+    filestem = "consensus_rgz_{0}".format(survey)
     
     if subset is not None:
 
@@ -741,10 +754,16 @@ def run_sample(update=True,subset=None,do_plot=False):
         Only run consensus for classifications of 
             expert100: the sample of 100 galaxies classified by science team
             goldstandard: the gold standard sample of 20 galaxies classified by all users
+
+            This only applies to FIRST subjects; no (explicit) gold standard yet for ATLAS,
+            although there are the manual classifications in Norris et al. (2006).
         '''
 
+        assert survey == 'first', \
+            "Subsets only exist for the FIRST data set, not {0}.".format(survey)
+
         assert subset in ('expert100','goldstandard'), \
-            "subset is %s; must be either 'expert100' or 'goldstandard'" % subset
+            "Subset is %s; must be either 'expert100' or 'goldstandard'" % subset
 
         pathd = {'expert100':'expert/expert_all_zooniverse_ids.txt',
                     'goldstandard':'goldstandard/gs_zids.txt'}
@@ -754,7 +773,7 @@ def run_sample(update=True,subset=None,do_plot=False):
         suffix = '_%s' % subset
 
     else:
-        all_completed_zids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','metadata.survey':'first'})]
+        all_completed_zids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','metadata.survey':survey})]
 
         if update:
             '''
@@ -777,12 +796,12 @@ def run_sample(update=True,subset=None,do_plot=False):
             print "%i RGZ subjects completed since last consensus catalog generation on %s" % \
                 (len(zooniverse_ids),time.ctime(os.path.getmtime(master_json)))
 
-            suffix = ''
-
         else:
 
             # Rerun consensus for every completed subject in RGZ.
             zooniverse_ids = all_completed_zids
+
+        suffix = ''
 
     # Remove the tutorial subject
     #
@@ -790,7 +809,7 @@ def run_sample(update=True,subset=None,do_plot=False):
     try:
         zooniverse_ids.remove(tutorial_zid)
     except ValueError:
-        print '\nTutorial subject {0} not in list'.format(tutorial_zid)
+        print '\nTutorial subject {0} not in list.'.format(tutorial_zid)
     
     print '\nLoaded data; running consensus algorithm on %i completed RGZ subjects' % len(zooniverse_ids)
 
@@ -810,9 +829,54 @@ def run_sample(update=True,subset=None,do_plot=False):
         if not idx % 100:
             print idx, datetime.datetime.now().strftime('%H:%M:%S.%f')
 
-        cons = checksum(zid,write_peak_data=do_plot)
+        cons = checksum(zid,include_peak_data=do_plot)
         if do_plot:
-            plot_consensus(cons,save_fig=True)
+
+
+            """
+            Still doesn't work with the ATLAS images; suspect that the sizing is incorrect.
+
+            In [2]: consensus.run_sample('atlas',update=False,do_plot=True)
+
+            Tutorial subject ARG0003r15 not in list.
+            
+            Loaded data; running consensus algorithm on 2443 completed RGZ subjects
+            0 14:30:28.545179
+            LinAlgError in KD estimation for ARG0003r1f [307.19339622641513, 298.938679245283, 302.47641509433964] [303.0660377358491, 294.811320754717, 298.3490566037736]
+            100 14:34:14.850085
+            200 14:37:54.944771
+            300 14:41:31.602768
+            ---------------------------------------------------------------------------
+            IOError                                   Traceback (most recent call last)
+            <ipython-input-2-1360b401d1f1> in <module>()
+            ----> 1 consensus.run_sample('atlas',update=False,do_plot=True)
+            
+            /Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/python/consensus.py in run_sample(survey, update, subset, do_plot)
+                820     # CSV header
+                821     if update:
+            --> 822         fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'a')
+                823     else:
+                824         fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'w')
+            
+            /Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/python/consensus.py in plot_consensus(consensus, figno, savefig)
+                661 
+                662     ax3.set_xlim([0, 500])
+            --> 663     ax3.set_ylim([500, 0])
+                664     ax3.set_title(zid)
+                665     ax3.set_aspect('equal')
+            
+            //anaconda/lib/python2.7/site-packages/PIL/Image.pyc in open(fp, mode)
+               2286 
+               2287     raise IOError("cannot identify image file %r"
+            -> 2288                   % (filename if filename else fp))
+               2289 
+               2290 
+            
+            IOError: cannot identify image file <cStringIO.StringI object at 0x10fe0a8b0>
+            """
+
+
+            plot_consensus(cons,savefig=True)
 
         # Save results to files
 
@@ -821,6 +885,12 @@ def run_sample(update=True,subset=None,do_plot=False):
             cons['consensus_level'] = (cons['n_users']/cons['n_total'])
 
             # JSON
+
+            # Remove peak data from saved catalog; numpy arrays are not JSON serializable (may want to adjust later).
+            # http://stackoverflow.com/questions/3488934/simplejson-and-numpy-array/24375113#24375113
+            for ans in cons['answer']:
+                if cons['answer'][ans].has_key('peak_data'):
+                    popvar = cons['answer'][ans].pop('peak_data',None)
 
             json_output.append(cons)
 
@@ -833,13 +903,15 @@ def run_sample(update=True,subset=None,do_plot=False):
                     ir_peak = ans['ir'] if ans.has_key('ir') else (-99,-99)
 
                 try:
-                    fc.write('%s,%s,%4i,%4i,%.3f,%2i,%s,"%s","%s"\n' % 
-                        (
+                    fc.write('{0},{1},{2:4d},{3:4d},{4:.3f},{5:2d},{6},"{7}","{8}"\n'.format( 
                             cons['zid'],cons['source'],
-                            cons['n_users'],cons['n_total'],cons['consensus_level'],
-                            len(ans['xmax']),alpha(ans['ind']),bbox_unravel(ans['bbox']),ir_peak
+                            cons['n_users'],cons['n_total'],
+                            cons['consensus_level'],
+                            len(ans['xmax']),
+                            alpha(ans['ind']),
+                            bbox_unravel(ans['bbox']),ir_peak
                             )
-                        )
+                    )
                 except KeyError:
                     print zid
                     print cons
@@ -850,20 +922,20 @@ def run_sample(update=True,subset=None,do_plot=False):
     # Write and close the new JSON file
     if update:
         jmaster.extend(json_output)
-        with open('%s/json/%s%s.json' % (rgz_dir,filestem,suffix),'w') as fj:
-            json.dump(jmaster,fj)
+        jfinal = jmaster
     else:
-        with open('%s/json/%s%s.json' % (rgz_dir,filestem,suffix),'w') as fj:
-            json.dump(json_output,fj)
-        jmaster = json_output
+        jfinal = json_output
+
+    with open('%s/json/%s%s.json' % (rgz_dir,filestem,suffix),'w') as fj:
+        json.dump(jfinal,fj)
 
     # Make 75% version for full catalog
 
     if subset is None:
         # JSON
-        jmaster75 = filter(lambda a: (a['n_users']/a['n_total']) >= 0.75, jmaster)
+        json75 = filter(lambda a: (a['n_users']/a['n_total']) >= 0.75, jfinal)
         with open('%s/json/%s_75.json' % (rgz_dir,filestem),'w') as fj:
-            json.dump(jmaster75,fj)
+            json.dump(json75,fj)
         # CSV
         import pandas as pd
         cmaster = pd.read_csv('%s/csv/%s.csv' % (rgz_dir,filestem))
@@ -966,7 +1038,7 @@ def update_gs_subjects(subjects):
 if __name__ == "__main__":
     if pathdict != None:
         print 'Starting at',datetime.datetime.now().strftime('%H:%M:%S.%f')
-        run_sample(update=True,do_plot=False)
+        run_sample(update=False,do_plot=False)
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
     else:
         print "\nAborting consensus.py - could not locate raw RGZ image data.\n"
