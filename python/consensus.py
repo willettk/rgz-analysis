@@ -785,7 +785,6 @@ def run_sample(update=True,subset=None,do_plot=False):
             zooniverse_ids = all_completed_zids
 
     # Remove the tutorial subject
-    #
     tutorial_zid = "ARG0003r15"
     try:
         zooniverse_ids.remove(tutorial_zid)
