@@ -2,7 +2,7 @@
 
 import rgz
 
-subjects,classifications,users = rgz.load_rgz_data()
+subjects,classifications = rgz.load_rgz_data()
 
 cc_list = list(subjects.find())
 

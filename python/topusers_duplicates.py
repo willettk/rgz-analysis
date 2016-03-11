@@ -5,7 +5,7 @@ import pandas as pd
 import datetime
 from matplotlib import rc
 
-subjects,classifications,users = rgz.load_rgz_data()
+subjects,classifications = rgz.load_rgz_data()
 
 # Try for range of top users
 

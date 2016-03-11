@@ -398,9 +398,8 @@ def load_rgz_data():
     
     subjects = db['radio_subjects'] 		# subjects = images
     classifications = db['radio_classifications']	# classifications = classifications of each subject per user
-    users = db['radio_users']	# volunteers doing each classification (can be anonymous)
 
-    return subjects,classifications,users
+    return subjects,classifications
 
 def load_expert_parameters():
 
@@ -573,7 +572,7 @@ def compare_expert_consensus():
 
 if __name__ == '__main__':
 
-    subjects,classifications,users = load_rgz_data()
+    subjects,classifications = load_rgz_data()
 
     # If arguments are given from command line, process only those users
     # Note that MongoDB and Python are case-sensitive!! (eg, "Stasmanian" != "stasmanian")

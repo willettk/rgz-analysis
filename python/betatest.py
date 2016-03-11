@@ -65,7 +65,6 @@ client = MongoClient('localhost', 27017)
 db = client['ouroboros'] 
 subjects = db['radio_subjects'] 		# subjects = images
 classifications = db['radio_classifications']	# classifications = classifications of each subject per user
-users = db['radio_users']	
 
 Nsubjects = subjects.count()		# determine the number of images in the data set
 Nclassifications = classifications.find({"updated_at": {"$gt": beta_release_date}}).count() # total number of classifications

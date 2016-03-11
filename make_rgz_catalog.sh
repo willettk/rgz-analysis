@@ -7,17 +7,18 @@ numactl --interleave=all mongod --fork --logpath /data/tabernacle/larry/RGZdata/
 # Restore the raw files
 echo "Restoring MongoDB files"
 
-arr=($(find mongodb/exports/radio* -type d))
+arr=($(find mongodb/exports/sanitized_radio* -type d))
 backup_path=${arr[${#arr[@]}-1]}
 echo ${#arr[@]}" backups of catalog found"
 echo "Using "$backup_path
 
 #mongorestore --db radio --drop --collection radio_users $backup_path'/radio_users.bson'
-#mongorestore --db radio --drop --collection radio_subjects $backup_path'/radio_subjects.bson'
-#mongorestore --db radio --drop --collection radio_classifications $backup_path'/radio_classifications.bson'
+mongoimport --db radio --drop --collection radio_subjects $backup_path'/radio_subjects.json'
+mongoimport --db radio --drop --collection radio_classifications $backup_path'/radio_classifications.json'
+mongoimport --db radio --drop --collection radio_groups $backup_path'/radio_groups.json'
 
 # Restore the latest version of the catalog
-#mongorestore --db radio --drop --collection catalog '/data/tabernacle/larry/RGZdata/rgz_mongo/radio/catalog.bson'
+mongorestore --db radio --drop --collection catalog '/data/tabernacle/larry/RGZdata/rgz_mongo/radio/catalog.bson'
 
 # Activate necessary Python environments
 

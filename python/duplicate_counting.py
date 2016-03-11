@@ -23,7 +23,7 @@ def duplicate_class_count(c):
 
     return dups,timestamps
 
-subjects,classifications,users = rgz.load_rgz_data()
+subjects,classifications = rgz.load_rgz_data()
 complete_subjects = subjects.find({'state':'complete'})
 cs = pd.DataFrame(list(complete_subjects))
 

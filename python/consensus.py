@@ -611,6 +611,11 @@ def plot_consensus(consensus,figno=1,save_fig=False):
     colormaparr = [cm.hot_r,cm.Blues,cm.RdPu,cm.Greens,cm.PuBu,cm.YlGn,cm.Greys][::-1]
     colorarr = ['r','b','m','g','c','y','k'][::-1]
     
+    # If, in the rare case, that the consensus has more unique sources than the number of colors:
+    if len(answer) > len(colorarr):
+        colorarr *= int(len(answer)/len(colorarr))+1
+        colormaparr *= int(len(answer)/len(colorarr))+1
+    
     if len(answer) > 0: # At least one galaxy was identified
         for idx,ans in enumerate(answer.itervalues()):
 
@@ -749,7 +754,7 @@ def run_sample(update=True,subset=None,do_plot=False):
         suffix = '_%s' % subset
 
     else:
-        all_completed_zids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','tutorial':{'$exists':False},'metadata.survey':'first'})]
+        all_completed_zids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','metadata.survey':'first'})]
 
         if update:
             '''
@@ -772,23 +777,30 @@ def run_sample(update=True,subset=None,do_plot=False):
             print "%i RGZ subjects completed since last consensus catalog generation on %s" % \
                 (len(zooniverse_ids),time.ctime(os.path.getmtime(master_json)))
 
-            suffix = '_update'
+            suffix = ''
 
         else:
 
             # Rerun consensus for every completed subject in RGZ.
             zooniverse_ids = all_completed_zids
 
+    # Remove the tutorial subject
+    tutorial_zid = "ARG0003r15"
+    try:
+        zooniverse_ids.remove(tutorial_zid)
+    except ValueError:
+        print '\nTutorial subject {0} not in list'.format(tutorial_zid)
+    
     print '\nLoaded data; running consensus algorithm on %i completed RGZ subjects' % len(zooniverse_ids)
 
-    ad = alphadict()
-
     # Empty files and objects for CSV, JSON output
-    fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'w')
     json_output = []
 
     # CSV header
-    if not update:
+    if update:
+        fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'a')
+    else:
+        fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'w')
         fc.write('zooniverse_id,first_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
 
     for idx,zid in enumerate(zooniverse_ids):
@@ -824,18 +836,17 @@ def run_sample(update=True,subset=None,do_plot=False):
                         (
                             cons['zid'],cons['source'],
                             cons['n_users'],cons['n_total'],cons['consensus_level'],
-                            len(ans['xmax']),ad[ans['ind']],bbox_unravel(ans['bbox']),ir_peak
+                            len(ans['xmax']),alpha(ans['ind']),bbox_unravel(ans['bbox']),ir_peak
                             )
                         )
                 except KeyError:
                     print zid
                     print cons
 
+    # Close the new CSV file
     fc.close()
 
-    # Merge the update with master
-
-    # JSON
+    # Write and close the new JSON file
     if update:
         jmaster.extend(json_output)
         with open('%s/json/%s%s.json' % (rgz_dir,filestem,suffix),'w') as fj:
@@ -843,22 +854,7 @@ def run_sample(update=True,subset=None,do_plot=False):
     else:
         with open('%s/json/%s%s.json' % (rgz_dir,filestem,suffix),'w') as fj:
             json.dump(json_output,fj)
-
-    # CSV
-
-    if update:
-        outfilename,infile_master,infile_update = ['%s/csv/%s%s.csv' % (rgz_dir,filestem,x) for x in ('_all','','_update')]
-
-        with open(outfilename, 'wb') as outfile:
-            for filename in (infile_master,infile_update):
-                if filename == outfilename:
-                    # don't want to copy the output into itself
-                    continue
-                with open(filename, 'rb') as readfile:
-                    shutil.copyfileobj(readfile, outfile)
-
-        shutil.move(outfilename,infile_master)
-        os.remove(infile_update)
+        jmaster = json_output
 
     # Make 75% version for full catalog
 
@@ -877,6 +873,43 @@ def run_sample(update=True,subset=None,do_plot=False):
 
     return None
 
+def force_csv_update(filestem='consensus_rgz_first',suffix=''):
+
+    # Force an update of the CSV file from the JSON, in case of errors.
+
+    master_json = '%s/json/%s.json' % (rgz_dir,filestem)
+    
+    with open(master_json,'r') as fm:
+        jmaster = json.load(fm)
+    
+    fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'w')
+    fc.write('zooniverse_id,first_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
+
+    for gal in jmaster:
+        for ans in gal['answer'].itervalues():
+            try:
+                ir_peak = ans['ir_peak']
+            except KeyError:
+                ir_peak = ans['ir'] if ans.has_key('ir') else (-99,-99)
+
+    
+            fc.write('{0},{1},{2:4d},{3:4d},{4:.3f},{5:2d},{6},"{7}","{8}"\n'.format(
+                    gal['zid'],
+                    gal['source'],
+                    gal['n_users'],
+                    gal['n_total'],
+                    gal['n_users'] * 1./gal['n_total'],
+                    len(ans['xmax']),
+                    alpha(ans['ind']),
+                    bbox_unravel(ans['bbox']),
+                    ir_peak
+                    )
+                )
+
+    fc.close()
+
+    return None
+
 def bbox_unravel(bbox):
 
     # Turn an array of tuple strings into floats
@@ -889,16 +922,19 @@ def bbox_unravel(bbox):
 
     return bboxes
 
-def alphadict():
+def alpha(i):
 
-    # Create a dictionary enumerating each letter of the alphabet.
+    from string import letters
 
-    alphabet_str = 'abcdefghijklmnopqrstuvwxyz'
-    ad = {}
-    for idx,letter in enumerate(alphabet_str):
-        ad[idx] = letter
-
-    return ad
+    # Return a letter of the alphabet for a given integer
+    #
+    lowercase = letters[26:]
+    
+    try:
+        letter = letters[26:][i % 26]*int(i/26 + 1)
+        return letter
+    except TypeError:
+        raise AssertionError("Index must be integer between 0 and 25")
 
 def update_experts(classifications): 
 
