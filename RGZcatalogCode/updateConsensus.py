@@ -19,7 +19,7 @@ def updateConsensus(csvPath):
         consensus = db['consensus']
 
         consensusDict = csv.DictReader(csvFile)
-        header = ['zooniverse_id', 'FIRST_id', 'n_users', 'n_total', 'consensus_level', 'n_radio', 'label', 'bbox', 'ir_peak']
+        header = ['zooniverse_id', 'first_id', 'n_users', 'n_total', 'consensus_level', 'n_radio', 'label', 'bbox', 'ir_peak']
         for entry in consensusDict:
             row = {}
             for field in header:

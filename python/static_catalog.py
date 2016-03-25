@@ -80,7 +80,7 @@ def flat_version(catalog,full=False):
             try:
                 # Print all values to new row in file. 
 
-                row = ['RGZ_'+str(c['catalog_id'])+c['consensus']['label'],c['Zooniverse_id'],c['FIRST_id']]
+                row = ['RGZ_'+str(c['catalog_id'])+c['consensus']['label'],c['zooniverse_id'],c['first_id']]
                 for entry in header.split(',')[3:]:
                     bothvar = entry.split('.')
                     if bothvar[0] == 'wise':

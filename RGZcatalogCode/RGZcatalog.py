@@ -73,7 +73,7 @@ def RGZcatalog():
             
             #do not process if this object in this field is already in the catalog
             process = True
-            for i in catalog.find({'Zooniverse_id':subject['zooniverse_id']}):
+            for i in catalog.find({'zooniverse_id':subject['zooniverse_id']}):
                 if i['consensus']['label'] == consensusObject['label']:
                     process = False
 
@@ -86,16 +86,16 @@ def RGZcatalog():
 
                 #display which entry is being processed to see how far the program is
                 print IDnumber
-                entry = {'catalog_id':IDnumber, 'Zooniverse_id':str(subject['zooniverse_id'])}
+                entry = {'catalog_id':IDnumber, 'zooniverse_id':str(subject['zooniverse_id'])}
                 
                 #find location of FITS file
-                fid = consensusObject['FIRST_id']
+                fid = consensusObject['first_id']
                 if fid[0] == 'F':
                     fits_loc = pathdict[fid]
-                    entry.update({'FIRST_id':str(fid)})
+                    entry.update({'first_id':str(fid)})
                 else:
                     fits_loc = '%s/rgz/raw_images/ATLAS/2x2/%s_radio.fits' % (data_path, fid)
-                    entry.update({'ATLAS_id':str(fid)})
+                    entry.update({'atlas_id':str(fid)})
                 
                 #find IR counterpart from consensus data, if present
                 w = wcs.WCS(fits.getheader(fits_loc, 0)) #gets pixel-to-WCS conversion from header
