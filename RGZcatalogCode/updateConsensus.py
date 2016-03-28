@@ -17,12 +17,9 @@ def updateConsensus(csvPath):
 
     with open(csvPath, 'r') as csvFile:
         
-        #db = MongoClient()['radio']
-        #db.drop_collection('consensus')
-        #consensus = db['consensus']
-        db = MongoClient()['platypus']
-        db.drop_collection('test')
-        test = db['test']
+        db = MongoClient()['radio']
+        db.drop_collection('consensus')
+        consensus = db['consensus']
 
         consensusDict = csv.DictReader(csvFile)
         header = ['zooniverse_id', 'first_id', 'n_users', 'n_total', 'consensus_level', 'n_radio', 'label', 'bbox', 'ir_peak']
