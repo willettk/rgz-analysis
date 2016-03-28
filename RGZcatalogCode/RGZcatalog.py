@@ -7,7 +7,7 @@ AllWISE and SDSS catalogs.
 import logging, urllib2, time, argparse, json
 import pymongo
 import numpy as np
-import StringIO, gzip, ast
+import StringIO, gzip
 from astropy.io import fits
 from astropy import wcs, coordinates as coord, units as u
 
@@ -99,7 +99,7 @@ def RGZcatalog():
                 
                 #find IR counterpart from consensus data, if present
                 w = wcs.WCS(fits.getheader(fits_loc, 0)) #gets pixel-to-WCS conversion from header
-                ir_coords = ast.literal_eval(consensusObject['ir_peak'])
+                ir_coords = consensusObject['ir_peak']
                 if ir_coords == (-99, -99):
                     ir_pos = None
                     wise_match = None
@@ -117,7 +117,7 @@ def RGZcatalog():
                     logging.info('IR counterpart found')
                     entry['consensus'].update({'IR_ra':ir_pos.ra.deg, 'IR_dec':ir_pos.dec.deg})
                 else:
-                    logging.info('No IR conterpart found')
+                    logging.info('No IR counterpart found')
 
                 #if an IR peak exists, search AllWISE and SDSS for counterparts
                 if ir_pos:
