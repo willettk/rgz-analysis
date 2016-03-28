@@ -137,8 +137,9 @@ def RGZcatalog():
                     # Use local file if available
 
                     jsonfile = link.split("/")[-1]
-                    if os.path.exists("{0}/rgz/contours/{1}".format(data_path,jsonfile)):
-                        with open(jsonfile,'r') as jf:
+                    jsonfile_path = "{0}/rgz/contours/{1}".format(data_path,jsonfile)
+                    if os.path.exists(jsonfile_path):
+                        with open(jsonfile_path,'r') as jf:
                             data = json.load(jf)
 
                     # Otherwise, read from web
