@@ -4,7 +4,7 @@ consensus matching information, radio morphology, IR counterpart location, and d
 AllWISE and SDSS catalogs.
 '''
 
-import logging, urllib2, time, argparse, json
+import logging, urllib2, time, argparse, json, os
 import pymongo
 import numpy as np
 import StringIO, gzip, ast
