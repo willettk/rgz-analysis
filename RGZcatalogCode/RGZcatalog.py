@@ -134,22 +134,33 @@ def RGZcatalog():
                 try:
                     link = subject['location']['contours'] #gets url as Unicode string
 
-                    tryCount = 0
-                    while(True): #in case of error, wait 10 sec and try again; give up after 5 tries
-                        tryCount += 1
-                        try:
-                            compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
-                            break
-                        except (urllib2.URLError, urllib2.HTTPError) as e:
-                            if tryCount>5:
-                                logging.exception('Too many radio query errors')
-                                raise
-                            logging.exception(e)
-                            time.sleep(10)
-                    
-                    tempfile = StringIO.StringIO(compressed) #temporarily stores contents as file (emptied after unzipping)
-                    uncompressed = gzip.GzipFile(fileobj=tempfile, mode='r').read() #unzips contents to str
-                    data = json.loads(uncompressed) #loads JSON object
+                    # Use local file if available
+
+                    jsonfile = link.split("/")[-1]
+                    if os.path.exists("{0}/rgz/contours/{1}".format(data_path,jsonfile)):
+                        with open(jsonfile,'r') as jf:
+                            data = json.load(jf)
+
+                    # Otherwise, read from web
+
+                    else:
+
+                        tryCount = 0
+                        while(True): #in case of error, wait 10 sec and try again; give up after 5 tries
+                            tryCount += 1
+                            try:
+                                compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
+                                break
+                            except (urllib2.URLError, urllib2.HTTPError) as e:
+                                if tryCount>5:
+                                    logging.exception('Too many radio query errors')
+                                    raise
+                                logging.exception(e)
+                                time.sleep(10)
+                        
+                        tempfile = StringIO.StringIO(compressed) #temporarily stores contents as file (emptied after unzipping)
+                        uncompressed = gzip.GzipFile(fileobj=tempfile, mode='r').read() #unzips contents to str
+                        data = json.loads(uncompressed) #loads JSON object
                     
                     radio_data = p.getRadio(data, fits_loc, consensusObject)
                     entry.update(radio_data)
