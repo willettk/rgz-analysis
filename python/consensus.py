@@ -387,7 +387,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
             if np.isnan(kp).sum() > 0:
                 acp = collinearity.collinear(x_exists,y_exists)
                 if len(acp) > 0:
-                    print 'There are {0:d} unique points for {1} (source no. {1:d} in the field), but all are co-linear; KDE estimate does not work.'.format(len(Counter(x_exists)),zid,xk)
+                    print 'There are {0:d} unique points for {1} (source no. {2:d} in the field), but all are co-linear; KDE estimate does not work.'.format(len(Counter(x_exists)),zid,xk)
                 else:
                     print 'There are NaNs in the KDE for {0} (source no. {1:d} in the field), but points are not co-linear.'.format(zid,xk)
 
@@ -695,7 +695,7 @@ def plot_consensus(consensus,figno=1,savefig=False):
                 ax3.plot([x_plot],[y_plot],color=color,marker='o',markersize=2)
                 ax4.plot([x_plot],[y_plot],color=color,marker='*',markersize=12)
             else:
-                ax4.text(img_params[survey]['IMG_WIDTH_NEW']+50,idx*25,'#{0:d} - no IR host'format(idx),fontsize=11)
+                ax4.text(img_params[survey]['IMG_WIDTH_NEW']+50,idx*25,'#{0:d} - no IR host'.format(idx),fontsize=11)
 
     ax3.set_xlim([0, img_params[survey]['IMG_WIDTH_NEW']])
     ax3.set_ylim([img_params[survey]['IMG_HEIGHT_NEW'], 0])
@@ -954,7 +954,7 @@ def force_csv_update(survey='first',suffix=''):
         jmaster = json.load(fm)
     
     fc = open('{0}/csv/{1}{2}.csv'.format(rgz_dir,filestem,suffix),'w')
-    fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
+    fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
 
     for gal in jmaster:
         for ans in gal['answer'].itervalues():
