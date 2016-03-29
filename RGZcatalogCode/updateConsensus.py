@@ -7,8 +7,6 @@ from pymongo import MongoClient
 import csv
 from ast import literal_eval
 
-csvPath = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/csv/consensus_rgz_first_75.csv'
-
 def updateConsensus(csvPath):
 
     logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s')
@@ -31,9 +29,6 @@ def updateConsensus(csvPath):
                 except (ValueError,SyntaxError) as e:
                     entry_typed = str(entry[field])
                 row[field] = entry_typed
-            test.insert(row)
+            consensus.insert(row)
 
-        logging.info('%i entries added to test collection', test.count())
-
-if __name__ == "__main__":
-    updateConsensus(csvPath)
+        logging.info('%i entries added to consensus collection', consensus.count())
