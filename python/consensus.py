@@ -900,11 +900,8 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
                 try:
                     fc.write('{0},{1},{2:4d},{3:4d},{4:.3f},{5:2d},{6},"{7}","{8}"\n'.format( 
                             cons['zid'],cons['source'],
-                            cons['n_users'],cons['n_total'],
-                            cons['consensus_level'],
-                            len(ans['xmax']),
-                            alpha(ans['ind']),
-                            bbox_unravel(ans['bbox']),ir_peak
+                            cons['n_users'],cons['n_total'],cons['consensus_level'],
+                            len(ans['xmax']),alphabet(ans['ind']),bbox_unravel(ans['bbox']),ir_peak
                             )
                     )
                 except KeyError:
@@ -970,7 +967,7 @@ def force_csv_update(survey='first',suffix=''):
                     gal['n_total'],
                     gal['n_users'] * 1./gal['n_total'],
                     len(ans['xmax']),
-                    alpha(ans['ind']),
+                    alphabet(ans['ind']),
                     bbox_unravel(ans['bbox']),
                     ir_peak
                     )
@@ -992,11 +989,18 @@ def bbox_unravel(bbox):
 
     return bboxes
 
-def alpha(i):
+def alphabet(i):
 
     from string import letters
 
-    # Return a letter of the alphabet for a given integer
+    # Return a letter (or set of duplicated letters) of the alphabet for a given integer
+    # For i > 25, letters begin multiplying:    alphabet(0) = 'a' 
+    #                                           alphabet(1) = 'b'
+    #                                           ...
+    #                                           alphabet(25) = 'z'
+    #                                           alphabet(26) = 'aa'
+    #                                           alphabet(27) = 'bb'
+    #                                           ...
     #
     lowercase = letters[26:]
     
@@ -1004,7 +1008,7 @@ def alpha(i):
         letter = letters[26:][i % 26]*int(i/26 + 1)
         return letter
     except TypeError:
-        raise AssertionError("Index must be integer between 0 and 25")
+        raise AssertionError("Index must be an integer")
 
 def update_experts(classifications): 
 

@@ -5,6 +5,7 @@ Updates the consensus database in Mongo so that new entries may be added to the 
 import logging
 from pymongo import MongoClient
 import csv
+from ast import literal_eval
 
 def updateConsensus(csvPath):
 
@@ -23,7 +24,11 @@ def updateConsensus(csvPath):
         for entry in consensusDict:
             row = {}
             for field in header:
-                row[field] = entry[field]
+                try:
+                    entry_typed = literal_eval(entry[field])
+                except (ValueError,SyntaxError) as e:
+                    entry_typed = str(entry[field])
+                row[field] = entry_typed
             consensus.insert(row)
 
         logging.info('%i entries added to consensus collection', consensus.count())
