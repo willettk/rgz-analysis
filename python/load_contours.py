@@ -69,7 +69,7 @@ def get_contours(subject,pathdict):
         with open(pathdict[source]['contours']) as f:
             contours = json.load(f)
     # If pathdict is None, try to download over network
-    except TypeError:
+    except (IOError,TypeError):
         r = requests.get(subject['location']['contours'])
         contours = r.json()
     
