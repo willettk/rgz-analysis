@@ -146,11 +146,15 @@ def RGZcatalog():
 
                     else:
 
+                        # Reform weblink to point to the direct S3 URL, which will work even with older SSLv3
+                        
+                        link_s3 = "http://zooniverse-static.s3.amazonaws.com/"+link.split('http://')[-1]
+                        
                         tryCount = 0
                         while(True): #in case of error, wait 10 sec and try again; give up after 5 tries
                             tryCount += 1
                             try:
-                                compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
+                                compressed = urllib2.urlopen(str(link_s3)).read() #reads contents of url to str
                                 break
                             except (urllib2.URLError, urllib2.HTTPError) as e:
                                 if tryCount>5:
