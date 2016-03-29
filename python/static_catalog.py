@@ -1,10 +1,13 @@
 from pymongo import MongoClient
 
-path = '.'
+# Make a version of the Radio Galaxy Zoo catalog that's perusable as a flat FITS or CSV table
 
 # Set the desired consensus level of the RGZ classifications (between 0 and 1)
 
+path = '.'
 consensus_level = 0.50
+
+# Define a filestem that will be appended to the new catalog output
 
 if consensus_level == 0.:
     suffix = '_full'
@@ -26,7 +29,7 @@ def flat_version(catalog,full=False):
 
     # Write the MongoDB catalog to a CSV file including all fields with a fixed number of elements
 
-    filename = '%s/rgz-analysis/csv/static_rgz_flat%s.csv' % (path,suffix)
+    filename = '%s/csv/static_rgz_flat%s.csv' % (path,suffix)
 
     # Check the WISE and SDSS fields to see if they had a match; if not, return null values
 
@@ -80,7 +83,7 @@ def flat_version(catalog,full=False):
             try:
                 # Print all values to new row in file. 
 
-                row = ['RGZ_'+str(c['catalog_id'])+c['consensus']['label'],c['zooniverse_id'],c['first_id']]
+                row = ['RGZ_'+str(c['catalog_id']),c['zooniverse_id'],c['first_id']]
                 for entry in header.split(',')[3:]:
                     bothvar = entry.split('.')
                     if bothvar[0] == 'wise':
@@ -101,16 +104,16 @@ def flat_version(catalog,full=False):
 
         # Print summary to screen
 
-        print "{0:d} entries written to CSV file {1:}".format(good_entry,filename)
-        print "{0:d} had errors writing data to file".format(bad_entry,catalog.find(args).count())
+        print "{0:d} entries written to CSV file {1}".format(good_entry,filename)
+        print "{0:d}/{1:d} had errors writing data to file".format(bad_entry,catalog.find(args).count())
 
     return None
 
 def selected_fields(catalog,full=False):
 
-    # Write a version of the MongoDB catalog to a CSV file, only including certain fields
+    # Write a version of the MongoDB catalog to a CSV file. Includes only fields that are manually selected here. 
 
-    filename = '%s/rgz-analysis/csv/static_rgz_selected%s.csv' % (path,suffix)
+    filename = '%s/csv/static_rgz_selected%s.csv' % (path,suffix)
 
     # Check the WISE and SDSS fields to see if they had a match; if not, return null values
 
@@ -156,7 +159,7 @@ def selected_fields(catalog,full=False):
 
             try:
                 # Print values to new row in file. -99 values for the first few roles can be removed if the fields are renumbered in this line.
-                print >> f,'RGZ_{0:},{14:},{21:d},{22:.5f},{23:.5f},{24:.5f},{25:.5f},{17:.3f},{18:.3f},{10:},{7:.5f},{8:.5f},{9:.2f},{11:.4f},{12:.4f},{13:d},{16:},{19:.5f},{20:.5f},{15:.2f}'.format(\
+                print >> f,'RGZ_{0},{14},{21:d},{22:.5f},{23:.5f},{24:.5f},{25:.5f},{17:.3f},{18:.3f},{10},{7:.5f},{8:.5f},{9:.2f},{11:.4f},{12:.4f},{13:d},{16},{19:.5f},{20:.5f},{15:.2f}'.format(\
                 c['catalog_id'], 
                 -99,
                 -99,
@@ -190,8 +193,8 @@ def selected_fields(catalog,full=False):
 
         # Print summary to screen
 
-        print "{0:d} entries written to CSV file {1:}".format(good_entry,filename)
-        print "{0:d} had errors writing data to file".format(bad_entry,catalog.find(args).count())
+        print "{0:d} entries written to CSV file {1}".format(good_entry,filename)
+        print "{0:d}/{1:d} had errors writing data to file".format(bad_entry,catalog.find(args).count())
 
     return None
 
