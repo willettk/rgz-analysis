@@ -91,7 +91,6 @@ if rgz_dir == None:
     print "Unable to find the hardcoded local path to store outputs."
 
 pathdict = make_pathdict()
-plot_path = "/".join(pathdict[pathdict.keys()[0]]['contours'].split("/")[:-4])+"/plots"
 
 # Paths v2 - from RGZcatalogCode
 
@@ -111,6 +110,7 @@ def determine_paths(paths):
 rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis',
                            '/data/tabernacle/larry/RGZdata/rgz-analysis'))
 data_path = determine_paths(('/Volumes/REISEPASS/','/data/extragal/willett'))
+plot_path = "{0}/rgz/plots".format(data_path)
 
 # Find the consensus classification for a single subject
 
@@ -216,7 +216,6 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
         else:
             listcount.append(False)
-            #print 'Removing classification for %s' % user_name
     
     # Remove duplicates and classifications for no object
     clist = [c for lc,c in zip(listcount,clist_all) if lc and c['checksum'] != -99]
@@ -225,7 +224,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
     '''
     if clen_diff > 0:
-        print '\nSkipping %i duplicated classifications for %s. %i good classifications total.' % (clen_diff,zid,len(clist))
+        print '\nSkipping {0:d} duplicated classifications for {1}. {2:d} good classifications total.'.format(clen_diff,zid,len(clist))
     '''
 
     maxval=0
@@ -257,7 +256,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
         cmatch = next(i for i in clist if i['checksum'] == mc_checksum)
     except StopIteration:
         # Necessary for objects like ARG0003par; one classifier recorded 22 "No IR","No Contours" in a short space. Still shouldn't happen.
-        print 'No non-zero classifications recorded for %s' % zid
+        print 'No non-zero classifications recorded for {0}'.format(zid)
         return None
    
     # Find IR peak for the checksummed galaxies
@@ -292,7 +291,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
         except KeyError:
             print gal, zid
         except AttributeError:
-            print 'No Sources, No IR recorded for %s' % zid
+            print 'No Sources, No IR recorded for {0}'.format(zid)
     
         # Make empty copy of next dict in same loop
         ir_x[k] = []
@@ -327,7 +326,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
     # Perform a kernel density estimate on the data for each galaxy
     
-    scale_ir = img_params[survey]['IMG_HEIGHT_NEW']/img_params[survey]['IMG_HEIGHT_OLD']
+    scale_ir = img_params[survey]['IMG_HEIGHT_NEW'] * 1./img_params[survey]['IMG_HEIGHT_OLD']
 
     peak_data = []
 
@@ -340,7 +339,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
         if len(yv) == 0:
             ir_y.pop(yk)
 
-    assert len(ir_x) == len(ir_y),'Lengths of ir_x (%i) and ir_y (%i) are not the same' % (len(ir_x),len(ir_y))
+    assert len(ir_x) == len(ir_y),'Lengths of ir_x ({0:d}) and ir_y ({1:d}) are not the same'.format(len(ir_x),len(ir_y))
 
     for (xk,xv),(yk,yv) in zip(ir_x.iteritems(),ir_y.iteritems()):
         
@@ -373,11 +372,11 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
             except ValueError:
                 # Breaks on the tutorial subject. Find out why len(x) != len(y)
                 print zid
-                print 'Length of IR x array: %i; Length of IR y array: %i' % (len(x_exists),len(y_exists))
+                print 'Length of IR x array: {0:d}; Length of IR y array: {1:d}'.format(len(x_exists),len(y_exists))
             try:
                 kernel = stats.gaussian_kde(values)
             except LinAlgError:
-                print 'LinAlgError in KD estimation for %s' % zid,x_exists,y_exists
+                print 'LinAlgError in KD estimation for {0}'.format(zid,x_exists,y_exists)
                 continue
 
             # Even if there are more than 2 sets of points, if they are mutually co-linear, 
@@ -388,9 +387,9 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
             if np.isnan(kp).sum() > 0:
                 acp = collinearity.collinear(x_exists,y_exists)
                 if len(acp) > 0:
-                    print 'There are %i unique points for %s (source no. %i in the field), but all are co-linear; KDE estimate does not work.' % (len(Counter(x_exists)),zid,xk)
+                    print 'There are {0:d} unique points for {1} (source no. {1:d} in the field), but all are co-linear; KDE estimate does not work.'.format(len(Counter(x_exists)),zid,xk)
                 else:
-                    print 'There are NaNs in the KDE for %s (source no. %i in the field), but points are not co-linear.' % (zid,xk)
+                    print 'There are NaNs in the KDE for {0} (source no. {1:d} in the field), but points are not co-linear.'.format(zid,xk)
 
                 for k,v in answer.iteritems():
                     if v['ind'] == xk:
@@ -623,8 +622,8 @@ def plot_consensus(consensus,figno=1,savefig=False):
     #   contours['width'] = img_params[survey]['FITS_WIDTH']
     #   contours['height'] = img_params[survey]['FITS_HEIGHT']
 
-    sf_x = img_params[survey]['IMG_WIDTH_NEW']/contours['width']
-    sf_y = img_params[survey]['IMG_HEIGHT_NEW']/contours['height']
+    sf_x = img_params[survey]['IMG_WIDTH_NEW'] * 1./contours['width']
+    sf_y = img_params[survey]['IMG_HEIGHT_NEW'] * 1./contours['height']
     
     verts_all = []
     codes_all = []
@@ -653,7 +652,7 @@ def plot_consensus(consensus,figno=1,savefig=False):
         path = Path(verts_all, codes_all)
         patch_black = patches.PathPatch(path, facecolor = 'none', edgecolor='black', lw=1)
     except AssertionError:
-        print 'Users found no components for consensus match of %s' % zid
+        print 'Users found no components for consensus match of {0}'.format(zid)
     
     # Plot the infrared results
     
@@ -696,7 +695,7 @@ def plot_consensus(consensus,figno=1,savefig=False):
                 ax3.plot([x_plot],[y_plot],color=color,marker='o',markersize=2)
                 ax4.plot([x_plot],[y_plot],color=color,marker='*',markersize=12)
             else:
-                ax4.text(img_params[survey]['IMG_WIDTH_NEW']+50,idx*25,'#%i - no IR host' % idx,fontsize=11)
+                ax4.text(img_params[survey]['IMG_WIDTH_NEW']+50,idx*25,'#{0:d} - no IR host'format(idx),fontsize=11)
 
     ax3.set_xlim([0, img_params[survey]['IMG_WIDTH_NEW']])
     ax3.set_ylim([img_params[survey]['IMG_HEIGHT_NEW'], 0])
@@ -705,7 +704,7 @@ def plot_consensus(consensus,figno=1,savefig=False):
     
     ax4.set_xlim([0, img_params[survey]['IMG_WIDTH_NEW']])
     ax4.set_ylim([img_params[survey]['IMG_HEIGHT_NEW'], 0])
-    ax4.set_title('Consensus (%i/%i users)' % (consensus['n_users'],consensus['n_total']))
+    ax4.set_title('Consensus ({0:d}/{1:d} users)'.format(consensus['n_users'],consensus['n_total']))
     
     ax4.set_aspect('equal')
     
@@ -742,7 +741,7 @@ def plot_consensus(consensus,figno=1,savefig=False):
     
     # Save hard copy of the figure
     if savefig == True:
-        fig.savefig('%s/%s/%s.pdf' % (plot_path,consensus['survey'],zid))
+        fig.savefig('{0}/{1}/{2}.pdf'.format(plot_path,consensus['survey'],zid))
     else:
         plt.show()
 
@@ -763,7 +762,7 @@ def check_class(zid):
             name = c['user_name']
         except KeyError:
             name = 'Anonymous'
-        print '%25s %20s %s' % (name,c['user_ip'],c['updated_at'])
+        print '{0:25} {1:25} {2}'.format(name,c['user_ip'],c['updated_at'])
 
     return None
 
@@ -776,11 +775,11 @@ def rc(zid):
     check_class(zid)
     cons = checksum(zid,excluded=expert_names,no_anonymous=True)
     plot_consensus(cons,figno=1,savefig=False)
-    print '\nVolunteers: %i sources' % len(cons['answer'])
+    print '\nVolunteers: {0:d} sources'.format(len(cons['answer']))
 
     cons_ex = checksum(zid,experts_only=True)
     plot_consensus(cons_ex,figno=2,savefig=False)
-    print '   Experts: %i sources' % len(cons_ex['answer'])
+    print '   Experts: {0:d} sources'.format(len(cons_ex['answer']))
 
     return None
 
@@ -805,14 +804,14 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
             "Subsets only exist for the FIRST data set, not {0}.".format(survey)
 
         assert subset in ('expert100','goldstandard'), \
-            "Subset is %s; must be either 'expert100' or 'goldstandard'" % subset
+            "Subset is {0}; must be either 'expert100' or 'goldstandard'".format(subset)
 
         pathd = {'expert100':'expert/expert_all_zooniverse_ids.txt',
                     'goldstandard':'goldstandard/gs_zids.txt'}
-        with open('%s/%s' % (rgz_dir,pathd[subset]),'rb') as f:
+        with open('{0}/{1}'.format(rgz_dir,pathd[subset]),'rb') as f:
             zooniverse_ids = [line.rstrip() for line in f]
 
-        suffix = '_%s' % subset
+        suffix = '_{0}'.format(subset)
 
     else:
         all_completed_zids = [cz['zooniverse_id'] for cz in subjects.find({'state':'complete','metadata.survey':survey})]
@@ -823,7 +822,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
                 only run on subjects without an existing consensus.
             '''
 
-            master_json = '%s/json/%s.json' % (rgz_dir,filestem)
+            master_json = '{0}/json/{1}.json'.format(rgz_dir,filestem)
 
             with open(master_json,'r') as fm:
                 jmaster = json.load(fm)
@@ -834,9 +833,8 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
 
             zooniverse_ids = list(set(all_completed_zids) - set(already_finished_zids))
 
-            print "\n%i RGZ subjects already in master catalog" % len(already_finished_zids)
-            print "%i RGZ subjects completed since last consensus catalog generation on %s" % \
-                (len(zooniverse_ids),time.ctime(os.path.getmtime(master_json)))
+            print "\n{0:d} RGZ subjects already in master catalog".format(len(already_finished_zids))
+            print "{0:d} RGZ subjects completed since last consensus catalog generation on {1}".format(len(zooniverse_ids),time.ctime(os.path.getmtime(master_json)))
 
         else:
 
@@ -853,16 +851,16 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
     except ValueError:
         print '\nTutorial subject {0} not in list.'.format(tutorial_zid)
     
-    print '\nLoaded data; running consensus algorithm on %i completed RGZ subjects' % len(zooniverse_ids)
+    print '\nLoaded data; running consensus algorithm on {0:d} completed RGZ subjects'.format(len(zooniverse_ids))
 
     # Empty files and objects for CSV, JSON output
     json_output = []
 
     # CSV header
     if update:
-        fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'a')
+        fc = open('{0}/csv/{1}{2}.csv'.format(rgz_dir,filestem,suffix),'a')
     else:
-        fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'w')
+        fc = open('{0}/csv/{1}{2}.csv'.format(rgz_dir,filestem,suffix),'w')
         fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
 
     for idx,zid in enumerate(zooniverse_ids):
@@ -924,7 +922,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
     else:
         jfinal = json_output
 
-    with open('%s/json/%s%s.json' % (rgz_dir,filestem,suffix),'w') as fj:
+    with open('{0}/json/{1}{2}.json'.format(rgz_dir,filestem,suffix),'w') as fj:
         json.dump(jfinal,fj)
 
     # Make 75% version for full catalog
@@ -932,13 +930,13 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
     if subset is None:
         # JSON
         json75 = filter(lambda a: (a['n_users']/a['n_total']) >= 0.75, jfinal)
-        with open('%s/json/%s_75.json' % (rgz_dir,filestem),'w') as fj:
+        with open('{0}/json/{1}_75.json'.format(rgz_dir,filestem),'w') as fj:
             json.dump(json75,fj)
         # CSV
         import pandas as pd
-        cmaster = pd.read_csv('%s/csv/%s.csv' % (rgz_dir,filestem))
+        cmaster = pd.read_csv('{0}/csv/{1}.csv'.format(rgz_dir,filestem))
         cmaster75 = cmaster[cmaster['consensus_level'] >= 0.75]
-        cmaster75.to_csv('%s/csv/%s_75.csv' % (rgz_dir,filestem),index=False)
+        cmaster75.to_csv('{0}/csv/{1}_75.csv'.format(rgz_dir,filestem),index=False)
         
     print '\nCompleted consensus.'
 
@@ -950,12 +948,12 @@ def force_csv_update(survey='first',suffix=''):
     #
     filestem = 'consensus_rgz_{0}'.format(survey)
 
-    master_json = '%s/json/%s.json' % (rgz_dir,filestem)
+    master_json = '{0}/json/{1}.json'.format(rgz_dir,filestem)
     
     with open(master_json,'r') as fm:
         jmaster = json.load(fm)
     
-    fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'w')
+    fc = open('{0}/csv/{1}{2}.csv'.format(rgz_dir,filestem,suffix),'w')
     fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
 
     for gal in jmaster:
@@ -1029,16 +1027,21 @@ def update_gs_subjects(subjects):
 
     # Add field to the Mongo database designating the gold standard subjects.
 
-    with open('{0:}/goldstandard/gs_zids.txt'.format(rgz_dir),'r') as f:
+    with open('{0}/goldstandard/gs_zids.txt'.format(rgz_dir),'r') as f:
         for gal in f:
             subjects.update({'zooniverse_id':gal.strip()},{'$set':{'goldstandard':True}})
 
     return None
 
 if __name__ == "__main__":
+
     if pathdict != None:
+
         print 'Starting at',datetime.datetime.now().strftime('%H:%M:%S.%f')
-        run_sample('atlas',update=False,do_plot=True)
+
+        for survey in ('atlas','first'):
+            run_sample(survey,update=True,do_plot=False)
+
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
     else:
         print "\nAborting consensus.py - could not locate raw RGZ image data.\n"
