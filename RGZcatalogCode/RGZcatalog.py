@@ -4,7 +4,7 @@ consensus matching information, radio morphology, IR counterpart location, and d
 AllWISE and SDSS catalogs.
 '''
 
-import logging, urllib2, time, argparse, json
+import logging, urllib2, time, argparse, json, os
 import pymongo
 import numpy as np
 import StringIO, gzip, ast
@@ -134,22 +134,38 @@ def RGZcatalog():
                 try:
                     link = subject['location']['contours'] #gets url as Unicode string
 
-                    tryCount = 0
-                    while(True): #in case of error, wait 10 sec and try again; give up after 5 tries
-                        tryCount += 1
-                        try:
-                            compressed = urllib2.urlopen(str(link)).read() #reads contents of url to str
-                            break
-                        except (urllib2.URLError, urllib2.HTTPError) as e:
-                            if tryCount>5:
-                                logging.exception('Too many radio query errors')
-                                raise
-                            logging.exception(e)
-                            time.sleep(10)
-                    
-                    tempfile = StringIO.StringIO(compressed) #temporarily stores contents as file (emptied after unzipping)
-                    uncompressed = gzip.GzipFile(fileobj=tempfile, mode='r').read() #unzips contents to str
-                    data = json.loads(uncompressed) #loads JSON object
+                    # Use local file if available
+
+                    jsonfile = link.split("/")[-1]
+                    jsonfile_path = "{0}/rgz/contours/{1}".format(data_path,jsonfile)
+                    if os.path.exists(jsonfile_path):
+                        with open(jsonfile_path,'r') as jf:
+                            data = json.load(jf)
+
+                    # Otherwise, read from web
+
+                    else:
+
+                        # Reform weblink to point to the direct S3 URL, which will work even with older SSLv3
+                        
+                        link_s3 = "http://zooniverse-static.s3.amazonaws.com/"+link.split('http://')[-1]
+                        
+                        tryCount = 0
+                        while(True): #in case of error, wait 10 sec and try again; give up after 5 tries
+                            tryCount += 1
+                            try:
+                                compressed = urllib2.urlopen(str(link_s3)).read() #reads contents of url to str
+                                break
+                            except (urllib2.URLError, urllib2.HTTPError) as e:
+                                if tryCount>5:
+                                    logging.exception('Too many radio query errors')
+                                    raise
+                                logging.exception(e)
+                                time.sleep(10)
+                        
+                        tempfile = StringIO.StringIO(compressed) #temporarily stores contents as file (emptied after unzipping)
+                        uncompressed = gzip.GzipFile(fileobj=tempfile, mode='r').read() #unzips contents to str
+                        data = json.loads(uncompressed) #loads JSON object
                     
                     radio_data = p.getRadio(data, fits_loc, consensusObject)
                     entry.update(radio_data)
