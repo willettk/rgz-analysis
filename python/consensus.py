@@ -56,32 +56,26 @@ subindex = classifications.create_index([('subject_ids',pymongo.ASCENDING)],name
 
 main_release_date = datetime.datetime(2013, 12, 17, 0, 0, 0, 0)
 
-# Note: none of these are 
 img_params = {
     'first':{
-        'IMG_HEIGHT_OLD':424.0    ,         # number of pixels in the original JPG image along the y axis
-        'IMG_WIDTH_OLD':424.0     ,         # number of pixels in the original JPG image along the x axis
+        'IMG_HEIGHT_OLD':424.0    ,         # number of pixels in the IR coordinate system (as recorded in Mongo) along the y axis
+        'IMG_WIDTH_OLD':424.0     ,         # number of pixels in the IR coordinate system (as recorded in Mongo) along the x axis
         'IMG_HEIGHT_NEW':500.0    ,         # number of pixels in the downloaded JPG image along the y axis
         'IMG_WIDTH_NEW':500.0     ,         # number of pixels in the downloaded JPG image along the x axis
-        'FITS_HEIGHT':132.0       ,         # number of pixels in the FITS image along the y axis
-        'FITS_WIDTH':132.0        ,         # number of pixels in the FITS image along the y axis
-        'PIXEL_SIZE':0.00016667             # the number of arcseconds per pixel in the FITS image
+        'FITS_HEIGHT':132.0       ,         # number of pixels in the FITS image along the y axis (radio only)
+        'FITS_WIDTH':132.0        ,         # number of pixels in the FITS image along the y axis (radio only)
+        'PIXEL_SIZE':1.3748                 # the number of arcseconds per pixel in the radio FITS image (from CDELT1)
     },
     'atlas':{
-        'IMG_HEIGHT_OLD':424.0    ,         # number of pixels in the original JPG image along the y axis
-        'IMG_WIDTH_OLD':424.0     ,         # number of pixels in the original JPG image along the x axis
-        'IMG_HEIGHT_NEW':500.0    ,         # number of pixels in the downloaded JPG image along the y axis
-        'IMG_WIDTH_NEW':500.0     ,         # number of pixels in the downloaded JPG image along the x axis
-        'FITS_HEIGHT':201.0       ,         # number of pixels in the FITS image along the y axis
-        'FITS_WIDTH':201.0        ,         # number of pixels in the FITS image along the x axis
-        'PIXEL_SIZE':0.00016667             # the number of arcseconds per pixel in the FITS image
+        'IMG_HEIGHT_OLD':424.0    ,         # number of pixels in the IR coordinate system (as recorded in Mongo) along the y axis
+        'IMG_WIDTH_OLD':424.0     ,         # number of pixels in the IR coordinate system (as recorded in Mongo) along the x axis
+        'IMG_HEIGHT_NEW':500.0    ,         # number of pixels in the downloaded PNG image along the y axis
+        'IMG_WIDTH_NEW':500.0     ,         # number of pixels in the downloaded PNG image along the x axis
+        'FITS_HEIGHT':201.0       ,         # number of pixels in the FITS image along the y axis (both IR and radio)
+        'FITS_WIDTH':201.0        ,         # number of pixels in the FITS image along the x axis (both IR and radio)
+        'PIXEL_SIZE':0.6000                 # the number of arcseconds per pixel in the radio FITS image (from CDELT1)
     }
 }
-
-xmin = 1.
-xmax = IMG_HEIGHT_NEW
-ymin = 1.
-ymax = IMG_WIDTH_NEW
 
 bad_keys = ('finished_at','started_at','user_agent','lang','pending')
 
@@ -99,6 +93,25 @@ if rgz_dir == None:
 pathdict = make_pathdict()
 plot_path = "/".join(pathdict[pathdict.keys()[0]]['contours'].split("/")[:-4])+"/plots"
 
+# Paths v2 - from RGZcatalogCode
+
+def determine_paths(paths):
+
+    found_path = False
+    for path in paths:
+        if os.path.exists(path):
+            found_path = True
+            return path
+
+    if found_path == False:
+        print "Unable to find the hardcoded local path:"
+        print paths
+        return None
+
+rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis',
+                           '/data/tabernacle/larry/RGZdata/rgz-analysis'))
+data_path = determine_paths(('/Volumes/REISEPASS/','/data/extragal/willett'))
+
 # Find the consensus classification for a single subject
 
 def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_data=True):
@@ -107,6 +120,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
     sub = subjects.find_one({'zooniverse_id':zid})
     imgid = sub['_id']
+    survey = sub['metadata']['survey']
 
     # Classifications for this subject after launch date
     class_params = {"subject_ids": imgid, "updated_at": {"$gt": main_release_date}}
@@ -255,7 +269,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
     cons = {}
     cons['zid'] = zid
     cons['source'] = sub['metadata']['source']
-    cons['survey'] = sub['metadata']['survey']
+    cons['survey'] = survey
     ir_x,ir_y = {},{}
     cons['answer'] = {}
     cons['n_users'] = maxval
@@ -313,7 +327,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
     # Perform a kernel density estimate on the data for each galaxy
     
-    scale_ir = IMG_HEIGHT_NEW/IMG_HEIGHT_OLD
+    scale_ir = img_params[survey]['IMG_HEIGHT_NEW']/img_params[survey]['IMG_HEIGHT_OLD']
 
     peak_data = []
 
@@ -345,6 +359,11 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
         most_common_ir = ir_Counter.most_common(1)[0][0]
 
         if len(Counter(x_exists)) > 2 and len(Counter(y_exists)) > 2 and most_common_ir != (-99,-99):
+
+            xmin = 1.
+            xmax = img_params[survey]['IMG_HEIGHT_NEW']
+            ymin = 1.
+            ymax = img_params[survey]['IMG_WIDTH_NEW']
 
             # X,Y = grid of uniform coordinates over the IR pixel plane
             X, Y = np.mgrid[xmin:xmax, ymin:ymax]
@@ -572,6 +591,22 @@ def one_answer(zid,user_name):
         
     return cons
 
+def grab_image(subject,imgtype='standard'):
+
+    # Import a JPG from the RGZ subjects. Try to find a local version before downloading over the web
+    
+    url = subject['location'][imgtype]
+    filename = "{0}/{1}/{2}".format(data_path,imgtype,url.split('/')[-1])
+
+    if os.path.exists(filename):
+        with open(filename) as f:
+            im = Image.open(f)
+            im.load()
+    else:
+        im = Image.open(cStringIO.StringIO(urllib.urlopen(url).read()))
+
+    return im
+
 def plot_consensus(consensus,figno=1,savefig=False):
 
     # Plot 4-panel image of IR, radio, KDE estimate, and consensus
@@ -579,12 +614,17 @@ def plot_consensus(consensus,figno=1,savefig=False):
     zid = consensus['zid']
     answer = consensus['answer']
     sub = subjects.find_one({'zooniverse_id':zid})
+    survey = sub['metadata']['survey']
 
     # Get contour data
     contours = get_contours(sub,pathdict)
     
-    sf_x = 500./contours['width']
-    sf_y = 500./contours['height']
+    # Key bit that sets the difference between surveys.
+    #   contours['width'] = img_params[survey]['FITS_WIDTH']
+    #   contours['height'] = img_params[survey]['FITS_HEIGHT']
+
+    sf_x = img_params[survey]['IMG_WIDTH_NEW']/contours['width']
+    sf_y = img_params[survey]['IMG_HEIGHT_NEW']/contours['height']
     
     verts_all = []
     codes_all = []
@@ -635,16 +675,17 @@ def plot_consensus(consensus,figno=1,savefig=False):
 
             if ans.has_key('peak_data'):
 
+                xmin = 1.
+                xmax = img_params[survey]['IMG_HEIGHT_NEW']
+                ymin = 1.
+                ymax = img_params[survey]['IMG_WIDTH_NEW']
+
                 # Plot the KDE map
                 colormap = colormaparr.pop()
                 ax3.imshow(np.rot90(ans['peak_data']['Z']), cmap=colormap,extent=[xmin, xmax, ymin, ymax])
         
                 # Plot individual sources
                 color = colorarr.pop()
-                '''
-                x_plot = [xt * 500./424 for xt in ans['ir_x'] if xt != -99.0]
-                y_plot = [yt * 500./424 for yt in ans['ir_y'] if yt != -99.0]
-                '''
                 x_plot,y_plot = ans['ir_x'],ans['ir_y']
                 ax3.scatter(x_plot, y_plot, c=color, marker='o', s=10, alpha=1./len(x_plot))
                 ax4.plot([ans['ir_peak'][0]],[ans['ir_peak'][1]],color=color,marker='*',markersize=12)
@@ -655,30 +696,29 @@ def plot_consensus(consensus,figno=1,savefig=False):
                 ax3.plot([x_plot],[y_plot],color=color,marker='o',markersize=2)
                 ax4.plot([x_plot],[y_plot],color=color,marker='*',markersize=12)
             else:
-                ax4.text(550,idx*25,'#%i - no IR host' % idx,fontsize=11)
+                ax4.text(img_params[survey]['IMG_WIDTH_NEW']+50,idx*25,'#%i - no IR host' % idx,fontsize=11)
 
-    
-    ax3.set_xlim([0, 500])
-    ax3.set_ylim([500, 0])
+    ax3.set_xlim([0, img_params[survey]['IMG_WIDTH_NEW']])
+    ax3.set_ylim([img_params[survey]['IMG_HEIGHT_NEW'], 0])
     ax3.set_title(zid)
     ax3.set_aspect('equal')
     
-    ax4.set_xlim([0, 500])
-    ax4.set_ylim([500, 0])
+    ax4.set_xlim([0, img_params[survey]['IMG_WIDTH_NEW']])
+    ax4.set_ylim([img_params[survey]['IMG_HEIGHT_NEW'], 0])
     ax4.set_title('Consensus (%i/%i users)' % (consensus['n_users'],consensus['n_total']))
     
     ax4.set_aspect('equal')
     
     # Display IR and radio images
     
-    url_standard = sub['location']['standard']
-    im_standard = Image.open(cStringIO.StringIO(urllib.urlopen(url_standard).read()))
+    im_standard = grab_image(sub,imgtype='standard')
+
     ax1 = fig.add_subplot(141)
     ax1.imshow(im_standard,origin='upper')
     ax1.set_title('WISE')
 
-    url_radio = sub['location']['radio']
-    im_radio = Image.open(cStringIO.StringIO(urllib.urlopen(url_radio).read()))
+    im_radio = grab_image(sub,imgtype='radio')
+
     ax2 = fig.add_subplot(142)
     ax2.imshow(im_radio,origin='upper')
     ax2.set_title(sub['metadata']['source'])
@@ -690,11 +730,13 @@ def plot_consensus(consensus,figno=1,savefig=False):
     if len(answer) > 0:
         ax4.add_patch(patch_black)
     ax4.yaxis.tick_right()
+
+    nticks = 5
     
-    ax1.get_xaxis().set_ticks([0,100,200,300,400])
-    ax2.get_xaxis().set_ticks([0,100,200,300,400])
-    ax3.get_xaxis().set_ticks([0,100,200,300,400])
-    ax4.get_xaxis().set_ticks([0,100,200,300,400,500])
+    ax1.get_xaxis().set_ticks(np.arange(nticks)*img_params[survey]['IMG_WIDTH_NEW'] * 1./nticks)
+    ax2.get_xaxis().set_ticks(np.arange(nticks)*img_params[survey]['IMG_WIDTH_NEW'] * 1./nticks)
+    ax3.get_xaxis().set_ticks(np.arange(nticks)*img_params[survey]['IMG_WIDTH_NEW'] * 1./nticks)
+    ax4.get_xaxis().set_ticks(np.arange(nticks+1)*img_params[survey]['IMG_WIDTH_NEW'] * 1./nticks)
 
     plt.subplots_adjust(wspace=0.02)
     
@@ -821,7 +863,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
         fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'a')
     else:
         fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'w')
-        fc.write('zooniverse_id,first_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
+        fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
 
     for idx,zid in enumerate(zooniverse_ids):
     
@@ -831,50 +873,6 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
 
         cons = checksum(zid,include_peak_data=do_plot)
         if do_plot:
-
-
-            """
-            Still doesn't work with the ATLAS images; suspect that the sizing is incorrect.
-
-            In [2]: consensus.run_sample('atlas',update=False,do_plot=True)
-
-            Tutorial subject ARG0003r15 not in list.
-            
-            Loaded data; running consensus algorithm on 2443 completed RGZ subjects
-            0 14:30:28.545179
-            LinAlgError in KD estimation for ARG0003r1f [307.19339622641513, 298.938679245283, 302.47641509433964] [303.0660377358491, 294.811320754717, 298.3490566037736]
-            100 14:34:14.850085
-            200 14:37:54.944771
-            300 14:41:31.602768
-            ---------------------------------------------------------------------------
-            IOError                                   Traceback (most recent call last)
-            <ipython-input-2-1360b401d1f1> in <module>()
-            ----> 1 consensus.run_sample('atlas',update=False,do_plot=True)
-            
-            /Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/python/consensus.py in run_sample(survey, update, subset, do_plot)
-                820     # CSV header
-                821     if update:
-            --> 822         fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'a')
-                823     else:
-                824         fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'w')
-            
-            /Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis/python/consensus.py in plot_consensus(consensus, figno, savefig)
-                661 
-                662     ax3.set_xlim([0, 500])
-            --> 663     ax3.set_ylim([500, 0])
-                664     ax3.set_title(zid)
-                665     ax3.set_aspect('equal')
-            
-            //anaconda/lib/python2.7/site-packages/PIL/Image.pyc in open(fp, mode)
-               2286 
-               2287     raise IOError("cannot identify image file %r"
-            -> 2288                   % (filename if filename else fp))
-               2289 
-               2290 
-            
-            IOError: cannot identify image file <cStringIO.StringI object at 0x10fe0a8b0>
-            """
-
 
             plot_consensus(cons,savefig=True)
 
@@ -946,9 +944,11 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
 
     return None
 
-def force_csv_update(filestem='consensus_rgz_first',suffix=''):
+def force_csv_update(survey='first',suffix=''):
 
     # Force an update of the CSV file from the JSON, in case of errors.
+    #
+    filestem = 'consensus_rgz_{0}'.format(survey)
 
     master_json = '%s/json/%s.json' % (rgz_dir,filestem)
     
@@ -956,7 +956,7 @@ def force_csv_update(filestem='consensus_rgz_first',suffix=''):
         jmaster = json.load(fm)
     
     fc = open('%s/csv/%s%s.csv' % (rgz_dir,filestem,suffix),'w')
-    fc.write('zooniverse_id,first_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
+    fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n')
 
     for gal in jmaster:
         for ans in gal['answer'].itervalues():
@@ -1038,7 +1038,7 @@ def update_gs_subjects(subjects):
 if __name__ == "__main__":
     if pathdict != None:
         print 'Starting at',datetime.datetime.now().strftime('%H:%M:%S.%f')
-        run_sample(update=False,do_plot=False)
+        run_sample('atlas',update=False,do_plot=True)
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
     else:
         print "\nAborting consensus.py - could not locate raw RGZ image data.\n"
