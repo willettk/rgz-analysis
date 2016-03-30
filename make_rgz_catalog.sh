@@ -1,24 +1,27 @@
 #!/bin/bash
 
+RGZ_PATH='/data/tabernacle/larry/RGZdata'
+
 # Start MongoDB
 echo "Starting MongoDB"
-numactl --interleave=all mongod --fork --logpath /data/tabernacle/larry/RGZdata/mongodb/log/mongodb.log --dbpath /data/tabernacle/larry/RGZdata/data/db
+numactl --interleave=all mongod --fork --logpath $RGZ_PATH"/mongodb/log/mongodb.log" --dbpath $RGZ_PATH"/data/db"
 
 # Restore the raw files
 echo "Restoring MongoDB files"
 
-arr=($(find mongodb/exports/sanitized_radio* -type d))
-backup_path=${arr[${#arr[@]}-1]}
+arr=($(find $RGZ_PATH"/mongodb/exports/sanitized_radio"* -type d))
+BACKUP_PATH=${arr[${#arr[@]}-1]}
 echo ${#arr[@]}" backups of catalog found"
-echo "Using "$backup_path
+echo "Using "$BACKUP_PATH
 
-#mongorestore --db radio --drop --collection radio_users $backup_path'/radio_users.bson'
-mongoimport --db radio --drop --collection radio_subjects $backup_path'/radio_subjects.json'
-mongoimport --db radio --drop --collection radio_classifications $backup_path'/radio_classifications.json'
-mongoimport --db radio --drop --collection radio_groups $backup_path'/radio_groups.json'
+#mongorestore --db radio --drop --collection radio_users $BACKUP_PATH'/radio_users.bson'
+
+mongoimport --db radio --drop --collection radio_subjects $BACKUP_PATH'/radio_subjects.json'
+mongoimport --db radio --drop --collection radio_classifications $BACKUP_PATH'/radio_classifications.json'
+mongoimport --db radio --drop --collection radio_groups $BACKUP_PATH'/radio_groups.json'
 
 # Restore the latest version of the catalog
-mongorestore --db radio --drop --collection catalog '/data/tabernacle/larry/RGZdata/rgz_mongo/radio/catalog.bson'
+mongorestore --db radio --drop --collection catalog $RGZ_PATH'/rgz_mongo/radio/catalog.bson'
 
 # Activate necessary Python environments
 
@@ -29,17 +32,17 @@ source /home/phys/willett/veastropy/bin/activate
 # Run consensus algorithm
 
 echo "Running consensus algorithm on new subjects"
-python2.7 rgz-analysis/python/consensus.py
+python2.7 $RGZ_PATH"/rgz-analysis/python/consensus.py"
 
 # Update catalog
 
 echo "Updating catalog"
-python2.7 rgz-analysis/RGZcatalogCode/RGZcatalog.py --consensus rgz-analysis/csv/consensus_rgz_first.csv
+python2.7 $RGZ_PATH"/rgz-analysis/RGZcatalogCode/RGZcatalog.py" --consensus $RGZ_PATH"/rgz-analysis/csv/consensus_rgz_first.csv"
 
 # Create static version (full flat catalog, removing peak/component data)
 
 echo "Outputting static catalog"
-python2.7 rgz-analysis/python/static_catalog.py
+python2.7 $RGZ_PATH"/rgz-analysis/python/static_catalog.py"
 
 # Close Python environment
 

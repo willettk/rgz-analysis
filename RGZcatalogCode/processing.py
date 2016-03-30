@@ -1,6 +1,6 @@
 import logging, time
 from astropy import coordinates as coord, units as u
-import mechanize, httplib, StringIO, ast
+import mechanize, httplib, StringIO
 from astroquery.exceptions import TimeoutError, TableParseError
 from astroquery.irsa import Irsa
 import numpy as np
@@ -193,7 +193,7 @@ def getRadio(data, fits_loc, consensusObject):
     
     #create list of trees, each containing a contour and its contents
     contourTrees = []
-    consensusBboxes = ast.literal_eval(consensusObject['bbox'])
+    consensusBboxes = consensusObject['bbox']
     for contour in data['contours']:
         for bbox in consensusBboxes:
             if fn.approx(contour[0]['bbox'][0], bbox[0]) and fn.approx(contour[0]['bbox'][1], bbox[1]) and \
