@@ -53,7 +53,7 @@ module unload python27
 # Export the Mongo files
 
 echo "Dumping Mongo files"
-mongodump --db radio --out rgz_mongo
+mongodump --db radio --out $RGZ_PATH'/rgz_mongo'
 
 # Kill the MongoDB process
 
