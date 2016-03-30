@@ -934,7 +934,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
         cmaster75 = cmaster[cmaster['consensus_level'] >= 0.75]
         cmaster75.to_csv('{0}/csv/{1}_75.csv'.format(rgz_dir,filestem),index=False)
         
-    print '\nCompleted consensus.'
+    print '\nCompleted consensus for {0}.'.format(survey)
 
     return None
 
