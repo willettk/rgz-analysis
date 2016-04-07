@@ -109,7 +109,7 @@ def determine_paths(paths):
 
 rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis',
                            '/data/tabernacle/larry/RGZdata/rgz-analysis'))
-data_path = determine_paths(('/Volumes/REISEPASS/','/data/extragal/willett'))
+data_path = determine_paths(('/Volumes/REISEPASS/','/Volumes/3TB/','/data/extragal/willett'))
 plot_path = "{0}/rgz/plots".format(data_path)
 
 # Find the consensus classification for a single subject
