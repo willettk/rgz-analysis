@@ -14,7 +14,7 @@ Once the database is downloaded, the pipeline can be run by:
 
 - run a ```mongod``` session on your local machine
 - run ```mongoimport``` on all three JSON collection files from RGZ. Example:
-- 
+
     ```mongoimport --db radio --drop --collection radio_subjects sanitized_radio_2016-01-01/radio_subjects.json```
 
     ```mongoimport --db radio --drop --collection radio_classifications sanitized_radio_2016-01-01/radio_classifications.json```
