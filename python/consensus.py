@@ -109,7 +109,7 @@ def determine_paths(paths):
 
 rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis',
                            '/data/tabernacle/larry/RGZdata/rgz-analysis'))
-data_path = determine_paths(('/Volumes/REISEPASS/','/Volumes/3TB/','/data/extragal/willett'))
+data_path = determine_paths(('/Volumes/REISEPASS','/Volumes/3TB','/data/extragal/willett'))
 plot_path = "{0}/rgz/plots".format(data_path)
 
 # Find the consensus classification for a single subject
@@ -595,7 +595,7 @@ def grab_image(subject,imgtype='standard'):
     # Import a JPG from the RGZ subjects. Try to find a local version before downloading over the web
     
     url = subject['location'][imgtype]
-    filename = "{0}/{1}/{2}".format(data_path,imgtype,url.split('/')[-1])
+    filename = "{0}/rgz/{1}/{2}".format(data_path,imgtype,url.split('/')[-1])
 
     if os.path.exists(filename):
         with open(filename) as f:
