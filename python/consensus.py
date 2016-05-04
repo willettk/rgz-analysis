@@ -718,7 +718,7 @@ def plot_consensus(consensus,figno=1,savefig=False):
     
     ax4.set_xlim([0, img_params[survey]['IMG_WIDTH_NEW']])
     ax4.set_ylim([img_params[survey]['IMG_HEIGHT_NEW'], 0])
-    ax4.set_title('uonsensus ({0:d}/{1:d} users)'.format(consensus['n_users'],consensus['n_total']))
+    ax4.set_title('Consensus ({0:d}/{1:d} users)'.format(consensus['n_users'],consensus['n_total']))
     
     ax4.set_aspect('equal')
     
