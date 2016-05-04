@@ -204,7 +204,7 @@ def plot_gs_volunteers():
     for gal in gs_gals:
         print gal
         c0 = consensus.checksum(gal,experts_only=False,excluded=experts)
-        consensus.plot_consensus(c0,save_fig = True)
+        consensus.plot_consensus(c0,savefig = True)
 
     return None
 

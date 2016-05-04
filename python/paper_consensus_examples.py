@@ -56,15 +56,15 @@ rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 
 # Plot 2 volunteer + 1 expert consensus for one galaxy, showing how they differ
 
-def plot_pce(zid = 'ARG000180p',save_fig = False):
+def plot_pce(zid = 'ARG000180p',savefig = False):
 
     cons1 = checksum(zid,no_anonymous=True,rank=1)
     cons2 = checksum(zid,no_anonymous=True,rank=2)
     cons3 = checksum(zid,experts_only=True,rank=1)
     
-    #consensus.plot_consensus(cons1,figno=4, save_fig=None)
-    #consensus.plot_consensus(cons2,figno=5, save_fig=None)
-    #consensus.plot_consensus(cons3,figno=6, save_fig=None)
+    #consensus.plot_consensus(cons1,figno=4, savefig=None)
+    #consensus.plot_consensus(cons2,figno=5, savefig=None)
+    #consensus.plot_consensus(cons3,figno=6, savefig=None)
 
     # Plot the infrared results
     
@@ -97,7 +97,7 @@ def plot_pce(zid = 'ARG000180p',save_fig = False):
     
     # Save hard copy of the figure
     # For some reason, LaTeX breaks when saving this as EPS. Save as PNG and then use ImageMagick to convert.
-    if save_fig:
+    if savefig:
         writepath = '/Users/willettk/Astronomy/Research/GalaxyZoo/radiogalaxyzoo/paper/figures'
         writefile = 'compare_consensus'
         fig.savefig('%s/%s.png' % (writepath,writefile))
