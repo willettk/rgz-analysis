@@ -22,7 +22,7 @@ def bending_examples():
                         angle_type = 'mps'
                     else:
                         angle_type = 'radio'
-                    ba.plot_one_double(zid,pathdict,save_fig=True,anglepath='{0:.0f}_{1:.0f}/'.format(a,a+10),dbltype=angle_type)
+                    ba.plot_one_double(zid,pathdict,savefig=True,anglepath='{0:.0f}_{1:.0f}/'.format(a,a+10),dbltype=angle_type)
                     count += 1
                 except ValueError as inst:
                     print "ValueError,",inst.args,zid
@@ -42,6 +42,6 @@ def triples():
         if len(bdata) > 0:
             for t in bdata:
                 zid = t['zooniverse_id']
-                ba.plot_one_triple(zid,pathdict,save_fig=True,anglepath='{0:.0f}_{1:.0f}/'.format(a,a+10))
+                ba.plot_one_triple(zid,pathdict,savefig=True,anglepath='{0:.0f}_{1:.0f}/'.format(a,a+10))
         print '{:d} triple galaxies with bending angle for angles between {:.0f} and {:.0f} deg'.format(len(bdata),a,a+10)
 

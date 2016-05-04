@@ -5,7 +5,7 @@ zids=("hymor01_ARG0003o4o", "hymor01_ARG0003o4w", "hymor01_ARG0003o4t", "hymor02
 for zid in zids:
     c = consensus.checksum(zid.split('_')[1])
     if c != None:
-        consensus.plot_consensus(c,save_fig=zid)
+        consensus.plot_consensus(c,savefig=zid)
     else:
         print "Couldn't do %s" % zid
     
