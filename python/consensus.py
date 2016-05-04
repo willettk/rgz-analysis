@@ -114,7 +114,7 @@ plot_path = "{0}/rgz/plots".format(data_path)
 
 # Find the consensus classification for a single subject
 
-def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_data=True):
+def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_data=True,use_weights=False):
 
     # Find the consensus for all users who have classified a particular galaxy
 
@@ -207,6 +207,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                 checksum = -99
 
             c['checksum'] = checksum
+            c['n_galaxies'] = n_galaxies
     
             # Insert checksum into dictionary with number of galaxies as the index
             if cdict.has_key(n_galaxies):
@@ -220,9 +221,24 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
     # Remove duplicates and classifications for no object
     clist = [c for lc,c in zip(listcount,clist_all) if lc and c['checksum'] != -99]
 
-    clen_diff = clen_start - len(clist)
+    # Add additional classifications if they're a reliable user to serve as a weight
+    
+    if use_weights:
+        print "Using weights"
+        weighted_c = []
+        for c in clist:
+            if c.has_key('user_name'):
+                weight = get_weight(c['user_name'])
+                if weight == 1:
+                    weighted_c.append(c)
+                    cdict[c['n_galaxies']].append(c['checksum'])
+        if len(weighted_c) > 0:
+            clist.extend(weighted_c)
+            print "{0} weighted users added to checksum".format(len(weighted_c))
 
+    print cdict
     '''
+    clen_diff = clen_start - len(clist)
     if clen_diff > 0:
         print '\nSkipping {0:d} duplicated classifications for {1}. {2:d} good classifications total.'.format(clen_diff,zid,len(clist))
     '''
@@ -761,8 +777,8 @@ def check_class(zid):
         try:
             name = c['user_name']
         except KeyError:
-            name = 'Anonymous'
-        print '{0:25} {1:25} {2}'.format(name,c['user_ip'],c['updated_at'])
+            name = '<<< Anonymous >>>'
+        print '{0:25} {1}'.format(name,c['updated_at'])
 
     return None
 
@@ -1035,6 +1051,88 @@ def update_gs_subjects(subjects):
             subjects.update({'zooniverse_id':gal.strip()},{'$set':{'goldstandard':True}})
 
     return None
+
+def get_unique_users():
+
+    print "Finding non-anonymous classifications"
+    non_anonymous = classifications.find({"user_name":{"$exists":True}})
+
+    print "Finding user list"
+    users = [n['user_name'] for n in non_anonymous]
+    unique_users = set(users)
+
+    return unique_users
+
+def weight_users(unique_users):
+
+    # Assign a weight to users based on their agreement with the gold standard sample as classified by RGZ science team
+    #
+    # More annoying to do now that there's no separate radio_users collection in the sanitized data. 
+
+    '''
+    update_gs_subjects(subjects)
+    update_experts(classifications)
+    '''
+
+    wf = open("{0}/csv/user_weights.csv".format(rgz_path),'w')
+    print >> wf,"user_name,gs_seen,agreed,weight"
+
+    # Find the science team answers once:
+    
+    print "Science team GS answers"
+    gs_zids = [s['zooniverse_id'] for s in subjects.find({"goldstandard":True})]
+    science_answers = {}
+
+    for zid in gs_zids:
+        s = checksum(zid,experts_only=True)
+        science_answers[zid] = s['answer'].keys()
+
+    gs_ids = [s['_id'] for s in subjects.find({"goldstandard":True})]
+
+    n = 100
+    print "Test loop of {0}".format(n)
+    for u in list(unique_users)[:n]:
+        agreed = 0
+        u_str = u.encode('utf8')
+        # Figure out if they've seen and classified the gold standard set
+        gs = classifications.find({'user_name':u,'subject_ids':{"$in":gs_ids}})
+        gs_count = gs.count()
+        if gs_count > 0:
+            # For each match, see if they agreed with the science team. Allows them to do it more than once. 
+            for g in gs:
+                zid = g['subjects'][0]['zooniverse_id']
+                their_answer = one_answer(zid,u)
+                their_checksums = their_answer['answer'].keys()
+                science_checksums = science_answers[zid]
+                if set(their_checksums) == set(science_checksums):
+                    agreed += 1
+            #print "{0:20} agreed with {1:3d}/{2:3d} gold standard subjects seen.".format(u_str,agreed,gs_count)
+        else:
+            #print "\t{0} did not classify any subjects in gold standard sample.".format(u_str)
+            pass
+        # Save output to CSV file
+        weight = 1 if gs_count > 5 and (agreed * 1./gs_count) > 0.50 else 0
+        print >> wf,"{0},{1},{2},{3}".format(u_str,gs_count,agreed,weight)
+
+    return None
+
+def get_weight(user_name):
+
+    rf = open("{0}/csv/user_weights.csv".format(rgz_path),'r')
+    for line in rf:
+        uname,gs_seen,agreed,weight = line.strip().split(',')
+        if uname.decode('utf8') == user_name:
+            rf.close()
+            try:
+                if int(weight) == 1:
+                    return 1
+                else:
+                    return 0
+            except:
+                return 0
+    
+    rf.close()
+    return 0
 
 if __name__ == "__main__":
 
