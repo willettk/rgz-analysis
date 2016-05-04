@@ -32,14 +32,13 @@ from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
 from scipy.linalg.basic import LinAlgError
 
 from astropy.io import fits
-from astropy import wcs
 
-import pymongo 
+import pymongo.ASCENDING
 from pymongo import MongoClient
 
 from PIL import Image
 
-# MongoDB parameters
+# Load data from MongoDB; collections are used in almost every module, so make them global variables.
 
 client = MongoClient('localhost', 27017)
 db = client['radio'] 
@@ -47,12 +46,7 @@ db = client['radio']
 subjects = db['radio_subjects'] # subjects = images
 classifications = db['radio_classifications']# classifications = classifications of each subject per user
 
-# Create index on subject IDs so that queries run faster
-
-subindex = classifications.create_index([('subject_ids',pymongo.ASCENDING)],name='subject_ids_1')
-
-# General variables for the RGZ sample
-# Need to add separate parameters for ATLAS vs FIRST, both IR and radio.
+# Parameters for the RGZ sample
 
 main_release_date = datetime.datetime(2013, 12, 17, 0, 0, 0, 0)
 
@@ -79,20 +73,7 @@ img_params = {
 
 bad_keys = ('finished_at','started_at','user_agent','lang','pending')
 
-expert_names = [u'42jkb', u'ivywong', u'stasmanian', u'klmasters', u'Kevin', u'akapinska', u'enno.middelberg', u'xDocR', u'vrooje', u'KWillett', u'DocR']
-
-# Paths
-
-paths = ('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis','/data/tabernacle/larry/RGZdata/rgz-analysis')
-for path in paths:
-    if os.path.exists(path):
-        rgz_dir = path
-if rgz_dir == None:
-    print "Unable to find the hardcoded local path to store outputs."
-
-pathdict = make_pathdict()
-
-# Paths v2 - from RGZcatalogCode
+# Local paths
 
 def determine_paths(paths):
 
@@ -112,7 +93,10 @@ rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-an
 data_path = determine_paths(('/Volumes/REISEPASS','/Volumes/3TB','/data/extragal/willett'))
 plot_path = "{0}/rgz/plots".format(data_path)
 
-# Find the consensus classification for a single subject
+pathdict = make_pathdict()
+
+########################################
+########################################
 
 def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_data=True,use_weights=False):
 
@@ -449,7 +433,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
         else:
 
             # Note: need to actually put a limit in if less than half of users selected IR counterpart.
-            # Right now it still IDs a sources even if only 1/10 users said it was there.
+            # Right now it still IDs a source even if only 1/10 users said it was there.
 
             for k,v in answer.iteritems():
                 if v['ind'] == xk:
@@ -603,6 +587,17 @@ def one_answer(zid,user_name):
                             answer[k]['ir_peak'] = (xpeak,ypeak)
         
     return cons
+
+def check_indices(index_names):
+
+    # See if additional indices have been created (improves run time drastically)
+    
+    indices = classifications.index_information()
+    for index_name in index_names:
+        if not indices.has_key("{0}_idx".format(index_name)):
+            subindex = classifications.create_index([(index_name,pymongo.ASCENDING)],name='{0}_idx'.format(index_name))
+
+    return None
 
 def grab_image(subject,imgtype='standard'):
 
@@ -769,7 +764,7 @@ def check_class(zid):
     # Print list of users who have classified a particular subject
 
     sid = subjects.find_one({'zooniverse_id':zid})['_id']
-    c_all = classifications.find({'subject_ids':sid,'user_name':{'$exists':True,'$nin':expert_names}}).sort([("updated_at", -1)])
+    c_all = classifications.find({'subject_ids':sid,'user_name':{'$exists':True,'$nin':expert_names()}}).sort([("updated_at", -1)])
     clist = list(c_all)
     for c in clist:
         try:
@@ -787,7 +782,7 @@ def rc(zid):
     plt.ion()
 
     check_class(zid)
-    cons = checksum(zid,excluded=expert_names,no_anonymous=True)
+    cons = checksum(zid,excluded=expert_names(),no_anonymous=True)
     plot_consensus(cons,figno=1,savefig=False)
     print '\nVolunteers: {0:d} sources'.format(len(cons['answer']))
 
@@ -798,6 +793,10 @@ def rc(zid):
     return None
 
 def run_sample(survey,update=True,subset=None,do_plot=False,use_weights=False):
+
+    # Make sure indices have been created in MongoDB to speed up consensus.
+    
+    check_indices(('subject_ids','updated_at','zooniverse_id'))
 
     # Run the consensus algorithm on the ATLAS subjects
 
@@ -822,7 +821,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,use_weights=False):
 
         pathd = {'expert100':'expert/expert_all_zooniverse_ids.txt',
                     'goldstandard':'goldstandard/gs_zids.txt'}
-        with open('{0}/{1}'.format(rgz_dir,pathd[subset]),'rb') as f:
+        with open('{0}/{1}'.format(rgz_path,pathd[subset]),'rb') as f:
             zooniverse_ids = [line.rstrip() for line in f]
 
         suffix = '_{0}'.format(subset)
@@ -836,7 +835,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,use_weights=False):
                 only run on subjects without an existing consensus.
             '''
 
-            master_json = '{0}/json/{1}.json'.format(rgz_dir,filestem)
+            master_json = '{0}/json/{1}.json'.format(rgz_path,filestem)
 
             with open(master_json,'r') as fm:
                 jmaster = json.load(fm)
@@ -871,9 +870,9 @@ def run_sample(survey,update=True,subset=None,do_plot=False,use_weights=False):
 
     # CSV header
     if update:
-        fc = open('{0}/csv/{1}{2}.csv'.format(rgz_dir,filestem,suffix),'a')
+        fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'a')
     else:
-        fc = open('{0}/csv/{1}{2}.csv'.format(rgz_dir,filestem,suffix),'w')
+        fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'w')
         fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
 
     for idx,zid in enumerate(zooniverse_ids):
@@ -932,7 +931,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,use_weights=False):
     else:
         jfinal = json_output
 
-    with open('{0}/json/{1}{2}.json'.format(rgz_dir,filestem,suffix),'w') as fj:
+    with open('{0}/json/{1}{2}.json'.format(rgz_path,filestem,suffix),'w') as fj:
         json.dump(jfinal,fj)
 
     # Make 75% version for full catalog
@@ -940,13 +939,13 @@ def run_sample(survey,update=True,subset=None,do_plot=False,use_weights=False):
     if subset is None:
         # JSON
         json75 = filter(lambda a: (a['n_users']/a['n_total']) >= 0.75, jfinal)
-        with open('{0}/json/{1}_75.json'.format(rgz_dir,filestem),'w') as fj:
+        with open('{0}/json/{1}_75.json'.format(rgz_path,filestem),'w') as fj:
             json.dump(json75,fj)
         # CSV
         import pandas as pd
-        cmaster = pd.read_csv('{0}/csv/{1}.csv'.format(rgz_dir,filestem))
+        cmaster = pd.read_csv('{0}/csv/{1}.csv'.format(rgz_path,filestem))
         cmaster75 = cmaster[cmaster['consensus_level'] >= 0.75]
-        cmaster75.to_csv('{0}/csv/{1}_75.csv'.format(rgz_dir,filestem),index=False)
+        cmaster75.to_csv('{0}/csv/{1}_75.csv'.format(rgz_path,filestem),index=False)
         
     print '\nCompleted consensus for {0}.'.format(survey)
 
@@ -958,12 +957,12 @@ def force_csv_update(survey='first',suffix=''):
     #
     filestem = 'consensus_rgz_{0}'.format(survey)
 
-    master_json = '{0}/json/{1}.json'.format(rgz_dir,filestem)
+    master_json = '{0}/json/{1}.json'.format(rgz_path,filestem)
     
     with open(master_json,'r') as fm:
         jmaster = json.load(fm)
     
-    fc = open('{0}/csv/{1}{2}.csv'.format(rgz_dir,filestem,suffix),'w')
+    fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'w')
     fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
 
     for gal in jmaster:
@@ -1005,9 +1004,10 @@ def bbox_unravel(bbox):
 
 def alphabet(i):
 
+    # Return a letter (or set of duplicated letters) of the alphabet for a given integer
+    
     from string import letters
 
-    # Return a letter (or set of duplicated letters) of the alphabet for a given integer
     # For i > 25, letters begin multiplying:    alphabet(0) = 'a' 
     #                                           alphabet(1) = 'b'
     #                                           ...
@@ -1031,7 +1031,7 @@ def update_experts():
     import dateutil.parser
 
     # Load saved data from the test runs
-    json_data = open('{0}/expert/expert_params.json'.format(rgz_dir)).read() 
+    json_data = open('{0}/expert/expert_params.json'.format(rgz_path)).read() 
     experts = json.loads(json_data)
 
     for ex in experts:
@@ -1040,17 +1040,29 @@ def update_experts():
 
     return None
 
+def expert_names():
+
+    # Return list of Zooniverse user names for the science team
+    
+    ex = [u'42jkb', u'ivywong', u'stasmanian', u'klmasters', u'Kevin', u'akapinska', u'enno.middelberg', u'xDocR', u'vrooje', u'KWillett', u'DocR']
+    
+    return ex
+
 def update_gs_subjects(): 
 
     # Add field to the Mongo database designating the gold standard subjects.
 
-    with open('{0}/goldstandard/gs_zids.txt'.format(rgz_dir),'r') as f:
+    with open('{0}/goldstandard/gs_zids.txt'.format(rgz_path),'r') as f:
         for gal in f:
             subjects.update({'zooniverse_id':gal.strip()},{'$set':{'goldstandard':True}})
 
     return None
 
 def get_unique_users():
+
+    # Index search
+    
+    check_indices(('user_name',))
 
     print "Finding non-anonymous classifications"
     non_anonymous = classifications.find({"user_name":{"$exists":True}})
@@ -1064,18 +1076,21 @@ def get_unique_users():
 def weight_users(unique_users):
 
     # Assign a weight to users based on their agreement with the gold standard sample as classified by RGZ science team
-    #
-    # More annoying to do now that there's no separate radio_users collection in the sanitized data. 
+    
+    # Check to make sure experts and gold standards are set
+    gs_count = classifications.find({'goldstandard':True}).count()
+    if gs_count < 1:
+        update_gs_subjects()
 
-    '''
-    update_gs_subjects(subjects)
-    update_experts(classifications)
-    '''
+    ex_count = classifications.find({'expert':True}).count()
+    if ex_count < 1:
+        update_experts()
 
+    # Data will be written to CSV file (could also be stored in Mongo)
     wf = open("{0}/csv/user_weights.csv".format(rgz_path),'w')
     print >> wf,"user_name,gs_seen,agreed,weight"
 
-    # Find the science team answers once:
+    # Find the science team answers:
     
     gs_zids = [s['zooniverse_id'] for s in subjects.find({"goldstandard":True})]
     science_answers = {}
@@ -1086,14 +1101,15 @@ def weight_users(unique_users):
 
     gs_ids = [s['_id'] for s in subjects.find({"goldstandard":True})]
 
+    # For each user, find the gold standard subjects they saw and whether it agreed with the experts
     for u in list(unique_users):
         agreed = 0
         u_str = u.encode('utf8')
-        # Figure out if they've seen and classified the gold standard set
+        # Gold standard classifications by the user
         gs = classifications.find({'user_name':u,'subject_ids':{"$in":gs_ids}})
         gs_count = gs.count()
         if gs_count > 0:
-            # For each match, see if they agreed with the science team. Allows them to do it more than once. 
+            # For each match, see if they agreed with the science team. This may have (against design) happened more than once. 
             for g in gs:
                 zid = g['subjects'][0]['zooniverse_id']
                 their_answer = one_answer(zid,u)
@@ -1105,7 +1121,17 @@ def weight_users(unique_users):
         else:
             #print "\t{0} did not classify any subjects in gold standard sample.".format(u_str)
             pass
+
         # Save output to CSV file
+        
+        # Minimum number of gold standard subjects user must have seen to determine agreement. 
+        # Set to prevent upweighting on low information (eg, agreeing with the science team
+        # if the user has only seen 1 gold standard object doesn't tell us as much than
+        # if they agreed 19/20 times).
+        min_gs = 5
+        # Minimum level of agreement with the science team (N_agree / N_seen)
+        min_agree = 0.50
+
         weight = 1 if gs_count > 5 and (agreed * 1./gs_count) > 0.50 else 0
         print >> wf,"{0},{1},{2},{3}".format(u_str,gs_count,agreed,weight)
 
@@ -1113,6 +1139,8 @@ def weight_users(unique_users):
 
 def get_weight(user_name):
 
+    # Compute the classification weight for a single user
+    
     rf = open("{0}/csv/user_weights.csv".format(rgz_path),'r')
     for line in rf:
         uname,gs_seen,agreed,weight = line.strip().split(',')
@@ -1136,7 +1164,7 @@ if __name__ == "__main__":
         print 'Starting at',datetime.datetime.now().strftime('%H:%M:%S.%f')
 
         for survey in ('atlas','first'):
-            run_sample(survey,update=False,do_plot=False,use_weights=True)
+            run_sample(survey,update=False,do_plot=False,use_weights=False)
 
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
     else:
