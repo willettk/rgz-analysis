@@ -224,7 +224,6 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
     # Add additional classifications if they're a reliable user to serve as a weight
     
     if use_weights:
-        print "Using weights"
         weighted_c = []
         for c in clist:
             if c.has_key('user_name'):
@@ -234,9 +233,8 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                     cdict[c['n_galaxies']].append(c['checksum'])
         if len(weighted_c) > 0:
             clist.extend(weighted_c)
-            print "{0} weighted users added to checksum".format(len(weighted_c))
+            #print "{0} weighted users added to checksum".format(len(weighted_c))
 
-    print cdict
     '''
     clen_diff = clen_start - len(clist)
     if clen_diff > 0:
@@ -720,7 +718,7 @@ def plot_consensus(consensus,figno=1,savefig=False):
     
     ax4.set_xlim([0, img_params[survey]['IMG_WIDTH_NEW']])
     ax4.set_ylim([img_params[survey]['IMG_HEIGHT_NEW'], 0])
-    ax4.set_title('Consensus ({0:d}/{1:d} users)'.format(consensus['n_users'],consensus['n_total']))
+    ax4.set_title('uonsensus ({0:d}/{1:d} users)'.format(consensus['n_users'],consensus['n_total']))
     
     ax4.set_aspect('equal')
     
@@ -799,7 +797,7 @@ def rc(zid):
 
     return None
 
-def run_sample(survey,update=True,subset=None,do_plot=False):
+def run_sample(survey,update=True,subset=None,do_plot=False,use_weights=False):
 
     # Run the consensus algorithm on the ATLAS subjects
 
@@ -884,7 +882,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False):
         if not idx % 100:
             print idx, datetime.datetime.now().strftime('%H:%M:%S.%f')
 
-        cons = checksum(zid,include_peak_data=do_plot)
+        cons = checksum(zid,include_peak_data=do_plot,use_weights=use_weights)
         if do_plot:
 
             plot_consensus(cons,savefig=True)
@@ -1026,7 +1024,7 @@ def alphabet(i):
     except TypeError:
         raise AssertionError("Index must be an integer")
 
-def update_experts(classifications): 
+def update_experts(): 
 
     # Add field to classifications made by members of the expert science team. Takes ~1 minute to run.
 
@@ -1042,7 +1040,7 @@ def update_experts(classifications):
 
     return None
 
-def update_gs_subjects(subjects): 
+def update_gs_subjects(): 
 
     # Add field to the Mongo database designating the gold standard subjects.
 
@@ -1079,7 +1077,6 @@ def weight_users(unique_users):
 
     # Find the science team answers once:
     
-    print "Science team GS answers"
     gs_zids = [s['zooniverse_id'] for s in subjects.find({"goldstandard":True})]
     science_answers = {}
 
@@ -1089,9 +1086,7 @@ def weight_users(unique_users):
 
     gs_ids = [s['_id'] for s in subjects.find({"goldstandard":True})]
 
-    n = 100
-    print "Test loop of {0}".format(n)
-    for u in list(unique_users)[:n]:
+    for u in list(unique_users):
         agreed = 0
         u_str = u.encode('utf8')
         # Figure out if they've seen and classified the gold standard set
@@ -1141,7 +1136,7 @@ if __name__ == "__main__":
         print 'Starting at',datetime.datetime.now().strftime('%H:%M:%S.%f')
 
         for survey in ('atlas','first'):
-            run_sample(survey,update=True,do_plot=False)
+            run_sample(survey,update=False,do_plot=False,use_weights=True)
 
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
     else:
