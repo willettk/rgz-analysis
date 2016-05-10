@@ -33,7 +33,7 @@ from scipy.linalg.basic import LinAlgError
 
 from astropy.io import fits
 
-import pymongo.ASCENDING
+from pymongo import ASCENDING
 from pymongo import MongoClient
 
 from PIL import Image
@@ -207,14 +207,16 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
     # Add additional classifications if they're a reliable user to serve as a weight
     
+    nw=10
     if use_weights:
         weighted_c = []
         for c in clist:
             if c.has_key('user_name'):
                 weight = get_weight(c['user_name'])
                 if weight == 1:
-                    weighted_c.append(c)
-                    cdict[c['n_galaxies']].append(c['checksum'])
+                    for i in range(nw):
+                        weighted_c.append(c)
+                        cdict[c['n_galaxies']].append(c['checksum'])
         if len(weighted_c) > 0:
             clist.extend(weighted_c)
             #print "{0} weighted users added to checksum".format(len(weighted_c))
@@ -595,7 +597,7 @@ def check_indices(index_names):
     indices = classifications.index_information()
     for index_name in index_names:
         if not indices.has_key("{0}_idx".format(index_name)):
-            subindex = classifications.create_index([(index_name,pymongo.ASCENDING)],name='{0}_idx'.format(index_name))
+            subindex = classifications.create_index([(index_name,ASCENDING)],name='{0}_idx'.format(index_name))
 
     return None
 
@@ -1164,7 +1166,7 @@ if __name__ == "__main__":
         print 'Starting at',datetime.datetime.now().strftime('%H:%M:%S.%f')
 
         for survey in ('atlas','first'):
-            run_sample(survey,update=False,do_plot=False,use_weights=False)
+            run_sample(survey,update=False,do_plot=False,use_weights=True)
 
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
     else:
