@@ -1021,7 +1021,7 @@ def alphabet(i):
     lowercase = letters[26:]
     
     try:
-        letter = letters[26:][i % 26]*int(i/26 + 1)
+        letter = lowercase[26:][i % 26]*int(i/26 + 1)
         return letter
     except TypeError:
         raise AssertionError("Index must be an integer")
