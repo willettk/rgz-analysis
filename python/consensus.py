@@ -98,7 +98,7 @@ pathdict = make_pathdict()
 ########################################
 ########################################
 
-def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_data=True,use_weights=False):
+def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_data=True,weights=0):
 
     # Find the consensus for all users who have classified a particular galaxy
 
@@ -207,14 +207,13 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
     # Add additional classifications if they're a reliable user to serve as a weight
     
-    nw=10
-    if use_weights:
+    if weights > 0:
         weighted_c = []
         for c in clist:
             if c.has_key('user_name'):
                 weight = get_weight(c['user_name'])
                 if weight == 1:
-                    for i in range(nw):
+                    for i in range(weights):
                         weighted_c.append(c)
                         cdict[c['n_galaxies']].append(c['checksum'])
         if len(weighted_c) > 0:
@@ -357,6 +356,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
         ir_Counter = Counter(coords_all)
         most_common_ir = ir_Counter.most_common(1)[0][0]
 
+        # Enough IR points to attempt a kernel density estimate
         if len(Counter(x_exists)) > 2 and len(Counter(y_exists)) > 2 and most_common_ir != (-99,-99):
 
             xmin = 1.
@@ -384,6 +384,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
             kp = kernel(positions)
 
+            # Check to see if there are NaNs in the kernel (usually a sign of co-linear points).
             if np.isnan(kp).sum() > 0:
                 acp = collinearity.collinear(x_exists,y_exists)
                 if len(acp) > 0:
@@ -395,6 +396,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                     if v['ind'] == xk:
                         answer[k]['ir'] = (np.mean(x_exists),np.mean(y_exists))
         
+            # Kernel is finite; should be able to get a position
             else:
 
                 Z = np.reshape(kp.T, X.shape)
@@ -432,6 +434,8 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                             answer[k]['peak_data'] = pd
                             answer[k]['ir_x'] = x_exists
                             answer[k]['ir_y'] = y_exists
+        
+        # Couldn't attempt a KDE; too few IR points in consensus
         else:
 
             # Note: need to actually put a limit in if less than half of users selected IR counterpart.
@@ -794,7 +798,7 @@ def rc(zid):
 
     return None
 
-def run_sample(survey,update=True,subset=None,do_plot=False,use_weights=False):
+def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
 
     # Make sure indices have been created in MongoDB to speed up consensus.
     
@@ -883,7 +887,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,use_weights=False):
         if not idx % 100:
             print idx, datetime.datetime.now().strftime('%H:%M:%S.%f')
 
-        cons = checksum(zid,include_peak_data=do_plot,use_weights=use_weights)
+        cons = checksum(zid,include_peak_data=do_plot,weights=10)
         if do_plot:
 
             plot_consensus(cons,savefig=True)
@@ -1166,7 +1170,7 @@ if __name__ == "__main__":
         print 'Starting at',datetime.datetime.now().strftime('%H:%M:%S.%f')
 
         for survey in ('atlas','first'):
-            run_sample(survey,update=False,do_plot=False,use_weights=True)
+            run_sample(survey,update=False,do_plot=False)
 
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
     else:
