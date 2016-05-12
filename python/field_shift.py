@@ -72,3 +72,5 @@ for m in range(imax):
     answers.append(answer)
 
 print sum(answers),len(answers),len(internal)
+
+# 10778 40270 177461
