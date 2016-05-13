@@ -1170,7 +1170,7 @@ if __name__ == "__main__":
         print 'Starting at',datetime.datetime.now().strftime('%H:%M:%S.%f')
 
         for survey in ('atlas','first'):
-            run_sample(survey,update=False,do_plot=False)
+            run_sample(survey,update=True,do_plot=False)
 
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
     else:
