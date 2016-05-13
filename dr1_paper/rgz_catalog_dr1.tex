@@ -91,6 +91,8 @@ A complete introduction and description of the project is provided in \citet[][h
 
 \subsection{FIRST + WISE}\label{ssec:sample_first}
 
+FIRST images are $3\times3$~arcmin. 
+
 \subsection{ATLAS + SWIRE}\label{ssec:sample_atlas}
 
 ATLAS images are $2\times2$~arcmin. 
@@ -111,6 +113,11 @@ Images in RGZ are presented for classification by independent users. The users a
 Once the consensus radio source(s) have been identified, the IR data is separately considered. For each classifier selecting the same combination of radio components as the overall consensus, the location of their corresponding \emph{counterpart} is marked. If the most common response for those radio components was to select ``No Infrared'', then the source is labeled as having no counterpart. If not, then the positions are then used in a 2-D Gaussian kernel-density estimator (KDE) to estimate the probability density function of the \emph{counterpart} in pixel coordinates. If there is enough data to calculate the KDE (requiring at least 3 non-colinear points), we evaluate the KDE on the same grid size as the original infrared image and apply a $10\times10$~pixel maximum filter to locate peaks. The location of the highest peak (corresponding to the maximum of the probability distribution function) is used for the position of the IR \emph{counterpart}. 
 
 {\note Users who marked ``No Infrared'': potentially very problematic, since (for example) 80\% of users could say there was no IR counterpart, and 20\% selected some image. That means we'd be going with the IR position of a strong minority. Should be changed ASAP.}
+
+\subsection{Duplicates in overlapping fields}
+
+Out of 40,270 entries in the consensus catalog (177,461 total) with overlapping areas in the $3^\prime\times3^\prime$ images, 10,778 have identical consensus answers. {\note Explore whether these are compact sources or have multiple radio components.} % field_shift.py - took a couple days to run on lucifer
+
 
 %-------------------------------------------------------------------------
 %                             CATALOG 
