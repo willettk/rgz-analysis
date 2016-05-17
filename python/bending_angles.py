@@ -352,7 +352,7 @@ def plothist(savefig=False):
 
     return None
 
-def plot_one_double(zooniverse_id,pathdict,figno=1,save_fig=False,anglepath='',dbltype='radio'):
+def plot_one_double(zooniverse_id,pathdict,figno=1,savefig=False,anglepath='',dbltype='radio'):
 
     # Make a four-panel plot of the consensus identification with marked bending angle and position angle for a double source
 
@@ -559,7 +559,7 @@ def plot_one_double(zooniverse_id,pathdict,figno=1,save_fig=False,anglepath='',d
     plt.subplots_adjust(wspace=0.02)
     
     # Save hard copy of the figure
-    if save_fig:
+    if savefig:
         fig.savefig('%s/bending_angles/plots/individual/%sba_%s.pdf' % (rgz_dir,anglepath,zooniverse_id))
         plt.close()
     else:
@@ -569,7 +569,7 @@ def plot_one_double(zooniverse_id,pathdict,figno=1,save_fig=False,anglepath='',d
     
     return None
 
-def plot_one_triple(zooniverse_id,pathdict,figno=1,save_fig=False,anglepath=''):
+def plot_one_triple(zooniverse_id,pathdict,figno=1,savefig=False,anglepath=''):
 
     # Make a four-panel plot of the consensus identification with marked bending angle and position angle for a triple source
 
@@ -758,7 +758,7 @@ def plot_one_triple(zooniverse_id,pathdict,figno=1,save_fig=False,anglepath=''):
     plt.subplots_adjust(wspace=0.02)
     
     # Save hard copy of the figure
-    if save_fig:
+    if savefig:
         fig.savefig('{0:}/bending_angles/plots/individual/triples/{1:}ba_{2:}.pdf'.format(rgz_dir,anglepath,zooniverse_id))
         plt.close()
     else:
@@ -793,12 +793,12 @@ def plot_some(n,random_selection=False):
     somedoubles = random.sample(doubles,n) if random_selection else doubles[:n]
 
     for dbl in somedoubles:
-        plot_one_double(dbl['zooniverse_id'],pathdict,save_fig=True)
+        plot_one_double(dbl['zooniverse_id'],pathdict,savefig=True)
 
     # Triples
     sometriples = get_triples()
     for triple in sometriples:
-        plot_one_triple(triple['zooniverse_id'],pathdict,save_fig=True)
+        plot_one_triple(triple['zooniverse_id'],pathdict,savefig=True)
 
     return None
 

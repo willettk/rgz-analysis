@@ -91,6 +91,8 @@ A complete introduction and description of the project is provided in \citet[][h
 
 \subsection{FIRST + WISE}\label{ssec:sample_first}
 
+FIRST images are $3\times3$~arcmin. 
+
 \subsection{ATLAS + SWIRE}\label{ssec:sample_atlas}
 
 ATLAS images are $2\times2$~arcmin. 
@@ -100,9 +102,22 @@ ATLAS images are $2\times2$~arcmin.
 %-------------------------------------------------------------------------
 \section{Data reduction}\label{sec:data_reduction}
 
-Images in RGZ are presented for classification by independent users. The users are treated as having equivalent levels of skill, with consensus accomplished by a simple majority vote. 
+The time period for the classifications from RGZ Data Release 1 (DR1) runs from 17 Dec 2013 (project launch) to 30 Mar 2016. In that time period, 11,214~registered users provided at least 1~classification of an image. A total of 97,807~images have been fully classified and retired from 1,692,415~classifications. Anonymous users (not registered with the system) provided 25.4\% of the total classifications. Among registered users, the distribution of effort was highly unequal, with a Gini coefficient of $G=0.887$. While indicating that the bulk of classifications are done by the most prolific classifiers, this is consistent with values measured for a wide range of citizen science projects \citep{cox15} and signals the presence of a dedicated user base. 
 
-Current statistics of the project.
+The limit for retiring an individual subject was initially set at 20~classifications for every image. After analyzing the early results of the project, it became clear that 20~thresholds oversampled the number of classifications needed to accurately characterize images with only a single radio component in the frame. In these cases, the only useful input by the users is identifying the location of the infrared counterpart (if present), for which we determine that typically only a few independent classifications suffice. To increase efficiency, the retirement threshold for images with only 1~radio component was lowered to 5 classifications on 20 Jun 2014, after $\sim750,000$~classifications were complete. 
+
+A \emph{source} is a single astronomical object identified by users, consisting of one or more discrete radio components along with a possible infrared counterpart. A \emph{component} refers to a discrete area of radio emission predefined by a cut above the noise level and represented as a set of enclosed contours in the RGZ interface. The \emph{counterpart} refers to the identification of the probable source of the radio emission as seen in infrared. 
+
+Images in RGZ are presented for classification by independent users. The users are treated as having equivalent levels of skill, with consensus accomplished by a simple majority vote. To find the consensus, the algorithm first separates classifications by the number of \emph{sources} $(N_\mathrm{s})$ identified in the image. For each classifier who identified some number of sources $N_{\mathrm{s},i}$, the most common combination of possible radio \emph{components} is selected and the number of votes recorded. The algorithm then compares the total number of votes for each $N_{\mathrm{s},i}$, with the overall highest value selected as the consensus identification. Ties between vote counts are broken {\note (possibly incorrectly)} by randomly selecting among combinations with the same number of votes.
+
+Once the consensus radio source(s) have been identified, the IR data is separately considered. For each classifier selecting the same combination of radio components as the overall consensus, the location of their corresponding \emph{counterpart} is marked. If the most common response for those radio components was to select ``No Infrared'', then the source is labeled as having no counterpart. If not, then the positions are then used in a 2-D Gaussian kernel-density estimator (KDE) to estimate the probability density function of the \emph{counterpart} in pixel coordinates. If there is enough data to calculate the KDE (requiring at least 3 non-colinear points), we evaluate the KDE on the same grid size as the original infrared image and apply a $10\times10$~pixel maximum filter to locate peaks. The location of the highest peak (corresponding to the maximum of the probability distribution function) is used for the position of the IR \emph{counterpart}. 
+
+{\note Users who marked ``No Infrared'': potentially very problematic, since (for example) 80\% of users could say there was no IR counterpart, and 20\% selected some image. That means we'd be going with the IR position of a strong minority. Should be changed ASAP.}
+
+\subsection{Duplicates in overlapping fields}
+
+Out of 40,270 entries in the consensus catalog (177,461 total) with overlapping areas in the $3^\prime\times3^\prime$ images, 10,778 have identical consensus answers. {\note Explore whether these are compact sources or have multiple radio components.} % field_shift.py - took a couple days to run on lucifer
+
 
 %-------------------------------------------------------------------------
 %                             CATALOG 

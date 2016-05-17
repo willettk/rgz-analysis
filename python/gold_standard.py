@@ -16,6 +16,8 @@ from matplotlib import pyplot as plt
 import scipy.stats.distributions as dist
 from collections import Counter
 
+from mpl_defaults import red,blue,green
+
 subjects,classifications = rgz.load_rgz_data()
 
 experts=("42jkb", "ivywong", "stasmanian", "klmasters", "Kevin", "akapinska", "enno.middelberg", "xDocR", "DocR", "vrooje", "KWillett")
@@ -204,28 +206,98 @@ def plot_gs_volunteers():
     for gal in gs_gals:
         print gal
         c0 = consensus.checksum(gal,experts_only=False,excluded=experts)
-        consensus.plot_consensus(c0,save_fig = True)
+        consensus.plot_consensus(c0,savefig = True)
 
     return None
 
-def count_finishers():
+def plot_gs_classified(savefig=True):
 
     # How many users have completed all galaxies in the gold standard set of 20 subjects? (raised by Ivy during Sep 2015 telecon)
 
-    counts = []
+    counts,labels = [],[]
     for gal in subjects.find({'goldstandard':True}):
         counts.append(gal['classification_count'])
-
-    print counts
+        labels.append(gal['zooniverse_id'])
 
     fig = plt.figure(figsize=(8,8))
     ax = fig.add_subplot(111)
 
-    arr = np.array(counts)
-    arr.sort()
+    N = len(counts)
+    rects1 = ax.bar(np.arange(N),counts,color=blue)
+    ax.set_xticks(np.arange(N))
+    ax.set_xticklabels(labels,rotation=45,fontsize=8)
+    ax.set_ylabel(r'$N_\mathrm{users}$',fontsize=20)
+    ax.set_title("Number of RGZ users who classified each gold standard subject")
 
-    ax.plot(arr)
-
-    plt.show()
+    if savefig:
+        plt.savefig('{0}/plots/gs_classified.png'.format(consensus.rgz_path))
+    else:
+        plt.show()
 
     return None
+
+def plot_agreement(savefig=True):
+
+    import pandas as pd
+    from matplotlib.colors import LogNorm
+    
+    data = pd.read_csv("{0}/csv/user_weights.csv".format(consensus.rgz_path))
+
+    agreement = np.nan_to_num(data['agreed'] * 1./data['gs_seen'])
+
+    fig,ax = plt.subplots(1,1)
+    h = ax.hist2d(data['gs_seen'],agreement,bins=25,range=[[0,50],[0,1]],cmap=plt.cm.viridis,norm=LogNorm())
+    fig.colorbar(h[3],ax=ax)
+
+    ax.set_xlabel('Number of gold standard subjects seen')
+    ax.set_ylabel(r'$N_\mathrm{agree}/N_\mathrm{seen}$',fontsize=20)
+
+    if savefig:
+        plt.savefig('{0}/plots/gs_agreement.png'.format(consensus.rgz_path))
+    else:
+        plt.show()
+
+    return None
+
+def weights():
+
+    import pandas as pd
+    data = pd.read_csv("{0}/csv/user_weights.csv".format(consensus.rgz_path))
+    agreement = np.nan_to_num(data['agreed'] * 1./data['gs_seen'])
+    weight_val = agreement * 10.
+
+    subindex = classifications.create_index([('user_name',consensus.pymongo.ASCENDING)],name='subject_ids_idx')
+
+    # What do I want to know?
+
+    # Per Larry's suggestion:
+    # As a function of N (minimum number of gold standard subjects seen), what's the distribution of user weights?
+
+    fig,axarr = plt.subplots(2,2,sharex=True,sharey=True,figsize=(8,8))
+    Narr = (3,5,10,20)
+
+    for N,ax in zip(Narr,axarr.ravel()):
+        wvlim = weight_val[np.array(data['gs_seen'] >= N)]
+        ax.hist(wvlim,bins=10,histtype='step',lw=3,color=blue)
+
+        ax.text(0,550,r'$N_\mathrm{wtd. users}=$'+'{0} ({1:.0f}%)'.format(len(wvlim),len(wvlim)*100./len(data)),ha='left')
+
+        # What are the number of weighted classifications?
+
+        wc = 0
+        for u in data[data['gs_seen'] >= N]['user_name']:
+            wc += classifications.find({'user_name':u}).count()
+        tc = classifications.count()
+
+        ax.text(0,500,r'$N_\mathrm{wtd. class}=$'+'{0:.0f}%'.format(wc * 100./tc),ha='left')
+        ax.text(0,450,r'$\langle w\rangle=$'+'{0:.1f}'.format(np.mean(wvlim),ha='left',color='red'))
+
+        ax.vlines(np.mean(wvlim),ax.get_ylim()[0],ax.get_ylim()[1],color='red',linestyles='--',lw=1)
+        ax.set_xlim(0,10)
+        ax.set_xlabel('Weight')
+        ax.set_ylabel(r'$N_\mathrm{users}$',fontsize=20)
+        ax.set_title(r'$N_\mathrm{seen}\geq$'+'{0}'.format(N))
+
+    fig.tight_layout()
+
+    plt.show()

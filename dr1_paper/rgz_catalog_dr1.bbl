@@ -1,4 +1,4 @@
-\begin{thebibliography}{3}
+\begin{thebibliography}{5}
 \expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
 
 \bibitem[{{Alam} {et~al}\mbox{.}(2015){Alam}, {Albareti}, {Allende Prieto},
@@ -15,7 +15,18 @@
   {Hollow}, \& {Whyte}}]{ban15}
 {Banfield} J.~K. {et~al.}, 2015, \mnras, 453, 2326
 
+\bibitem[{Cox {et~al}\mbox{.}(2015)Cox, Oh, Simmons, Lintott, Masters,
+  Greenhill, Graham, \& Holmes}]{cox15}
+Cox J., Oh E., Simmons B., Lintott C., Masters K., Greenhill A., Graham G.,
+  Holmes K., 2015, Computing in Science Engineering, 17, 28
+
 \bibitem[{{Cutri}(2013)}]{cut13}
 {Cutri} R.~M., 2013, VizieR Online Data Catalog, 2328
+
+\bibitem[{{Norris} {et~al}\mbox{.}(2006){Norris}, {Afonso}, {Appleton},
+  {Boyle}, {Ciliegi}, {Croom}, {Huynh}, {Jackson}, {Koekemoer}, {Lonsdale},
+  {Middelberg}, {Mobasher}, {Oliver}, {Polletta}, {Siana}, {Smail}, \&
+  {Voronkov}}]{nor06}
+{Norris} R.~P. {et~al.}, 2006, \aj, 132, 2409
 
 \end{thebibliography}
