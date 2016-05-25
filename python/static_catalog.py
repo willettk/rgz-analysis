@@ -1,13 +1,22 @@
 from pymongo import MongoClient
 
-# Make a version of the Radio Galaxy Zoo catalog that's perusable as a flat FITS or CSV table
+# Make a version of the Radio Galaxy Zoo catalog that's perusable as a flat FITS or CSV table. 
+# This is based on the output of:
+#   consensus.py
+#   RGZcatalog.py
 
-# Set the desired consensus level of the RGZ classifications (between 0 and 1)
+'''
+Set the desired consensus level of the RGZ classifications for this output (between 0 and 1).
+0 will include every source in the catalog; 1 would include only those with 100% consensus. 
+Default right now is (arbitrarily) set at 50%. One could also output the entire catalog
+with consensus_level = 0 and then perform cuts later in their analysis, since consensus_level
+is included as an output parameter.
+'''
 
 path = '.'
 consensus_level = 0.50
 
-# Define a filestem that will be appended to the new catalog output
+# Define a suffix that will be appended to the filename of the new catalog output.
 
 if consensus_level == 0.:
     suffix = '_full'
@@ -16,7 +25,7 @@ else:
 
 def load_data():
 
-    # Loads in the matched catalog from MongoDB
+    # Load the matched catalog from MongoDB
 
     client = MongoClient('localhost', 27017)
     db = client['radio'] 
@@ -27,7 +36,8 @@ def load_data():
 
 def flat_version(catalog,full=False):
 
-    # Write the MongoDB catalog to a CSV file including all fields with a fixed number of elements
+    # Write the MongoDB catalog to a CSV file, including only sources with a WISE and SDSS match.
+    # Include all data fields.
 
     filename = '%s/csv/static_rgz_flat%s.csv' % (path,suffix)
 
@@ -111,7 +121,7 @@ def flat_version(catalog,full=False):
 
 def selected_fields(catalog,full=False):
 
-    # Write a version of the MongoDB catalog to a CSV file. Includes only fields that are manually selected here. 
+    # Write the MongoDB catalog to a CSV file, but only include specific fields.
 
     filename = '%s/csv/static_rgz_selected%s.csv' % (path,suffix)
 
@@ -200,7 +210,7 @@ def selected_fields(catalog,full=False):
 
 if __name__ == "__main__":
 
-    # Run catalog from command line
+    # Make the static catalog from the command line
+
     catalog = load_data()
     flat_version(catalog)
-    #selected_fields(catalog)
