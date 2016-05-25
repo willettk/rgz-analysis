@@ -113,7 +113,7 @@ def determine_paths(paths):
 
 rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis',
                            '/data/tabernacle/larry/RGZdata/rgz-analysis'))
-data_path = determine_paths(('/Volumes/REISEPASS','/Volumes/3TB','/data/extragal/willett'))
+data_path = determine_paths(('/Volumes/REISEPASS','/Volumes/3TB','/data/extragal/willett','/data/tabernacle/larry/RGZdata/rawdata'))
 plot_path = "{0}/rgz/plots".format(data_path)
 
 pathdict = make_pathdict()
@@ -925,7 +925,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
         if not idx % 100:
             print idx, datetime.datetime.now().strftime('%H:%M:%S.%f')
 
-        cons = checksum(zid,include_peak_data=do_plot,weights=10)
+        cons = checksum(zid,include_peak_data=do_plot,weights=weights)
         if do_plot:
 
             plot_consensus(cons,savefig=True)

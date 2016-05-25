@@ -17,7 +17,7 @@ import processing as p #contains functions that process the data
 from updateConsensus import updateConsensus #replaces the current consensus collection with a specified csv
 
 rgz_path = fn.determinePaths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis', '/data/tabernacle/larry/RGZdata/rgz-analysis'))
-data_path = fn.determinePaths(('/Volumes/REISEPASS/', '/data/extragal/willett'))
+data_path = fn.determinePaths(('/Volumes/REISEPASS/', '/data/extragal/willett', '/data/tabernacle/larry/RGZdata/rawdata'))
 
 def RGZcatalog():
 

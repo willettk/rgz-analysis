@@ -11,7 +11,7 @@ def determinePaths(paths):
          found_path = True
          return path
    if found_path == False:
-      output = 'Unable to find the hardcoded local path: %s; exiting' % paths
+      output = 'Unable to find a hardcoded local path in %s; exiting' % str(paths)
       print output
       logging.warning(output)
       exit()
