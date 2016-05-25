@@ -1,10 +1,16 @@
-\begin{thebibliography}{5}
+\begin{thebibliography}{6}
 \expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
 
 \bibitem[{{Alam} {et~al}\mbox{.}(2015){Alam}, {Albareti}, {Allende Prieto},
   {Anders}, {Anderson}, {Anderton}, {Andrews}, {Armengaud}, {Aubourg},
   {Bailey}, \& et~al.}]{ala15}
 {Alam} S. {et~al.}, 2015, \apjs, 219, 12
+
+\bibitem[{Banfield {et~al}\mbox{.}(2016)Banfield, Andernach, Kapi{\'n}ska,
+  Rudnick, Hardcastle, Cotter, Vaughan, Jones, Heywood, Wing, Wong, Matorny,
+  Terentev, L{\'o}pez-S{\'a}nchez, Norris, Seymour, Shabala, \&
+  Willett}]{ban16}
+Banfield J. {et~al.}, 2016, \mnras
 
 \bibitem[{{Banfield} {et~al}\mbox{.}(2015){Banfield}, {Wong}, {Willett},
   {Norris}, {Rudnick}, {Shabala}, {Simmons}, {Snyder}, {Garon}, {Seymour},
