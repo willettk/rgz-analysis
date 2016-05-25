@@ -1,9 +1,14 @@
 require 'net/http'
 require 'json'
 
-# A Ruby script that returns information from Talk via the Zooniverse Ouroboros API
+# A Ruby script that returns information from Talk via the Zooniverse Ouroboros API. 
+# Results are saved as JSON files.
 #
-# Originally written by Michael Parrish; adapted by Kyle Willett
+# Originally written by Michael Parrish (Adler/Zooniverse); adapted by Kyle Willett (UMN)
+#
+# Example:
+#
+# >> ruby talk_search.rb
 
 def search(project: nil, text: nil, kind: 'subject', tags: { }, page: 1, results: [])
   raise 'no project specified' unless project
@@ -50,24 +55,21 @@ merger_collections = search project: 'galaxy_zoo', kind: 'collection', tags: { m
 pretty_mergers = search project: 'galaxy_zoo', text: 'pretty', tags: { merger: true }
 =end
 
-# Examples: queries for giant radio galaxies. Post-processed in Python (talk_search.py)
+########################################
+# Search parameters
+#
+# This is the query that's actually executed. Change the project and/or text if you want to do a different search.
+#
+########################################
 
 radio_giant = search project: 'radio', text: 'giant'
-radio_large = search project: 'radio', text: 'large'
-radio_huge = search project: 'radio', text: 'huge'
-radio_kpc = search project: 'radio', text: 'kpc'
-radio_mpc = search project: 'radio', text: 'Mpc'
-radio_overedge = search project: 'radio', text: 'overedge'
 
-# write the output to a file if you'd rather work with in another language
+# Write the output to a file if you'd rather analyze the results in another language (like Python)
+# Post-processed in Python (talk_search.py)
+
 File.open('talk_searches/radio_giant.json', 'w'){ |out| out.puts JSON.dump(radio_giant) }
-File.open('talk_searches/radio_large.json', 'w'){ |out| out.puts JSON.dump(radio_large) }
-File.open('talk_searches/radio_huge.json', 'w'){ |out| out.puts JSON.dump(radio_huge) }
-File.open('talk_searches/radio_kpc.json', 'w'){ |out| out.puts JSON.dump(radio_kpc) }
-File.open('talk_searches/radio_mpc.json', 'w'){ |out| out.puts JSON.dump(radio_mpc) }
-File.open('talk_searches/radio_overedge.json', 'w'){ |out| out.puts JSON.dump(radio_overedge) }
 
-# example response structure
+# Example response structure
 example_result = <<-JSON
 [
   {
