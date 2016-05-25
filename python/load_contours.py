@@ -16,7 +16,8 @@ def make_pathdict(local=False):
 
     paths = ['/Volumes/REISEPASS', \
              '/Volumes/3TB', \
-             '/data/extragal/willett']
+             '/data/extragal/willett', \
+	     '/data/tabernacle/larry/RGZdata/rawdata']
 
     data_found = False
     for dp in paths:
