@@ -12,9 +12,9 @@ from astropy.io import fits
 from astropy import wcs, coordinates as coord, units as u
 
 #custom modules for the RGZ catalog
-import catalogFunctions as fn #contains miscellaneous helper functions
+import catalog_functions as fn #contains miscellaneous helper functions
 import processing as p #contains functions that process the data
-from updateConsensus import updateConsensus #replaces the current consensus collection with a specified csv
+from update_consensus_csv import updateConsensus #replaces the current consensus collection with a specified csv
 
 rgz_path = fn.determinePaths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis', '/data/tabernacle/larry/RGZdata/rgz-analysis'))
 data_path = fn.determinePaths(('/Volumes/REISEPASS/', '/data/extragal/willett', '/data/tabernacle/larry/RGZdata/rawdata'))

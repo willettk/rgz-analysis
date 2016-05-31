@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 
 #custom modules for the RGZ catalog
-import catalogFunctions as fn #contains miscellaneous helper functions
-import contourNode as c #contains Node class
+import catalog_functions as fn #contains miscellaneous helper functions
+import contour_node as c #contains Node class
 
 def getWISE(entry):
     '''
@@ -23,7 +23,7 @@ def getWISE(entry):
     while(True): #in case of error, wait 10 sec and try again; give up after 5 tries
         tryCount += 1
         try:
-            table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3*u.arcsec)
+            table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3.*u.arcsec)
             break
         except (TimeoutError, TableParseError) as e:
             if tryCount>5:
@@ -107,14 +107,14 @@ def getSDSS(entry):
     ir_pos = coord.SkyCoord(entry['consensus']['IR_ra'], entry['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
     
     query = '''select objID, ra, dec, u, g, r, i, z, err_u, err_g, err_r, err_i, err_z from Galaxy
-               where (ra between %f-1.5/3600 and %f+1.5/3600) and (dec between %f-1.5/3600 and %f+1.5/3600)''' \
+               where (ra between %f-3./3600 and %f+3./3600) and (dec between %f-3./3600 and %f+3./3600)''' \
                % (ir_pos.ra.deg, ir_pos.ra.deg, ir_pos.dec.deg, ir_pos.dec.deg)
     df = SDSS_select(query)
     if len(df):
         numberMatches = 0
         matchPos = coord.SkyCoord(df.iloc[0]['ra'], df.iloc[0]['dec'], unit=(u.deg, u.deg))
         tempDist = ir_pos.separation(matchPos).arcsecond
-        if tempDist<3:
+        if tempDist<3.:
             match = df.iloc[0]
             dist = tempDist
             numberMatches += 1
@@ -125,7 +125,7 @@ def getSDSS(entry):
             for i in range(len(df)):
                 matchPos = coord.SkyCoord(df.iloc[i]['ra'], df.iloc[i]['dec'], unit=(u.deg, u.deg))
                 tempDist = ir_pos.separation(matchPos).arcsecond
-                if tempDist<3 and tempDist<dist:
+                if tempDist<3. and tempDist<dist:
                     match = df.iloc[i]
                     dist = tempDist
                     numberMatches += 1
