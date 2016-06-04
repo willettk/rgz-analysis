@@ -15,6 +15,7 @@ from astropy import wcs, coordinates as coord, units as u
 import catalog_functions as fn #contains miscellaneous helper functions
 import processing as p #contains functions that process the data
 from update_consensus_csv import updateConsensus #replaces the current consensus collection with a specified csv
+from find_duplicates import find_duplicates #finds and marks any radio components that are duplicated between sources
 
 rgz_path = fn.determinePaths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis', '/data/tabernacle/larry/RGZdata/rgz-analysis'))
 data_path = fn.determinePaths(('/Volumes/REISEPASS/', '/data/extragal/willett', '/data/tabernacle/larry/RGZdata/rawdata'))
@@ -57,7 +58,7 @@ def RGZcatalog():
             IDnumber = entry['catalog_id']
     else:
         IDnumber = 0
-
+    
     #start timer
     starttime = time.time()
 
@@ -67,25 +68,24 @@ def RGZcatalog():
     #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct galaxies
     #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple components
 
-        logging.info('Processing subject field %s', subject['zooniverse_id'])
-
+        #iterate through all consensus groupings (this makes it take a while)
         for consensusObject in consensus.find({'zooniverse_id':subject['zooniverse_id']}):
             
-            #do not process if this object in this field is already in the catalog
+            #do not process if this object in this source is already in the catalog
             process = True
             for i in catalog.find({'zooniverse_id':subject['zooniverse_id']}):
-                if i['consensus']['label'] == consensusObject['label']:
+                if i['consensus']['label'].lower() == consensusObject['label'].lower():
                     process = False
-
-            logging.info('Processing consensus object %s within subject field %s', consensusObject['label'].upper(), subject['zooniverse_id'])
             
             if process:
-
+                
+                logging.info('Processing consensus object %s within subject field %s', consensusObject['label'], subject['zooniverse_id'])
+                
                 count += 1
                 IDnumber += 1
 
                 #display which entry is being processed to see how far the program is
-                print IDnumber
+                print 'Processing entry %i (consensus %s in subject %s)' % (IDnumber, consensusObject['label'], subject['zooniverse_id'])
                 entry = {'catalog_id':IDnumber, 'zooniverse_id':str(subject['zooniverse_id'])}
                 
                 #find location of FITS file
@@ -203,6 +203,7 @@ def RGZcatalog():
                         raise
 
                 catalog.insert(entry)
+                find_duplicates(entry['zooniverse_id'])
                 logging.info('Entry %i added to catalog', IDnumber)
     
     #end timer
