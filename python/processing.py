@@ -27,8 +27,10 @@ def getWISE(entry):
             break
         except (TimeoutError, TableParseError) as e:
             if tryCount>5:
-                logging.exception('Too many AllWISE query errors')
-                raise
+                message = 'Unable to connect to IRSA; aborting'
+                logging.exception(message)
+                print message
+                raise fn.DataAccessError(message)
             logging.exception(e)
             time.sleep(10)
     
@@ -91,8 +93,10 @@ def SDSS_select(sql):
          break
       except (mechanize.URLError, mechanize.HTTPError, httplib.BadStatusLine) as e:
          if tryCount>5:
-            logging.exception('Too many SDSS query errors')
-            raise
+            message = 'Unable to connect to SkyServer; aborting'
+            logging.exception(message)
+            print message
+            raise DataAccessError(message)
          logging.exception(e)
          time.sleep(10)
    return pd.read_csv(file_like, skiprows=1)

@@ -158,8 +158,10 @@ def RGZcatalog():
                                 break
                             except (urllib2.URLError, urllib2.HTTPError) as e:
                                 if tryCount>5:
-                                    logging.exception('Too many radio query errors')
-                                    raise
+                                    message = 'Unable to connect to Amazon Web Services; aborting'
+                                    logging.exception(message)
+                                    print message
+                                    raise DataAccessError(message)
                                 logging.exception(e)
                                 time.sleep(10)
                         
@@ -230,6 +232,9 @@ if __name__ == '__main__':
             output = 'Cursor timed out; starting again.'
             logging.info(output)
             print output
+        except fn.DataAccessError as d:
+            #assuming this has been run from the make file, clean exit so that can shut everything down properly
+            break
         except BaseException as e:
             logging.exception(e)
             raise

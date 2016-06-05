@@ -3,6 +3,13 @@
 import logging, os
 import numpy as np
 
+class DataAccessError(Exception):
+   '''Raised when we can't access data on an external server for any reason.'''
+   def __init__(self, message='Unable to connect to server'):
+      self.message = message
+   def __str__(self):
+      return repr(self.message)
+
 def determinePaths(paths):
    '''Set up the local data paths. Currently works from UMN servers on tabernacle, plus Kyle Willett's laptop.'''
    found_path = False
