@@ -98,7 +98,7 @@ def RGZcatalog():
             
             if process:
                 
-                #logging.info('Processing consensus object %s within subject field %s', source['label'], subject['zooniverse_id'])
+                logging.info('Processing consensus object %s within subject field %s', source['label'], subject['zooniverse_id'])
                 
                 count += 1
                 IDnumber += 1
