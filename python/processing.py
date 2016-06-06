@@ -96,7 +96,7 @@ def SDSS_select(sql):
             message = 'Unable to connect to SkyServer; aborting'
             logging.exception(message)
             print message
-            raise DataAccessError(message)
+            raise fn.DataAccessError(message)
          logging.exception(e)
          time.sleep(10)
    return pd.read_csv(file_like, skiprows=1)

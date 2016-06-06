@@ -180,7 +180,7 @@ def RGZcatalog():
                                     message = 'Unable to connect to Amazon Web Services; aborting'
                                     logging.exception(message)
                                     print message
-                                    raise DataAccessError(message)
+                                    raise fn.DataAccessError(message)
                                 logging.exception(e)
                                 time.sleep(10)
                         
