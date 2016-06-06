@@ -8,7 +8,7 @@ from astropy.io import fits
 from astropy import wcs
 from scipy.special import erfinv
 from matplotlib import path
-import catalogFunctions as fn #contains custom functions
+import catalog_functions as fn #contains custom functions
 
 class Node(object):
     '''tree implementation for contours'''

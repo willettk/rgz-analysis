@@ -111,8 +111,8 @@ def determine_paths(paths):
         print paths
         return None
 
-rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis',
-                           '/data/tabernacle/larry/RGZdata/rgz-analysis'))
+rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis','/data/tabernacle/larry/RGZdata/rgz-analysis'))
+#rgz_path = '/home/garon/Documents/RGZdata/rgz-analysis'
 data_path = determine_paths(('/Volumes/REISEPASS','/Volumes/3TB','/data/extragal/willett','/data/tabernacle/larry/RGZdata/rawdata'))
 plot_path = "{0}/rgz/plots".format(data_path)
 
