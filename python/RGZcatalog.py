@@ -18,10 +18,15 @@ from update_consensus_csv import updateConsensus #replaces the current consensus
 from find_duplicates import find_duplicates #finds and marks any radio components that are duplicated between sources
 
 rgz_path = fn.determinePaths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis', '/data/tabernacle/larry/RGZdata/rgz-analysis'))
+#rgz_path = '/home/garon/Documents/RGZdata/rgz-analysis'
 data_path = fn.determinePaths(('/Volumes/REISEPASS/', '/data/extragal/willett', '/data/tabernacle/larry/RGZdata/rawdata'))
+in_progress_file = '%s/subject_in_progress.txt' % rgz_path
 
 def RGZcatalog():
-
+    
+    #start timer
+    starttime = time.time()
+    
     #begin logging even if not run from command line
     logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
@@ -32,17 +37,16 @@ def RGZcatalog():
     args = parser.parse_args()
     if args.consensus:
         updateConsensus(args.consensus)
-
+    
     #connect to database of subjects
     logging.info('Connecting to MongoDB')
     db = pymongo.MongoClient()['radio']
     subjects = db['radio_subjects']
     consensus = db['consensus']
     catalog = db['catalog'] #this is being populated by this program
-
     if catalog.count():
         logging.info('Catalog contains entries; appending')
-
+    
     #get dictionary for finding the path to FITS files and WCS headers
     with open('%s/first_fits.txt' % rgz_path) as f:
         lines = f.readlines()
@@ -58,38 +62,53 @@ def RGZcatalog():
             IDnumber = entry['catalog_id']
     else:
         IDnumber = 0
+
+    #find completed catalog entries so they can be skipped
+    consensus_set = set()
+    for source in consensus.find():
+        consensus_set.add(source['zooniverse_id'])
+    catalog_set = set()
+    for entry in catalog.find():
+        catalog_set.add(entry['zooniverse_id'])
+    to_be_completed = consensus_set.difference(catalog_set)
+    if os.path.exists(in_progress_file):
+        with open(in_progress_file, 'r') as f:
+            in_progress_zid = f.read()
+        to_be_completed.discard(in_progress_zid)
+    to_be_completed = list(to_be_completed)
     
-    #start timer
-    starttime = time.time()
-
-    #iterate through all subjects
-    for subject in subjects.find().batch_size(10):
+    #iterate through all noncompleted subjects
+    for subject in subjects.find({'zooniverse_id': {'$in':to_be_completed} }).batch_size(10):
     #for subject in subjects.find({'zooniverse_id': {'$in': ['ARG00000sl', 'ARG0003f9l']} }):
-    #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct galaxies
-    #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple components
-
-        #iterate through all consensus groupings (this makes it take a while)
-        for consensusObject in consensus.find({'zooniverse_id':subject['zooniverse_id']}):
+    #for subject in subjects.find({'zooniverse_id':'ARG00000sl'}): #sample subject with distinct sources
+    #for subject in subjects.find({'zooniverse_id':'ARG0003f9l'}): #sample subject with multiple-component source
+        
+        #mark subject as being in-progress
+        with open(in_progress_file, 'w') as f:
+            f.write(subject['zooniverse_id'])
+        
+        #iterate through all consensus groupings
+        for source in consensus.find({'zooniverse_id':subject['zooniverse_id']}):
             
             #do not process if this object in this source is already in the catalog
             process = True
             for i in catalog.find({'zooniverse_id':subject['zooniverse_id']}):
-                if i['consensus']['label'].lower() == consensusObject['label'].lower():
+                if i['consensus']['label'].lower() == source['label'].lower():
                     process = False
             
             if process:
                 
-                logging.info('Processing consensus object %s within subject field %s', consensusObject['label'], subject['zooniverse_id'])
+                #logging.info('Processing consensus object %s within subject field %s', source['label'], subject['zooniverse_id'])
                 
                 count += 1
                 IDnumber += 1
-
+                
                 #display which entry is being processed to see how far the program is
-                print 'Processing entry %i (consensus %s in subject %s)' % (IDnumber, consensusObject['label'], subject['zooniverse_id'])
+                print 'Processing entry %i (consensus %s in subject %s)' % (IDnumber, source['label'], subject['zooniverse_id'])
                 entry = {'catalog_id':IDnumber, 'zooniverse_id':str(subject['zooniverse_id'])}
                 
                 #find location of FITS file
-                fid = consensusObject['first_id']
+                fid = source['first_id']
                 if fid[0] == 'F':
                     fits_loc = pathdict[fid]
                     entry.update({'first_id':str(fid)})
@@ -99,7 +118,7 @@ def RGZcatalog():
                 
                 #find IR counterpart from consensus data, if present
                 w = wcs.WCS(fits.getheader(fits_loc, 0)) #gets pixel-to-WCS conversion from header
-                ir_coords = consensusObject['ir_peak']
+                ir_coords = source['ir_peak']
                 if ir_coords == (-99, -99):
                     ir_pos = None
                     wise_match = None
@@ -111,8 +130,8 @@ def RGZcatalog():
                     ir_peak = p2w( np.array([[ir_ra_pixels, ir_dec_pixels]]), 1)
                     ir_pos = coord.SkyCoord(ir_peak[0][0], ir_peak[0][1], unit=(u.deg,u.deg), frame='icrs')
 
-                entry.update({'consensus':{'n_users':consensusObject['n_users'], 'n_total':consensusObject['n_total'], \
-                                           'level':consensusObject['consensus_level'], 'label':consensusObject['label']}})
+                entry.update({'consensus':{'n_users':source['n_users'], 'n_total':source['n_total'], \
+                                           'level':source['consensus_level'], 'label':source['label']}})
                 if ir_pos:
                     logging.info('IR counterpart found')
                     entry['consensus'].update({'IR_ra':ir_pos.ra.deg, 'IR_dec':ir_pos.dec.deg})
@@ -169,7 +188,7 @@ def RGZcatalog():
                         uncompressed = gzip.GzipFile(fileobj=tempfile, mode='r').read() #unzips contents to str
                         data = json.loads(uncompressed) #loads JSON object
                     
-                    radio_data = p.getRadio(data, fits_loc, consensusObject)
+                    radio_data = p.getRadio(data, fits_loc, source)
                     entry.update(radio_data)
 
                     #calculate physical data using redshift
@@ -205,9 +224,12 @@ def RGZcatalog():
                         raise
 
                 catalog.insert(entry)
-                find_duplicates(entry['zooniverse_id'])
+                find_duplicates([entry['zooniverse_id']])
                 logging.info('Entry %i added to catalog', IDnumber)
-    
+        
+        with open(in_progress_file, 'w') as f:
+            f.write('')
+        
     #end timer
     endtime = time.time()
     output = 'Time taken: %f' % (endtime-starttime)
@@ -233,7 +255,7 @@ if __name__ == '__main__':
             logging.info(output)
             print output
         except fn.DataAccessError as d:
-            #assuming this has been run from the make file, clean exit so that can shut everything down properly
+            #assuming this has been run from the make file, clean exit so that it can shut everything down properly
             break
         except BaseException as e:
             logging.exception(e)
