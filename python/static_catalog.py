@@ -14,7 +14,7 @@ is included as an output parameter.
 '''
 
 path = '.'
-consensus_level = 0.50
+consensus_level = 0.0
 
 # Define a suffix that will be appended to the filename of the new catalog output.
 
@@ -42,18 +42,13 @@ def flat_version(catalog,full=False):
     filename = '%s/csv/static_rgz_flat%s.csv' % (path,suffix)
 
     # Check the WISE and SDSS fields to see if they had a match; if not, return null values
-
-    wise_default_dict = catalog.find_one({'AllWISE':{'$exists':True}})['AllWISE']
-    for k in wise_default_dict:
-        wise_default_dict[k] = -99.
-    wise_default_dict['designation'] = 'no_wise_match'
-    wise_default_dict['numberMatches'] = 0
-
-    sdss_default_dict = catalog.find_one({'SDSS':{'$exists':True},'SDSS.redshift':{'$exists':False}})['SDSS']
-    for k in sdss_default_dict:
-        sdss_default_dict[k] = -99.
-    sdss_default_dict['objID'] = 'no_sdss_match'
-    sdss_default_dict['numberMatches'] = 0
+    
+    wise_default_dict = {'designation':'no_wise_match', 'ra':-99, 'dec':-99, 'numberMatches':0, \
+                          'w1mpro':-99, 'w1sigmpro':-99, 'w1snr':-99, 'w2mpro':-99, 'w2sigmpro':-99, 'w2snr':-99, \
+                          'w3mpro':-99, 'w3sigmpro':-99, 'w3snr':-99, 'w4mpro':-99, 'w4sigmpro':-99, 'w4snr':-99}
+    
+    sdss_default_dict = {'objID':'no_sdss_match', 'ra':-99, 'dec':-99, 'numberMatches':0, 'redshift':-99, 'redshift_err':-99, 'redshift_type':-99, \
+                         'u':-99, 'g':-99, 'r':-99, 'i':-99, 'z':-99, 'u_err':-99, 'g_err':-99, 'r_err':-99, 'i_err':-99, 'z_err':-99}
 
     with open(filename,'w') as f:
 
@@ -61,14 +56,16 @@ def flat_version(catalog,full=False):
 
         header = ''
         header += 'catalog_id,zooniverse_id,first_id'
-        ex = catalog.find_one({'AllWISE':{'$exists':True},'SDSS':{'$exists':True}})
-        consensus_keys = [str(x) for x in ex['consensus'].keys() if x not in ('label')]
-        sdss_keys  = [str(x) for x in ex['SDSS'].keys()]
-        wise_keys  = [str(x) for x in ex['AllWISE'].keys()]
-        radio_keys = [str(x) for x in ex['radio'].keys() if x not in ('components','peaks')]
+        consensus_keys = ['IR_ra', 'IR_dec', 'level', 'n_users', 'n_total']
+        sdss_keys  = [str(x) for x in sdss_default_dict.keys()]
+        wise_keys  = [str(x) for x in wise_default_dict.keys()]
+        radio_keys = ['totalFlux', 'totalFluxErr', 'outermostLevel', 'numberComponents', 'numberPeaks', 'maxAngularExtent', 'totalSolidAngle', 'peakFluxErr', \
+                      'maxPhysicalExtent', 'totalCrossSection', 'totalLuminosity', 'totalLuminosityErr', 'peakLuminosityErr']
+        component_keys = ['fluxes', 'fluxErrs', 'peakRas', 'peakDecs']
+        peak_keys = ['fluxes', 'ras', 'decs']
 
-        arrs = (consensus_keys,radio_keys,wise_keys,sdss_keys)
-        labels = ('consensus','radio','wise','sdss')
+        arrs = (consensus_keys,radio_keys,component_keys,peak_keys,wise_keys,sdss_keys,duplicate_keys)
+        labels = ('consensus','radio','components','peaks','wise','sdss','overlapImages')
 
         for arr,label in zip(arrs,labels):
             arr.sort()
@@ -80,19 +77,47 @@ def flat_version(catalog,full=False):
         good_entry,bad_entry = 0,0
 
         # Select all matching galaxies (in this case, sources with optical and IR counterparts)
-        args = {'consensus.level':{"$gte":consensus_level},'SDSS':{'$exists':True},'AllWISE':{'$exists':True}}
+        args = {'consensus.level':{"$gte":consensus_level}}#,'SDSS':{'$exists':True},'AllWISE':{'$exists':True}}
 
         # Loop over number of RGZ catalog entries that match the consensus requirements
         for c in catalog.find(args):
             wiseval = c.setdefault('AllWISE',wise_default_dict)
             sdssval = c.setdefault('SDSS',sdss_default_dict)
-            sdssredshift = c['SDSS'].setdefault('redshift',-99.)
-            sdssredshifterr = c['SDSS'].setdefault('redshift_err',-99.)
-            sdssredshifttype = c['SDSS'].setdefault('redshift_type',-99)
+            #sdssredshift = c['SDSS'].setdefault('redshift',-99.)
+            #sdssredshifterr = c['SDSS'].setdefault('redshift_err',-99.)
+            #sdssredshifttype = c['SDSS'].setdefault('redshift_type',-99)
 
+            #determine component strings
+            component_strings = {'fluxes':'', 'fluxErrs':'', 'peakRas':'', 'peakDecs':''}
+            for component in c['radio']['components']:
+                component_strings['fluxes'] += '{0};'.format(component['flux'])
+                component_strings['fluxErrs'] += '{0};'.format(component['fluxErr'])
+                maxPeak = {'flux':-99, 'ra':-99, 'dec':-99}
+                for peak in c['radio']['peaks']:
+                    if component['raRange'][0] <= peak['ra'] <= component['raRange'][1] and \
+                       component['decRange'][0] <= peak['dec'] <= component['decRange'][1] and \
+                       peak['flux'] > maxPeak['flux']:
+                        maxPeak = peak.copy()
+                component_strings['peakRas'] += '{0};'.format(maxPeak['ra'])
+                component_strings['peakDecs'] += '{0};'.format(maxPeak['dec'])
+            for key in component_strings:
+                component_strings[key] = component_strings[key][:-1]
+            
+            #determine peak strings (only for single component sources)
+            peak_strings = {'fluxes':'', 'ras':'', 'decs':''}
+            if c['radio']['numberComponents'] == 1:
+                for peak in c['radio']['peaks']:
+                    peak_strings['fluxes'] += '{0};'.format(peak['flux'])
+                    peak_strings['ras'] += '{0};'.format(peak['ra'])
+                    peak_strings['decs'] += '{0};'.format(peak['dec'])
+                for key in peak_strings:
+                    peak_strings[key] = peak_strings[key][:-1]
+            else:
+                for key in peak_strings:
+                    peak_strings[key] = '-99'
+            
             try:
                 # Print all values to new row in file. 
-
                 row = ['RGZ_'+str(c['catalog_id']),c['zooniverse_id'],c['first_id']]
                 for entry in header.split(',')[3:]:
                     bothvar = entry.split('.')
@@ -101,16 +126,23 @@ def flat_version(catalog,full=False):
                     if bothvar[0] == 'sdss':
                         bothvar[0] = 'SDSS'
                     try:
-                        row.append(c[bothvar[0]][bothvar[1]])
+                        if bothvar[0] == 'components':
+                            row.append(component_strings[bothvar[1]])
+                        elif bothvar[0] == 'peaks':
+                            row.append(peak_strings[bothvar[1]])
+                        else:
+                            row.append(c[bothvar[0]][bothvar[1]])
                     except KeyError:
                         row.append(-99)
 
                 prow = [str(x) for x in row]
                 print >> f,','.join(prow)
                 good_entry += 1
+                
             except IndexError:
                 # If couldn't find one or more of the fields selected
                 bad_entry += 1
+                print "Unable to print {0}".format(c['catalog_id'])
 
         # Print summary to screen
 
@@ -119,6 +151,7 @@ def flat_version(catalog,full=False):
 
     return None
 
+#Hasn't been updated with new fields
 def selected_fields(catalog,full=False):
 
     # Write the MongoDB catalog to a CSV file, but only include specific fields.
