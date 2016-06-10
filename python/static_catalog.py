@@ -63,9 +63,10 @@ def flat_version(catalog,full=False):
                       'maxPhysicalExtent', 'totalCrossSection', 'totalLuminosity', 'totalLuminosityErr', 'peakLuminosityErr']
         component_keys = ['fluxes', 'fluxErrs', 'peakRas', 'peakDecs']
         peak_keys = ['fluxes', 'ras', 'decs']
+        duplicate_keys = ['shareComponents', 'matchComponents']
 
         arrs = (consensus_keys,radio_keys,component_keys,peak_keys,wise_keys,sdss_keys,duplicate_keys)
-        labels = ('consensus','radio','components','peaks','wise','sdss','overlapImages')
+        labels = ('consensus','radio','components','peaks','wise','sdss','duplicateSources')
 
         for arr,label in zip(arrs,labels):
             arr.sort()
@@ -76,18 +77,25 @@ def flat_version(catalog,full=False):
         print >> f,header
         good_entry,bad_entry = 0,0
 
+        # Find all duplicate sources for deletion
+        cids_for_removal = []
+        for c in catalog.find({'duplicateSources.exactDuplicate':{'$exists':True}}):
+            if c['catalog_id'] != min(c['duplicateSources']['exactDuplicate']):
+                cids_for_removal.append(c['catalog_id'])
+        
         # Select all matching galaxies (in this case, sources with optical and IR counterparts)
-        args = {'consensus.level':{"$gte":consensus_level}}#,'SDSS':{'$exists':True},'AllWISE':{'$exists':True}}
-
+        args = {'catalog_id':{'$nin':cids_for_removal},'consensus.level':{'$gte':consensus_level}}#,'SDSS':{'$exists':True},'AllWISE':{'$exists':True}}
+        
         # Loop over number of RGZ catalog entries that match the consensus requirements
         for c in catalog.find(args):
+            
             wiseval = c.setdefault('AllWISE',wise_default_dict)
             sdssval = c.setdefault('SDSS',sdss_default_dict)
             #sdssredshift = c['SDSS'].setdefault('redshift',-99.)
             #sdssredshifterr = c['SDSS'].setdefault('redshift_err',-99.)
             #sdssredshifttype = c['SDSS'].setdefault('redshift_type',-99)
 
-            #determine component strings
+            # Determine component strings
             component_strings = {'fluxes':'', 'fluxErrs':'', 'peakRas':'', 'peakDecs':''}
             for component in c['radio']['components']:
                 component_strings['fluxes'] += '{0};'.format(component['flux'])
@@ -103,7 +111,7 @@ def flat_version(catalog,full=False):
             for key in component_strings:
                 component_strings[key] = component_strings[key][:-1]
             
-            #determine peak strings (only for single component sources)
+            # Determine peak strings (only for single component sources)
             peak_strings = {'fluxes':'', 'ras':'', 'decs':''}
             if c['radio']['numberComponents'] == 1:
                 for peak in c['radio']['peaks']:
@@ -115,6 +123,16 @@ def flat_version(catalog,full=False):
             else:
                 for key in peak_strings:
                     peak_strings[key] = '-99'
+
+            # Determine overlap strings (when applicable)
+            duplicate_strings = {'shareComponents':'', 'matchComponents':''}
+            if 'duplicateSources' in c:
+                for key in duplicate_strings:
+                    if key in c['duplicateSources']:
+                        for cid in c['duplicateSources'][key]:
+                            if cid not in cids_for_removal:
+                                duplicate_strings[key] += '{0};'.format(cid)
+                        duplicate_strings[key] = duplicate_strings[key][:-1]
             
             try:
                 # Print all values to new row in file. 
@@ -130,6 +148,8 @@ def flat_version(catalog,full=False):
                             row.append(component_strings[bothvar[1]])
                         elif bothvar[0] == 'peaks':
                             row.append(peak_strings[bothvar[1]])
+                        elif bothvar[0] == 'duplicateSources':
+                            row.append(duplicate_strings[bothvar[1]])
                         else:
                             row.append(c[bothvar[0]][bothvar[1]])
                     except KeyError:

@@ -36,15 +36,15 @@ def component_match(c1_components,c2_components):
 
 def append_overlaps(c1,c2,field):
     
-    newField = 'overlapImages.{0}'.format(field)
+    newField = 'duplicateSources.{0}'.format(field)
     c1_cid = c1['catalog_id']
     c2_cid = c2['catalog_id']
     
-    if c1.has_key('overlapImages'):
-        #print "{0} has key 'overlapImages'".format(c1_cid)
-        if c1['overlapImages'].has_key(field):
+    if c1.has_key('duplicateSources'):
+        #print "{0} has key 'duplicateSources'".format(c1_cid)
+        if c1['duplicateSources'].has_key(field):
             #print "Has {0}".format(newField)
-            if c2_cid not in c1['overlapImages'][field]:
+            if c2_cid not in c1['duplicateSources'][field]:
                 #print "Appending {0} to list".format(c2_cid)
                 catalog.update({"catalog_id": c1_cid},{'$addToSet':{newField:c2_cid}})
         else:
@@ -52,14 +52,14 @@ def append_overlaps(c1,c2,field):
             catalog.update({"catalog_id": c1_cid},{'$set':{newField:[c2_cid,]}})
     
     else:
-        #print "{1} didn't have key 'overlapImages'; creating and appending {0} under '{2}'".format(c2_cid,c1_cid,field)
+        #print "{1} didn't have key 'duplicateSources'; creating and appending {0} under '{2}'".format(c2_cid,c1_cid,field)
         catalog.update({"catalog_id": c1_cid},{'$set':{newField:[c2_cid,]}})
     
-    if c2.has_key('overlapImages'):
-        #print "{0} has key 'overlapImages'".format(c2_cid)
-        if c2['overlapImages'].has_key(field):
+    if c2.has_key('duplicateSources'):
+        #print "{0} has key 'duplicateSources'".format(c2_cid)
+        if c2['duplicateSources'].has_key(field):
             #print "Has {0}".format(newField)
-            if c1_cid not in c2['overlapImages'][field]:
+            if c1_cid not in c2['duplicateSources'][field]:
                 #print "Appending {0} to list".format(c1_cid)
                 catalog.update({"catalog_id": c2_cid},{'$addToSet':{newField:c1_cid}})
         else:
@@ -67,7 +67,7 @@ def append_overlaps(c1,c2,field):
             catalog.update({"catalog_id": c2_cid},{'$set':{newField:[c1_cid,]}})
     
     else:
-        #print "{1} didn't have key 'overlapImages'; creating and appending {0} under '{2}'".format(c1_cid,c2_cid,field)
+        #print "{1} didn't have key 'duplicateSources'; creating and appending {0} under '{2}'".format(c1_cid,c2_cid,field)
         catalog.update({"catalog_id": c2_cid},{'$set':{newField:[c1_cid,]}})
     
     if field == 'exactDuplicate':
@@ -79,15 +79,15 @@ def append_overlaps(c1,c2,field):
 def check_symmetry(zid_list):
     returnVal = True
     for z in zid_list:
-        for subject1 in catalog.find({ 'zooniverse_id':z, 'overlapImages':{'$exists':True} }):
+        for subject1 in catalog.find({ 'zooniverse_id':z, 'duplicateSources':{'$exists':True} }):
             cid1 = subject1['catalog_id']
-            for duplicateCategory in subject1['overlapImages']:
-                for cid2 in subject1['overlapImages'][duplicateCategory]:
+            for duplicateCategory in subject1['duplicateSources']:
+                for cid2 in subject1['duplicateSources'][duplicateCategory]:
                     subject2 = catalog.find_one({'catalog_id':cid2})
-                    if ('overlapImages' not in subject2) or \
-                       (duplicateCategory not in subject2['overlapImages']) or \
-                       (cid1 not in subject2['overlapImages'][duplicateCategory]):
-                        print "{1}'s 'overlapImages.{2}' should contain {0} but doesn't".format(cid1, cid2, duplicateCategory)
+                    if ('duplicateSources' not in subject2) or \
+                       (duplicateCategory not in subject2['duplicateSources']) or \
+                       (cid1 not in subject2['duplicateSources'][duplicateCategory]):
+                        print "{1}'s 'duplicateSources.{2}' should contain {0} but doesn't".format(cid1, cid2, duplicateCategory)
                         returnVal = False
     #print "All symmetric"
     return returnVal
