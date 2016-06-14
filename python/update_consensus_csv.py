@@ -25,7 +25,7 @@ def updateConsensus(csvPath):
             row = {}
             for field in header:
                 try:
-                    entry_typed = literal_eval(entry[field])
+                    entry_typed = literal_eval(entry[field].lstrip())
                 except (ValueError,SyntaxError) as e:
                     entry_typed = str(entry[field])
                 row[field] = entry_typed

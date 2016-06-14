@@ -63,7 +63,7 @@ def flat_version(catalog,full=False):
                       'maxPhysicalExtent', 'totalCrossSection', 'totalLuminosity', 'totalLuminosityErr', 'peakLuminosityErr']
         component_keys = ['fluxes', 'fluxErrs', 'peakRas', 'peakDecs']
         peak_keys = ['fluxes', 'ras', 'decs']
-        duplicate_keys = ['shareComponents', 'matchComponents']
+        duplicate_keys = ['shareComponents', 'matchComponents', 'WISECATmismatch']
 
         arrs = (consensus_keys,radio_keys,component_keys,peak_keys,wise_keys,sdss_keys,duplicate_keys)
         labels = ('consensus','radio','components','peaks','wise','sdss','duplicateSources')
@@ -125,7 +125,7 @@ def flat_version(catalog,full=False):
                     peak_strings[key] = '-99'
 
             # Determine overlap strings (when applicable)
-            duplicate_strings = {'shareComponents':'', 'matchComponents':''}
+            duplicate_strings = {'shareComponents':'', 'matchComponents':'', 'WISECATmismatch'}
             if 'duplicateSources' in c:
                 for key in duplicate_strings:
                     if key in c['duplicateSources']:
@@ -133,6 +133,25 @@ def flat_version(catalog,full=False):
                             if cid not in cids_for_removal:
                                 duplicate_strings[key] += '{0};'.format(cid)
                         duplicate_strings[key] = duplicate_strings[key][:-1]
+            
+            # Combine sources (if duplicates exist)
+            if 'duplicateSources' in c and 'exactDuplicate' in c['duplicateSources']:
+                votes, total = 0, 0
+                ir_ra, ir_dec = 0., 0.
+                for d in catalog.find({'catalog_id': {'$in': c['duplicateSources']['exactDuplicate']}}):
+                    print d['consensus']
+                    votes += d['consensus']['n_users']
+                    total += d['consensus']['n_total']
+                    if 'IR_ra' in d['consensus']:
+                        ir_ra += d['consensus']['n_users'] * d['consensus']['IR_ra']
+                        ir_dec += d['consensus']['n_users'] * d['consensus']['IR_dec']
+                ir_ra /= votes
+                ir_dec /= votes
+                c['consensus']['n_users'] = votes
+                c['consensus']['n_total'] = total
+                if ir_ra:
+                    c['consensus']['IR_ra'] = ir_ra
+                    c['consensus']['IR_dec'] = ir_dec
             
             try:
                 # Print all values to new row in file. 
