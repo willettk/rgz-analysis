@@ -5,7 +5,6 @@ from astropy import coordinates as coord, units as u
 from astropy.io import fits
 from consensus import rgz_path,db
 import itertools
-from pprint import pprint
 
 #contains groups of subjects within 3' of each other, determined in TopCat
 internal = fits.getdata("{0}/fits/internal_matches.fits".format(rgz_path),1)
@@ -99,92 +98,94 @@ def check_symmetry(zooniverse_ids):
 def find_duplicates(zid):
     
     groupID = internal[internal['zooniverse_id']==zid]['GroupID'][0]
-    i = (internal['GroupID'] == groupID)
-    zooniverse_ids = internal[i]['zooniverse_id']
-    
-    for z1,z2 in itertools.combinations(zooniverse_ids,2):
+    if groupID > 0:
         
-        count1 = catalog.find({'zooniverse_id':z1}).count()
-        count2 = catalog.find({'zooniverse_id':z2}).count()
+        i = (internal['GroupID'] == groupID)
+        zooniverse_ids = internal[i]['zooniverse_id']
         
-        if (count1 > 0) & (count2 > 0):
-            for c1 in catalog.find({'zooniverse_id':z1}):
-                for c2 in catalog.find({'zooniverse_id':z2}):
-                    
-                    c1_id = c1['catalog_id']
-                    c2_id = c2['catalog_id']
-                    
-                    # Do any of the components match?
-                    
-                    anymatch = False
-                    for c1r,c2r in itertools.product(c1['radio']['components'],c2['radio']['components']):
-                        ll_match,ur_match = component_match(c1r,c2r)
-                        anymatch |= (ll_match and ur_match)
-                    
-                    if anymatch:
-                        print "Shared components found for GroupID {0}: images {1} and {2}".format(groupID,c1_id,c2_id)
-                        append_overlaps(c1,c2,'shareComponents')
-                        c1 = catalog.find_one({'catalog_id':c1_id})
-                        c2 = catalog.find_one({'catalog_id':c2_id})
-                    
-                    if c1['radio']['numberComponents'] == c2['radio']['numberComponents']:
+        for z1,z2 in itertools.combinations(zooniverse_ids,2):
+            
+            count1 = catalog.find({'zooniverse_id':z1}).count()
+            count2 = catalog.find({'zooniverse_id':z2}).count()
+            
+            if (count1 > 0) & (count2 > 0):
+                for c1 in catalog.find({'zooniverse_id':z1}):
+                    for c2 in catalog.find({'zooniverse_id':z2}):
                         
-                        # For all possible orders of the components in both lists, 
-                        # is there a set that matches within the tolerance?
+                        c1_id = c1['catalog_id']
+                        c2_id = c2['catalog_id']
                         
-                        c2permutations = itertools.permutations(c2['radio']['components'])
+                        # Do any of the components match?
                         
-                        # Loop over permutations of radio components
-                        for c2perm in c2permutations:
-                            results = True
+                        anymatch = False
+                        for c1r,c2r in itertools.product(c1['radio']['components'],c2['radio']['components']):
+                            ll_match,ur_match = component_match(c1r,c2r)
+                            anymatch |= (ll_match and ur_match)
+                        
+                        if anymatch:
+                            print "Shared components found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
+                            append_overlaps(c1,c2,'shareComponents')
+                            c1 = catalog.find_one({'catalog_id':c1_id})
+                            c2 = catalog.find_one({'catalog_id':c2_id})
+                        
+                        if c1['radio']['numberComponents'] == c2['radio']['numberComponents']:
                             
-                            # Loop over individual components in main and comparison images
-                            # and see if their positions match
+                            # For all possible orders of the components in both lists, 
+                            # is there a set that matches within the tolerance?
                             
-                            c1fix = c1['radio']['components']
-                            for c1_components,c2_components in zip(c1fix,c2perm):
+                            c2permutations = itertools.permutations(c2['radio']['components'])
+                            
+                            # Loop over permutations of radio components
+                            for c2perm in c2permutations:
+                                results = True
                                 
-                                ll_match,ur_match = component_match(c1_components,c2_components)
+                                # Loop over individual components in main and comparison images
+                                # and see if their positions match
                                 
-                                # If both corners match, then this is the same component in Image 1 and Image 2. 
-                                results &= (ll_match and ur_match)
-                                
-                            if results:
-                                print "Matching components found for GroupID {0}: images {1} and {2}".format(groupID,c1_id,c2_id)
-                                
-                                # Record the answer by appending it to the catalog entry
-                                # Only do it once, otherwise it'll repeat when the second one rolls around.
-                                
-                                append_overlaps(c1,c2,'matchComponents')
-                                c1 = catalog.find_one({'catalog_id':c1_id})
-                                c2 = catalog.find_one({'catalog_id':c2_id})
-                                
-                                #check if IR matches as well
-                                if 'IR_ra' not in c1['consensus'] and 'IR_ra' not in c2['consensus']:
-                                    print "Exact match (no WISE ID) found for GroupID {0}: images {1} and {2}".format(groupID,c1_id,c2_id)
-                                    append_overlaps(c1,c2,'exactDuplicate')
+                                c1fix = c1['radio']['components']
+                                for c1_components,c2_components in zip(c1fix,c2perm):
+                                    
+                                    ll_match,ur_match = component_match(c1_components,c2_components)
+                                    
+                                    # If both corners match, then this is the same component in Image 1 and Image 2. 
+                                    results &= (ll_match and ur_match)
+                                    
+                                if results:
+                                    print "Matching components found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
+                                    
+                                    # Record the answer by appending it to the catalog entry
+                                    # Only do it once, otherwise it'll repeat when the second one rolls around.
+                                    
+                                    append_overlaps(c1,c2,'matchComponents')
                                     c1 = catalog.find_one({'catalog_id':c1_id})
                                     c2 = catalog.find_one({'catalog_id':c2_id})
                                     
-                                elif 'IR_ra' in c1['consensus'] and 'IR_ra' in c2['consensus']:
-                                    if ('AllWISE' in c1 and 'AllWISE' in c2 and c1['AllWISE']==c2['AllWISE']) or \
-                                       ('AllWISE' not in c1 and 'AllWISE' not in c2):
-                                        print "Exact match (same WISE catalog ID) found for GroupID {0}: images {1} and {2}".format(groupID,c1_id,c2_id)
+                                    #check if IR matches as well
+                                    if 'IR_ra' not in c1['consensus'] and 'IR_ra' not in c2['consensus']:
+                                        print "Exact match (no WISE ID) found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
                                         append_overlaps(c1,c2,'exactDuplicate')
                                         c1 = catalog.find_one({'catalog_id':c1_id})
                                         c2 = catalog.find_one({'catalog_id':c2_id})
                                         
-                                    else:
-                                        c1_ir = coord.SkyCoord(c1['consensus']['IR_ra'], c1['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
-                                        c2_ir = coord.SkyCoord(c2['consensus']['IR_ra'], c2['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
-                                        if c1_ir.separation(c2_ir).arcsecond < 3.0:
-                                            print "WISE catalog mismatch found for GroupID {0}: images {1} and {2}".format(groupID,c1_id,c2_id)
-                                            append_overlaps(c1,c2,'WISECATmismatch')
+                                    elif 'IR_ra' in c1['consensus'] and 'IR_ra' in c2['consensus']:
+                                        if ('AllWISE' in c1 and 'AllWISE' in c2 and c1['AllWISE']==c2['AllWISE']) or \
+                                           ('AllWISE' not in c1 and 'AllWISE' not in c2):
+                                            print "Exact match (same WISE catalog ID) found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
+                                            append_overlaps(c1,c2,'exactDuplicate')
                                             c1 = catalog.find_one({'catalog_id':c1_id})
                                             c2 = catalog.find_one({'catalog_id':c2_id})
-                                
-                                # Don't need to bother doing the rest of the permutations if we find an answer
-                                break
-    
-    if not check_symmetry(zooniverse_ids):
-        raise RuntimeError("zooniverse_ids {0} aren't symmetric".format(str(zooniverse_ids)))
+                                            
+                                        else:
+                                            c1_ir = coord.SkyCoord(c1['consensus']['IR_ra'], c1['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
+                                            c2_ir = coord.SkyCoord(c2['consensus']['IR_ra'], c2['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
+                                            if c1_ir.separation(c2_ir).arcsecond < 3.0:
+                                                print "WISE catalog mismatch found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
+                                                append_overlaps(c1,c2,'WISECATmismatch')
+                                                c1 = catalog.find_one({'catalog_id':c1_id})
+                                                c2 = catalog.find_one({'catalog_id':c2_id})
+                                    
+                                    # Don't need to bother doing the rest of the permutations if we find an answer
+                                    break
+        
+        if not check_symmetry(zooniverse_ids):
+            raise RuntimeError("zooniverse_ids {0} aren't symmetric".format(str(zooniverse_ids)))

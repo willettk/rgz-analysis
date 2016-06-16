@@ -17,9 +17,10 @@ import processing as p #contains functions that process the data
 from update_consensus_csv import updateConsensus #replaces the current consensus collection with a specified csv
 from find_duplicates import find_duplicates #finds and marks any radio components that are duplicated between sources
 
-rgz_path = fn.determinePaths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis', '/data/tabernacle/larry/RGZdata/rgz-analysis'))
+from consensus import rgz_path, data_path, db
+#rgz_path = fn.determinePaths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis', '/data/tabernacle/larry/RGZdata/rgz-analysis'))
 #rgz_path = '/home/garon/Documents/RGZdata/rgz-analysis'
-data_path = fn.determinePaths(('/Volumes/REISEPASS/', '/data/extragal/willett', '/data/tabernacle/larry/RGZdata/rawdata'))
+#data_path = fn.determinePaths(('/Volumes/REISEPASS/', '/data/extragal/willett', '/data/tabernacle/larry/RGZdata/rawdata'))
 in_progress_file = '%s/subject_in_progress.txt' % rgz_path
 
 def RGZcatalog():
@@ -39,8 +40,8 @@ def RGZcatalog():
         updateConsensus(args.consensus)
     
     #connect to database of subjects
-    logging.info('Connecting to MongoDB')
-    db = pymongo.MongoClient()['radio']
+    #logging.info('Connecting to MongoDB')
+    #db = pymongo.MongoClient()['radio']
     subjects = db['radio_subjects']
     consensus = db['consensus']
     catalog = db['catalog'] #this is being populated by this program
@@ -191,6 +192,18 @@ def RGZcatalog():
                     radio_data = p.getRadio(data, fits_loc, source)
                     entry.update(radio_data)
 
+                    #create RGZ name from radio position
+                    radio_ra = radio_data['radio']['ra']
+                    ra_h = int(np.floor(radio_ra/15.))
+                    ra_m = int((radio_ra - ra_h*15)*4.)
+                    ra_s = (radio_ra - ra_h*15 - ra_m/4.)*240.
+                    radio_dec = radio_data['radio']['dec']
+                    dec_d = int(radio_dec)
+                    dec_m = int((radio_dec - dec_d)*60)
+                    dec_s = int((radio_dec - dec_d - dec_m/60.)*3600)
+                    name = 'RGZJ{:0=2}{:0=2}{:0=4.1f}{:0=+3}{:0=2}{:0=2}'.format(ra_h, ra_m, ra_s, dec_d, dec_m, dec_s)
+                    entry.update({'rgz_name':name})
+
                     #calculate physical data using redshift
                     if sdss_match and 'redshift' in sdss_match:
                         z = sdss_match['redshift']
@@ -222,9 +235,9 @@ def RGZcatalog():
                     else:
                         logging.exception(e)
                         raise
-
+                
                 catalog.insert(entry)
-                find_duplicates([entry['zooniverse_id']])
+                find_duplicates(entry['zooniverse_id'])
                 logging.info('Entry %i added to catalog', IDnumber)
         
         with open(in_progress_file, 'w') as f:

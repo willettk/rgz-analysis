@@ -54,13 +54,12 @@ def flat_version(catalog,full=False):
 
         # CSV file header
 
-        header = ''
-        header += 'catalog_id,zooniverse_id,first_id'
+        header = 'catalog_id,rgz_name,zooniverse_id,first_id'
         consensus_keys = ['IR_ra', 'IR_dec', 'level', 'n_users', 'n_total']
         sdss_keys  = [str(x) for x in sdss_default_dict.keys()]
         wise_keys  = [str(x) for x in wise_default_dict.keys()]
         radio_keys = ['totalFlux', 'totalFluxErr', 'outermostLevel', 'numberComponents', 'numberPeaks', 'maxAngularExtent', 'totalSolidAngle', 'peakFluxErr', \
-                      'maxPhysicalExtent', 'totalCrossSection', 'totalLuminosity', 'totalLuminosityErr', 'peakLuminosityErr']
+                      'maxPhysicalExtent', 'totalCrossSection', 'totalLuminosity', 'totalLuminosityErr', 'peakLuminosityErr', 'ra', 'dec']
         component_keys = ['fluxes', 'fluxErrs', 'peakRas', 'peakDecs']
         peak_keys = ['fluxes', 'ras', 'decs']
         duplicate_keys = ['shareComponents', 'matchComponents', 'WISECATmismatch']
@@ -125,7 +124,7 @@ def flat_version(catalog,full=False):
                     peak_strings[key] = '-99'
 
             # Determine overlap strings (when applicable)
-            duplicate_strings = {'shareComponents':'', 'matchComponents':'', 'WISECATmismatch'}
+            duplicate_strings = {'shareComponents':'', 'matchComponents':'', 'WISECATmismatch':''}
             if 'duplicateSources' in c:
                 for key in duplicate_strings:
                     if key in c['duplicateSources']:
@@ -139,7 +138,6 @@ def flat_version(catalog,full=False):
                 votes, total = 0, 0
                 ir_ra, ir_dec = 0., 0.
                 for d in catalog.find({'catalog_id': {'$in': c['duplicateSources']['exactDuplicate']}}):
-                    print d['consensus']
                     votes += d['consensus']['n_users']
                     total += d['consensus']['n_total']
                     if 'IR_ra' in d['consensus']:
@@ -155,8 +153,8 @@ def flat_version(catalog,full=False):
             
             try:
                 # Print all values to new row in file. 
-                row = ['RGZ_'+str(c['catalog_id']),c['zooniverse_id'],c['first_id']]
-                for entry in header.split(',')[3:]:
+                row = [c['catalog_id'],c['rgz_name'],c['zooniverse_id'],c['first_id']]
+                for entry in header.split(',')[4:]:
                     bothvar = entry.split('.')
                     if bothvar[0] == 'wise':
                         bothvar[0] = 'AllWISE'

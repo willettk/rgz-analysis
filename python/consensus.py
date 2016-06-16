@@ -58,7 +58,8 @@ client = MongoClient('localhost', 27017)
 db = client['radio'] 
 
 subjects = db['radio_subjects'] # subjects = images
-classifications = db['radio_classifications']# classifications = classifications of each subject per user
+classifications = db['radio_classifications'] # classifications = classifications of each subject per user
+consensus = db['consensus'] # consensus = output of this program
 
 # Parameters for the RGZ project
 
@@ -961,6 +962,23 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
                             len(ans['xmax']),alphabet(ans['ind']),bbox_unravel(ans['bbox']),ir_peak
                             )
                     )
+                except KeyError:
+                    print zid
+                    print cons
+
+            # Mongo collection
+
+            for ans in cons['answer'].itervalues():
+                try:
+                    ir_peak = ans['ir_peak']
+                except KeyError:
+                    ir_peak = ans['ir'] if ans.has_key('ir') else (-99,-99)
+                
+                try:
+                    new_con = {'zooniverse_id':cons['zid'], '{0}_id'.format(survey):cons['source'], 'n_users':cons['n_users'], \
+                               'n_total':cons['n_total'], 'consensus_level':cons['consensus_level'], 'n_radio':len(ans['xmax']), \
+                               'label':alphabet(ans['ind']), 'bbox':bbox_unravel(ans['bbox']), 'ir_peak':ir_peak}
+                    consensus.insert(new_con)
                 except KeyError:
                     print zid
                     print cons

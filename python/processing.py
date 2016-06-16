@@ -258,9 +258,24 @@ def getRadio(data, fits_loc, consensusObject):
         for peak in tree.peaks:
             peakList.append(peak)
     peakFluxErrmJy = contourTrees[0].sigmamJy
+
+    #find center of radio source
+    raMin, raMax, decMin, decMax = np.inf, 0, np.inf, 0
+    for comp in components:
+        if comp['raRange'][0] < raMin:
+            raMin = comp['raRange'][0]
+        if comp['raRange'][1] > raMax:
+            raMax = comp['raRange'][1]
+        if comp['decRange'][0] < decMin:
+            decMin = comp['decRange'][0]
+        if comp['decRange'][1] > decMax:
+            decMax = comp['decRange'][1]
+    meanRa = (raMax+raMin)/2.
+    meanDec = (decMax+decMin)/2.
     
     radio_data = {'radio':{'totalFlux':totalFluxmJy, 'totalFluxErr':totalFluxErrmJy, 'outermostLevel':data['contours'][0][0]['level']*1000, \
                            'numberComponents':len(contourTrees), 'numberPeaks':len(peakList), 'maxAngularExtent':maxAngularExtentArcmin, \
-                           'totalSolidAngle':totalSolidAngleArcsec2, 'peakFluxErr':peakFluxErrmJy, 'peaks':peakList, 'components':components}}
+                           'totalSolidAngle':totalSolidAngleArcsec2, 'peakFluxErr':peakFluxErrmJy, 'peaks':peakList, 'components':components, \
+                           'ra':meanRa, 'dec':meanDec}}
     
     return radio_data
