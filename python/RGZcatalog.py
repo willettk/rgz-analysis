@@ -47,6 +47,8 @@ def RGZcatalog():
     catalog = db['catalog'] #this is being populated by this program
     if catalog.count():
         logging.info('Catalog contains entries; appending')
+    else:
+        catalog.create_index([('catalog_id', 1)])
     
     #get dictionary for finding the path to FITS files and WCS headers
     with open('%s/first_fits.txt' % rgz_path) as f:
@@ -131,11 +133,11 @@ def RGZcatalog():
                     ir_peak = p2w( np.array([[ir_ra_pixels, ir_dec_pixels]]), 1)
                     ir_pos = coord.SkyCoord(ir_peak[0][0], ir_peak[0][1], unit=(u.deg,u.deg), frame='icrs')
 
-                entry.update({'consensus':{'n_users':source['n_users'], 'n_total':source['n_total'], \
+                entry.update({'consensus':{'n_votes':source['n_votes'], 'n_total':source['n_total'], \
                                            'level':source['consensus_level'], 'label':source['label']}})
                 if ir_pos:
                     logging.info('IR counterpart found')
-                    entry['consensus'].update({'IR_ra':ir_pos.ra.deg, 'IR_dec':ir_pos.dec.deg})
+                    entry['consensus'].update({'WISE_pos_ra':ir_pos.ra.deg, 'WISE_pos_dec':ir_pos.dec.deg})
                 else:
                     logging.info('No IR counterpart found')
 

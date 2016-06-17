@@ -297,7 +297,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
     cons['survey'] = survey
     ir_x,ir_y = {},{}
     cons['answer'] = {}
-    cons['n_users'] = maxval
+    cons['n_votes'] = maxval
     cons['n_total'] = len(clist)
 
     # This will be where we store the consensus parameters
@@ -583,7 +583,7 @@ def one_answer(zid,user_name):
     cons = {}
     cons['zid'] = zid
     cons['answer'] = {}
-    cons['n_users'] = 1
+    cons['n_votes'] = 1
     cons['n_total'] = 1
     answer = cons['answer']
 
@@ -760,7 +760,7 @@ def plot_consensus(consensus,figno=1,savefig=False):
     
     ax4.set_xlim([0, img_params[survey]['IMG_WIDTH_NEW']])
     ax4.set_ylim([img_params[survey]['IMG_HEIGHT_NEW'], 0])
-    ax4.set_title('Consensus ({0:d}/{1:d} users)'.format(consensus['n_users'],consensus['n_total']))
+    ax4.set_title('Consensus ({0:d}/{1:d} users)'.format(consensus['n_votes'],consensus['n_total']))
     
     ax4.set_aspect('equal')
     
@@ -918,7 +918,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
         fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'a')
     else:
         fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'w')
-        fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
+        fc.write('zooniverse_id,{0}_id,n_votes,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
 
     for idx,zid in enumerate(zooniverse_ids):
     
@@ -935,7 +935,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
 
         if cons is not None:
 
-            cons['consensus_level'] = (cons['n_users']/cons['n_total'])
+            cons['consensus_level'] = (cons['n_votes']/cons['n_total'])
 
             # JSON
 
@@ -958,7 +958,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
                 try:
                     fc.write('{0},{1},{2:4d},{3:4d},{4:.3f},{5:2d},{6},"{7}","{8}"\n'.format( 
                             cons['zid'],cons['source'],
-                            cons['n_users'],cons['n_total'],cons['consensus_level'],
+                            cons['n_votes'],cons['n_total'],cons['consensus_level'],
                             len(ans['xmax']),alphabet(ans['ind']),bbox_unravel(ans['bbox']),ir_peak
                             )
                     )
@@ -975,7 +975,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
                     ir_peak = ans['ir'] if ans.has_key('ir') else (-99,-99)
                 
                 try:
-                    new_con = {'zooniverse_id':cons['zid'], '{0}_id'.format(survey):cons['source'], 'n_users':cons['n_users'], \
+                    new_con = {'zooniverse_id':cons['zid'], '{0}_id'.format(survey):cons['source'], 'n_votes':cons['n_votes'], \
                                'n_total':cons['n_total'], 'consensus_level':cons['consensus_level'], 'n_radio':len(ans['xmax']), \
                                'label':alphabet(ans['ind']), 'bbox':bbox_unravel(ans['bbox']), 'ir_peak':ir_peak}
                     consensus.insert(new_con)
@@ -1000,7 +1000,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
 
     if subset is None:
         # JSON
-        json75 = filter(lambda a: (a['n_users']/a['n_total']) >= 0.75, jfinal)
+        json75 = filter(lambda a: (a['n_votes']/a['n_total']) >= 0.75, jfinal)
         with open('{0}/json/{1}_75.json'.format(rgz_path,filestem),'w') as fj:
             json.dump(json75,fj)
         # CSV
@@ -1025,7 +1025,7 @@ def force_csv_update(survey='first',suffix=''):
         jmaster = json.load(fm)
     
     fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'w')
-    fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
+    fc.write('zooniverse_id,{0}_id,n_votes,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
 
     for gal in jmaster:
         for ans in gal['answer'].itervalues():
@@ -1038,9 +1038,9 @@ def force_csv_update(survey='first',suffix=''):
             fc.write('{0},{1},{2:4d},{3:4d},{4:.3f},{5:2d},{6},"{7}","{8}"\n'.format(
                     gal['zid'],
                     gal['source'],
-                    gal['n_users'],
+                    gal['n_votes'],
                     gal['n_total'],
-                    gal['n_users'] * 1./gal['n_total'],
+                    gal['n_votes'] * 1./gal['n_total'],
                     len(ans['xmax']),
                     alphabet(ans['ind']),
                     bbox_unravel(ans['bbox']),

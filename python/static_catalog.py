@@ -43,11 +43,11 @@ def flat_version(catalog,full=False):
 
     # Check the WISE and SDSS fields to see if they had a match; if not, return null values
     
-    wise_default_dict = {'designation':'no_wise_match', 'ra':-99, 'dec':-99, 'numberMatches':0, \
+    wise_default_dict = {'designation':-99, 'ra':-99, 'dec':-99, 'numberMatches':0, \
                           'w1mpro':-99, 'w1sigmpro':-99, 'w1snr':-99, 'w2mpro':-99, 'w2sigmpro':-99, 'w2snr':-99, \
                           'w3mpro':-99, 'w3sigmpro':-99, 'w3snr':-99, 'w4mpro':-99, 'w4sigmpro':-99, 'w4snr':-99}
     
-    sdss_default_dict = {'objID':'no_sdss_match', 'ra':-99, 'dec':-99, 'numberMatches':0, 'redshift':-99, 'redshift_err':-99, 'redshift_type':-99, \
+    sdss_default_dict = {'objID':-99, 'ra':-99, 'dec':-99, 'numberMatches':0, 'redshift':-99, 'redshift_err':-99, 'redshift_type':-99, \
                          'u':-99, 'g':-99, 'r':-99, 'i':-99, 'z':-99, 'u_err':-99, 'g_err':-99, 'r_err':-99, 'i_err':-99, 'z_err':-99}
 
     with open(filename,'w') as f:
@@ -55,11 +55,11 @@ def flat_version(catalog,full=False):
         # CSV file header
 
         header = 'catalog_id,rgz_name,zooniverse_id,first_id'
-        consensus_keys = ['IR_ra', 'IR_dec', 'level', 'n_users', 'n_total']
+        consensus_keys = ['WISE_pos_ra', 'WISE_pos_dec', 'level', 'n_votes', 'n_total']
         sdss_keys  = [str(x) for x in sdss_default_dict.keys()]
         wise_keys  = [str(x) for x in wise_default_dict.keys()]
-        radio_keys = ['totalFlux', 'totalFluxErr', 'outermostLevel', 'numberComponents', 'numberPeaks', 'maxAngularExtent', 'totalSolidAngle', 'peakFluxErr', \
-                      'maxPhysicalExtent', 'totalCrossSection', 'totalLuminosity', 'totalLuminosityErr', 'peakLuminosityErr', 'ra', 'dec']
+        radio_keys = ['ra', 'dec', 'totalFlux', 'totalFluxErr', 'outermostLevel', 'numberComponents', 'numberPeaks', 'maxAngularExtent', 'totalSolidAngle', \
+                      'peakFluxErr', 'maxPhysicalExtent', 'totalCrossSection', 'totalLuminosity', 'totalLuminosityErr', 'peakLuminosityErr']
         component_keys = ['fluxes', 'fluxErrs', 'peakRas', 'peakDecs']
         peak_keys = ['fluxes', 'ras', 'decs']
         duplicate_keys = ['shareComponents', 'matchComponents', 'WISECATmismatch']
@@ -86,7 +86,7 @@ def flat_version(catalog,full=False):
         args = {'catalog_id':{'$nin':cids_for_removal},'consensus.level':{'$gte':consensus_level}}#,'SDSS':{'$exists':True},'AllWISE':{'$exists':True}}
         
         # Loop over number of RGZ catalog entries that match the consensus requirements
-        for c in catalog.find(args):
+        for c in catalog.find(args).sort([('catalog_id', 1)]):
             
             wiseval = c.setdefault('AllWISE',wise_default_dict)
             sdssval = c.setdefault('SDSS',sdss_default_dict)
@@ -109,7 +109,7 @@ def flat_version(catalog,full=False):
                 component_strings['peakDecs'] += '{0};'.format(maxPeak['dec'])
             for key in component_strings:
                 component_strings[key] = component_strings[key][:-1]
-            
+
             # Determine peak strings (only for single component sources)
             peak_strings = {'fluxes':'', 'ras':'', 'decs':''}
             if c['radio']['numberComponents'] == 1:
@@ -132,24 +132,27 @@ def flat_version(catalog,full=False):
                             if cid not in cids_for_removal:
                                 duplicate_strings[key] += '{0};'.format(cid)
                         duplicate_strings[key] = duplicate_strings[key][:-1]
-            
+            for key in duplicate_strings:
+                if duplicate_strings[key] == '':
+                    duplicate_strings[key] = -99
+
             # Combine sources (if duplicates exist)
             if 'duplicateSources' in c and 'exactDuplicate' in c['duplicateSources']:
                 votes, total = 0, 0
-                ir_ra, ir_dec = 0., 0.
+                WISE_pos_ra, WISE_pos_dec = 0., 0.
                 for d in catalog.find({'catalog_id': {'$in': c['duplicateSources']['exactDuplicate']}}):
-                    votes += d['consensus']['n_users']
+                    votes += d['consensus']['n_votes']
                     total += d['consensus']['n_total']
-                    if 'IR_ra' in d['consensus']:
-                        ir_ra += d['consensus']['n_users'] * d['consensus']['IR_ra']
-                        ir_dec += d['consensus']['n_users'] * d['consensus']['IR_dec']
-                ir_ra /= votes
-                ir_dec /= votes
-                c['consensus']['n_users'] = votes
+                    if 'WISE_pos_ra' in d['consensus']:
+                        WISE_pos_ra += d['consensus']['n_votes'] * d['consensus']['WISE_pos_ra']
+                        WISE_pos_dec += d['consensus']['n_votes'] * d['consensus']['WISE_pos_dec']
+                WISE_pos_ra /= votes
+                WISE_pos_dec /= votes
+                c['consensus']['n_votes'] = votes
                 c['consensus']['n_total'] = total
-                if ir_ra:
-                    c['consensus']['IR_ra'] = ir_ra
-                    c['consensus']['IR_dec'] = ir_dec
+                if WISE_pos_ra:
+                    c['consensus']['WISE_pos_ra'] = WISE_pos_ra
+                    c['consensus']['WISE_pos_dec'] = WISE_pos_dec
             
             try:
                 # Print all values to new row in file. 
