@@ -1234,7 +1234,7 @@ if __name__ == "__main__":
             #   Set as True if you want to run the consensus only on the subjects 
             #   completed since the last time the pipeline was run. If False, it
             #   will run it on the entire set of completed subjects (which can take days for ~90,000 images).
-            update = True
+            update = False
 
             # subset: default = None
             #
