@@ -100,13 +100,13 @@ bad_keys = ('finished_at','started_at','user_agent','lang','pending')
 #   - your current working directory (rgz_path)
 
 def determine_paths(paths):
-
+    
     found_path = False
     for path in paths:
         if os.path.exists(path):
             found_path = True
             return path
-
+    
     if found_path == False:
         print "Unable to find the hardcoded local path:"
         print paths

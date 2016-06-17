@@ -55,7 +55,7 @@ python2.7 $RGZ_PATH"/rgz-analysis/python/consensus.py"
 # Run the cross-matching catalog in Python
 
 echo "Updating catalog"
-python2.7 $RGZ_PATH"/rgz-analysis/python/RGZcatalog.py" --consensus $RGZ_PATH"/rgz-analysis/csv/consensus_rgz_first.csv"
+python2.7 $RGZ_PATH"/rgz-analysis/python/RGZcatalog.py" #--consensus $RGZ_PATH"/rgz-analysis/csv/consensus_rgz_first.csv"
 
 # Create a flat static version of the catalog
 
