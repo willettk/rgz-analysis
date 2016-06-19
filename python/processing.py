@@ -214,9 +214,9 @@ def getRadio(data, fits_loc, consensusObject):
         decRange = [ min(bboxCornersRD[0][1], bboxCornersRD[1][1]), max(bboxCornersRD[0][1], bboxCornersRD[1][1]) ]
         pos1 = coord.SkyCoord(raRange[0], decRange[0], unit=(u.deg, u.deg))
         pos2 = coord.SkyCoord(raRange[1], decRange[1], unit=(u.deg, u.deg))
-        extentArcmin = pos1.separation(pos2).arcminute
+        extentArcsec = pos1.separation(pos2).arcsecond
         solidAngleArcsec2 = tree.areaArcsec2
-        components.append({'flux':tree.fluxmJy, 'fluxErr':tree.fluxErrmJy, 'angularExtent':extentArcmin, 'solidAngle':solidAngleArcsec2, \
+        components.append({'flux':tree.fluxmJy, 'fluxErr':tree.fluxErrmJy, 'angularExtent':extentArcsec, 'solidAngle':solidAngleArcsec2, \
                            'raRange':raRange, 'decRange':decRange})
     
     #adds up total flux of all components
@@ -233,9 +233,9 @@ def getRadio(data, fits_loc, consensusObject):
         totalSolidAngleArcsec2 += component['solidAngle']
     
     #find maximum extent of component bboxes in arcseconds
-    maxAngularExtentArcmin = 0
+    maxAngularExtentArcsec = 0
     if len(components)==1:
-        maxAngularExtentArcmin = components[0]['angularExtent']
+        maxAngularExtentArcsec = components[0]['angularExtent']
     else:
         for i in range(len(components)-1):
             for j in range(1,len(components)-i):
@@ -249,8 +249,8 @@ def getRadio(data, fits_loc, consensusObject):
                                       [components[i+j]['raRange'][1], components[i+j]['decRange'][1]] ])
                 pos1 = coord.SkyCoord(corners1.T[0], corners1.T[1], unit=(u.deg, u.deg))
                 pos2 = coord.SkyCoord(corners2.T[0], corners2.T[1], unit=(u.deg, u.deg))
-                angularExtentArcmins = pos1.separation(pos2).arcminute
-                maxAngularExtentArcmin = max(np.append(angularExtentArcmins, maxAngularExtentArcmin))
+                angularExtentArcsec = pos1.separation(pos2).arcsecond
+                maxAngularExtentArcsec = max(np.append(angularExtentArcsec, maxAngularExtentArcsec))
     
     #add all peaks up into single list
     peakList = []
@@ -274,7 +274,7 @@ def getRadio(data, fits_loc, consensusObject):
     meanDec = (decMax+decMin)/2.
     
     radio_data = {'radio':{'totalFlux':totalFluxmJy, 'totalFluxErr':totalFluxErrmJy, 'outermostLevel':data['contours'][0][0]['level']*1000, \
-                           'numberComponents':len(contourTrees), 'numberPeaks':len(peakList), 'maxAngularExtent':maxAngularExtentArcmin, \
+                           'numberComponents':len(contourTrees), 'numberPeaks':len(peakList), 'maxAngularExtent':maxAngularExtentArcsec, \
                            'totalSolidAngle':totalSolidAngleArcsec2, 'peakFluxErr':peakFluxErrmJy, 'peaks':peakList, 'components':components, \
                            'ra':meanRa, 'dec':meanDec}}
     

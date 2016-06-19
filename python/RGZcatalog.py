@@ -137,7 +137,7 @@ def RGZcatalog():
                                            'level':source['consensus_level'], 'label':source['label']}})
                 if ir_pos:
                     logging.info('IR counterpart found')
-                    entry['consensus'].update({'WISE_pos_ra':ir_pos.ra.deg, 'WISE_pos_dec':ir_pos.dec.deg})
+                    entry['consensus'].update({'IR_ra':ir_pos.ra.deg, 'IR_dec':ir_pos.dec.deg})
                 else:
                     logging.info('No IR counterpart found')
 
@@ -196,9 +196,9 @@ def RGZcatalog():
 
                     #create RGZ name from radio position
                     radio_ra = radio_data['radio']['ra']
-                    ra_h = int(np.floor(radio_ra/15.))
-                    ra_m = int((radio_ra - ra_h*15)*4.)
-                    ra_s = (radio_ra - ra_h*15 - ra_m/4.)*240.
+                    ra_h = int(radio_ra/15.)
+                    ra_m = int((radio_ra - ra_h*15)*4)
+                    ra_s = (radio_ra - ra_h*15 - ra_m/4.)*240
                     radio_dec = radio_data['radio']['dec']
                     dec_d = int(radio_dec)
                     dec_m = int((radio_dec - dec_d)*60)
@@ -212,7 +212,7 @@ def RGZcatalog():
                         lz = np.log10(z)
                         DAkpc = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)*1000 #angular size distance approximation in kpc
                         DLkpc = DAkpc*np.square(1+z) #luminosity distance approximation in kpc
-                        maxPhysicalExtentKpc = DAkpc*radio_data['radio']['maxAngularExtent']*np.pi/180/60 #arcminutes to radians
+                        maxPhysicalExtentKpc = DAkpc*radio_data['radio']['maxAngularExtent']*np.pi/180/3600 #arcseconds to radians
                         totalCrossSectionKpc2 = np.square(DAkpc)*radio_data['radio']['totalSolidAngle']*np.square(np.pi/180/3600) #arcseconds^2 to radians^2
                         totalLuminosityWHz = radio_data['radio']['totalFlux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19) #mJy to W/(m^2 Hz), kpc to m
                         totalLuminosityErrWHz = radio_data['radio']['totalFluxErr']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)

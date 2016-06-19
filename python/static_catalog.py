@@ -55,7 +55,7 @@ def flat_version(catalog,full=False):
         # CSV file header
 
         header = 'catalog_id,rgz_name,zooniverse_id,first_id'
-        consensus_keys = ['WISE_pos_ra', 'WISE_pos_dec', 'level', 'n_votes', 'n_total']
+        consensus_keys = ['IR_ra', 'IR_dec', 'level', 'n_votes', 'n_total']
         sdss_keys  = [str(x) for x in sdss_default_dict.keys()]
         wise_keys  = [str(x) for x in wise_default_dict.keys()]
         radio_keys = ['ra', 'dec', 'totalFlux', 'totalFluxErr', 'outermostLevel', 'numberComponents', 'numberPeaks', 'maxAngularExtent', 'totalSolidAngle', \
@@ -139,20 +139,20 @@ def flat_version(catalog,full=False):
             # Combine sources (if duplicates exist)
             if 'duplicateSources' in c and 'exactDuplicate' in c['duplicateSources']:
                 votes, total = 0, 0
-                WISE_pos_ra, WISE_pos_dec = 0., 0.
+                IR_ra, IR_dec = 0., 0.
                 for d in catalog.find({'catalog_id': {'$in': c['duplicateSources']['exactDuplicate']}}):
                     votes += d['consensus']['n_votes']
                     total += d['consensus']['n_total']
-                    if 'WISE_pos_ra' in d['consensus']:
-                        WISE_pos_ra += d['consensus']['n_votes'] * d['consensus']['WISE_pos_ra']
-                        WISE_pos_dec += d['consensus']['n_votes'] * d['consensus']['WISE_pos_dec']
-                WISE_pos_ra /= votes
-                WISE_pos_dec /= votes
+                    if 'IR_ra' in d['consensus']:
+                        IR_ra += d['consensus']['n_votes'] * d['consensus']['IR_ra']
+                        IR_dec += d['consensus']['n_votes'] * d['consensus']['IR_dec']
+                IR_ra /= votes
+                IR_dec /= votes
                 c['consensus']['n_votes'] = votes
                 c['consensus']['n_total'] = total
-                if WISE_pos_ra:
-                    c['consensus']['WISE_pos_ra'] = WISE_pos_ra
-                    c['consensus']['WISE_pos_dec'] = WISE_pos_dec
+                if IR_ra:
+                    c['consensus']['IR_ra'] = IR_ra
+                    c['consensus']['IR_dec'] = IR_dec
             
             try:
                 # Print all values to new row in file. 
