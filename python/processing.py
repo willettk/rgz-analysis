@@ -27,7 +27,7 @@ def getWISE(entry):
             break
         except (TimeoutError, TableParseError) as e:
             if tryCount>5:
-                message = 'Unable to connect to IRSA; aborting'
+                message = 'Unable to connect to IRSA; trying again in 10 min'
                 logging.exception(message)
                 print message
                 raise fn.DataAccessError(message)
@@ -90,16 +90,17 @@ def SDSS_select(sql):
          br['format'] = ['csv']
          response = br.submit()
          file_like = StringIO.StringIO(response.get_data())
+         df = pd.read_csv(file_like, skiprows=1)
          break
-      except (mechanize.URLError, mechanize.HTTPError, httplib.BadStatusLine) as e:
+      except (mechanize.URLError, mechanize.HTTPError, httplib.BadStatusLine, pd.parser.CParserError) as e:
          if tryCount>5:
-            message = 'Unable to connect to SkyServer; aborting'
+            message = 'Unable to connect to SkyServer; trying again in 10 min'
             logging.exception(message)
             print message
             raise fn.DataAccessError(message)
          logging.exception(e)
          time.sleep(10)
-   return pd.read_csv(file_like, skiprows=1)
+   return df
 
 def getSDSS(entry):
     '''
@@ -110,7 +111,7 @@ def getSDSS(entry):
     
     ir_pos = coord.SkyCoord(entry['consensus']['IR_ra'], entry['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
     
-    query = '''select objID, ra, dec, u, g, r, i, z, err_u, err_g, err_r, err_i, err_z from Galaxy
+    query = '''select objID, ra, dec, u, r, g, i, z, err_u, err_r, err_g, err_i, err_z from Galaxy
                where (ra between %f-3./3600 and %f+3./3600) and (dec between %f-3./3600 and %f+3./3600)''' \
                % (ir_pos.ra.deg, ir_pos.ra.deg, ir_pos.dec.deg, ir_pos.dec.deg)
     df = SDSS_select(query)
@@ -135,8 +136,8 @@ def getSDSS(entry):
                     numberMatches += 1
         if match is not None:
             sdss_match = {'objID':df['objID'][match.name], 'ra':match['ra'], 'dec':match['dec'], 'numberMatches':np.int16(numberMatches), \
-                          'u':match['u'], 'g':match['g'], 'r':match['r'], 'i':match['i'], 'z':match['z'], \
-                          'u_err':match['err_u'], 'g_err':match['err_g'], 'r_err':match['err_r'], 'i_err':match['err_i'], 'z_err':match['err_z']}
+                          'u':match['u'], 'r':match['r'], 'g':match['g'], 'i':match['i'], 'z':match['z'], \
+                          'u_err':match['err_u'], 'r_err':match['err_r'], 'g_err':match['err_g'], 'i_err':match['err_i'], 'z_err':match['err_z']}
         else:
             sdss_match = None
     else:

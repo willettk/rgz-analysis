@@ -4,7 +4,7 @@ consensus matching information, radio morphology, IR counterpart location, and d
 AllWISE and SDSS catalogs.
 '''
 
-import logging, urllib2, time, argparse, json, os
+import logging, urllib2, time, argparse, json, os, datetime
 import pymongo
 import numpy as np
 import StringIO, gzip
@@ -96,7 +96,7 @@ def RGZcatalog():
             #do not process if this object in this source is already in the catalog
             process = True
             for i in catalog.find({'zooniverse_id':subject['zooniverse_id']}):
-                if i['consensus']['label'].lower() == source['label'].lower():
+                if i['consensus']['label'] == source['label']:
                     process = False
             
             if process:
@@ -180,7 +180,7 @@ def RGZcatalog():
                                 break
                             except (urllib2.URLError, urllib2.HTTPError) as e:
                                 if tryCount>5:
-                                    message = 'Unable to connect to Amazon Web Services; aborting'
+                                    message = 'Unable to connect to Amazon Web Services; trying again in 10 min'
                                     logging.exception(message)
                                     print message
                                     raise fn.DataAccessError(message)
@@ -270,8 +270,9 @@ if __name__ == '__main__':
             logging.info(output)
             print output
         except fn.DataAccessError as d:
-            #assuming this has been run from the make file, clean exit so that it can shut everything down properly
-            break
+            resume = datetime.datetime.now() + datetime.timedelta(minutes=10)
+            print 'RGZcatalog.py will resume at {:%H:%M}'.format(resume)
+            time.sleep(600)
         except BaseException as e:
             logging.exception(e)
             raise
