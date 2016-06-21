@@ -6,7 +6,6 @@
 
 # Read in the list of gold standard images
 
-rgz_dir = '/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis'
 import consensus
 import rgz
 import operator
@@ -18,8 +17,8 @@ from collections import Counter
 
 from mpl_defaults import red,blue,green
 
+rgz_dir = consensus.rgz_path
 subjects,classifications = rgz.load_rgz_data()
-
 experts=("42jkb", "ivywong", "stasmanian", "klmasters", "Kevin", "akapinska", "enno.middelberg", "xDocR", "DocR", "vrooje", "KWillett")
     
 def get_galaxies(expert=False):
@@ -28,12 +27,12 @@ def get_galaxies(expert=False):
         filename = "expert/expert_all_zooniverse_ids.txt"
     else:
         filename = "goldstandard/gs_zids.txt"
-
+    
     with open('{0:}/{1:}'.format(rgz_dir,filename)) as f:
         gs = f.readlines()
     
     gals = [g.strip() for g in gs]
-
+    
     return gals
     
 def top_volunteers(gs):

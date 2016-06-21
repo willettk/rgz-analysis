@@ -839,7 +839,7 @@ def rc(zid):
 
     return None
 
-def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
+def run_sample(survey,update=True,subset=None,do_plot=False,weights=0):
 
     # Run the consensus algorithm on the RGZ classifications
     
@@ -1135,7 +1135,12 @@ def get_unique_users():
 
     return unique_users
 
-def weight_users(unique_users):
+def weight_users(unique_users, min_gs=5, min_agree=0.5):
+
+    # min_gs is the minimum number of gold standard subjects user must have seen to determine agreement. 
+    # Set to prevent upweighting on low information (eg, agreeing with the science team if the user has
+    # only seen 1 gold standard object doesn't tell us as much than if they agreed 19/20 times).
+    # min_agree is the minimum level of agreement with the science team (N_agree / N_seen)
 
     # Assigns a weight to users based on their agreement with the gold standard sample as classified by RGZ science team
 
@@ -1184,14 +1189,6 @@ def weight_users(unique_users):
             pass
 
         # Save output to CSV file
-        
-        # Minimum number of gold standard subjects user must have seen to determine agreement. 
-        # Set to prevent upweighting on low information (eg, agreeing with the science team
-        # if the user has only seen 1 gold standard object doesn't tell us as much than
-        # if they agreed 19/20 times).
-        min_gs = 5
-        # Minimum level of agreement with the science team (N_agree / N_seen)
-        min_agree = 0.50
 
         weight = 1 if gs_count > 5 and (agreed * 1./gs_count) > 0.50 else 0
         print >> wf,"{0},{1},{2},{3}".format(u_str,gs_count,agreed,weight)
@@ -1226,39 +1223,43 @@ if __name__ == "__main__":
 
         print 'Starting at',datetime.datetime.now().strftime('%H:%M:%S.%f')
 
+        # update: default = True
+        #
+        #   Set as True if you want to run the consensus only on the subjects 
+        #   completed since the last time the pipeline was run. If False, it
+        #   will run it on the entire set of completed subjects (which can take days for ~90,000 images).
+        update = True
+
+        # subset: default = None
+        #
+        #   Run the sample only on some specific subjects. Pre-defined subsets include:
+        #       'expert100': a sample of 100 galaxies classified by science team
+        #       'goldstandard': the gold standard sample of 20 galaxies classified by all users
+        #                       and the science team. All galaxies in 'goldstandard' are also in
+        #                       'expert100'.
+        subset = None
+
+        # do_plot: default = False
+        #
+        #   Set as True if you want to make the four-panel plots of the consensus for each subject.
+        #   Useful, but adds to the total runtime.
+        do_plot = False
+
+        # weights: default = 0
+        #
+        #   Execute weighting of the users based on their agreement with the science team
+        #   on the gold standard subjects. If weights = 0 or weights = 1, each users' vote
+        #   is counted equally in the consensus. If weights > 1, then their impact is
+        #   increased by replicating the classifications. Must be an integer.
+        weights = 0
+        assert (type(weights) == int) and weights >= 0, 'Weight must be a nonnegative integer'
+        # If you're using weights, make sure they're up to date
+        if weights > 1:
+            unique_users = get_unique_users()
+            weight_users(unique_users=unique_users, min_gs=5, min_agree=0.5)
+
         # Run the consensus separately for different surveys, since the image parameters are different
         for survey in ('atlas','first'):
-
-            # update: default = True
-            #
-            #   Set as True if you want to run the consensus only on the subjects 
-            #   completed since the last time the pipeline was run. If False, it
-            #   will run it on the entire set of completed subjects (which can take days for ~90,000 images).
-            update = True
-
-            # subset: default = None
-            #
-            #   Run the sample only on some specific subjects. Pre-defined subsets include:
-            #       'expert100': a sample of 100 galaxies classified by science team
-            #       'goldstandard': the gold standard sample of 20 galaxies classified by all users
-            #                       and the science team. All galaxies in 'goldstandard' are also in
-            #                       'expert100'.
-            subset = None
-
-            # do_plot: default = False
-            #
-            #   Set as True if you want to make the four-panel plots of the consensus for each subject.
-            #   Useful, but adds to the total runtime.
-            do_plot = False
-
-            # weights: default = 0
-            #
-            #   Execute weighting of the users based on their agreement with the science team
-            #   on the gold standard subjects. If weights = 0 or weights = 1, each users' vote
-            #   is counted equally in the consensus. If weights > 1, then their impact is
-            #   increased by replicating the classifications. Must be an integer.
-            weights = 0
-
             run_sample(survey,update,subset,do_plot,weights)
 
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
