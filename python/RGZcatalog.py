@@ -113,17 +113,19 @@ def RGZcatalog():
                     fits_loc = pathdict[fid]
                     entry.update({'first_id':str(fid)})
                 else:
+                    raise RuntimeError('Not expecting non-FIRST data')
                     fits_loc = '%s/rgz/raw_images/ATLAS/2x2/%s_radio.fits' % (data_path, fid)
                     entry.update({'atlas_id':str(fid)})
                 
                 #find IR counterpart from consensus data, if present
                 w = wcs.WCS(fits.getheader(fits_loc, 0)) #gets pixel-to-WCS conversion from header
                 ir_coords = source['ir_peak']
-                if ir_coords == (-99, -99):
+                if ir_coords[0] == -99:
                     ir_pos = None
                     wise_match = None
                     sdss_match = None
                 else:
+                    #this only works for FIRST images; will need changing when ATLAS is added
                     p2w = w.wcs_pix2world
                     ir_ra_pixels = ir_coords[0] * 132./500.
                     ir_dec_pixels = 133 - ir_coords[1] * 132./500.
