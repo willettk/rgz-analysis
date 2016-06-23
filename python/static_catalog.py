@@ -36,20 +36,10 @@ def load_data():
 
 def flat_version(catalog,full=False):
 
-    # Write the MongoDB catalog to a CSV file, including only sources with a WISE and SDSS match.
-    # Include all data fields.
+    # Write the MongoDB catalog to a CSV file, with the fields described here:
+    # http://radiogalaxyzoo.pbworks.com/w/page/108921379/DR1%20testing
 
     filename = '%s/csv/static_rgz_flat%s.csv' % (path,suffix)
-
-    # Check the WISE and SDSS fields to see if they had a match; if not, return null values
-    
-    wise_default_dict = {'designation':-99, 'ra':-99, 'dec':-99, 'numberMatches':0, \
-                          'w1mpro':-99, 'w1sigmpro':-99, 'w1snr':-99, 'w2mpro':-99, 'w2sigmpro':-99, 'w2snr':-99, \
-                          'w3mpro':-99, 'w3sigmpro':-99, 'w3snr':-99, 'w4mpro':-99, 'w4sigmpro':-99, 'w4snr':-99}
-    
-    sdss_default_dict = {'objID':-99, 'ra':-99, 'dec':-99, 'numberMatches':0, 'redshift':-99, 'redshift_err':-99, 'redshift_type':-99, \
-                         'u':-99, 'r':-99, 'g':-99, 'i':-99, 'z':-99, 'u_err':-99, 'r_err':-99, 'g_err':-99, 'i_err':-99, 'z_err':-99, \
-                         'spectralClass':-99}
 
     with open(filename,'w') as f:
 
@@ -178,6 +168,7 @@ def flat_version(catalog,full=False):
 
         # Print summary to screen
 
+        print "{0:d} duplicate sources removed".format(len(cids_for_removal))
         print "{0:d} entries written to CSV file {1}".format(good_entry,filename)
         print "{0:d}/{1:d} had errors writing data to file".format(bad_entry,catalog.find(args).count())
 

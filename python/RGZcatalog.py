@@ -11,16 +11,13 @@ import StringIO, gzip
 from astropy.io import fits
 from astropy import wcs, coordinates as coord, units as u
 
-#custom modules for the RGZ catalog
+#custom modules for the RGZ catalog pipeline
 import catalog_functions as fn #contains miscellaneous helper functions
 import processing as p #contains functions that process the data
 from update_consensus_csv import updateConsensus #replaces the current consensus collection with a specified csv
 from find_duplicates import find_duplicates #finds and marks any radio components that are duplicated between sources
 
 from consensus import rgz_path, data_path, db
-#rgz_path = fn.determinePaths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis', '/data/tabernacle/larry/RGZdata/rgz-analysis'))
-#rgz_path = '/home/garon/Documents/RGZdata/rgz-analysis'
-#data_path = fn.determinePaths(('/Volumes/REISEPASS/', '/data/extragal/willett', '/data/tabernacle/larry/RGZdata/rawdata'))
 in_progress_file = '%s/subject_in_progress.txt' % rgz_path
 
 def RGZcatalog():
@@ -271,7 +268,9 @@ if __name__ == '__main__':
             print output
         except fn.DataAccessError as d:
             resume = datetime.datetime.now() + datetime.timedelta(minutes=10)
-            print 'RGZcatalog.py will resume at {:%H:%M}'.format(resume)
+            output = "RGZcatalog.py can't connect to external server; will resume at {:%H:%M}".format(resume)
+            logging.info(output)
+            print output
             time.sleep(600)
         except BaseException as e:
             logging.exception(e)

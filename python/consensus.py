@@ -112,8 +112,8 @@ def determine_paths(paths):
         print paths
         return None
 
-rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis','/data/tabernacle/larry/RGZdata/rgz-analysis'))
-#rgz_path = '/home/garon/Documents/RGZdata/rgz-analysis'
+#rgz_path = determine_paths(('/Users/willettk/Astronomy/Research/GalaxyZoo/rgz-analysis','/data/tabernacle/larry/RGZdata/rgz-analysis'))
+rgz_path = '/home/garon/Documents/RGZdata/rgz-analysis'
 data_path = determine_paths(('/Volumes/REISEPASS','/Volumes/3TB','/data/extragal/willett','/data/tabernacle/larry/RGZdata/rawdata'))
 plot_path = "{0}/rgz/plots".format(data_path)
 
@@ -162,39 +162,39 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
     # Compute the most popular combination for each NUMBER of galaxies identified in image
     
     for c in _c:
-
+        
         clist_all.append(c)
         clen_start += 1
         
         # Skip classification if they already did one. This assumes the latest classification
         # is always the best (or at least the one that will be recorded here).
-
+        
         try:
             user_name = c['user_name']
         except KeyError:
             user_name = 'Anonymous'
-
+        
         # Check the answer, as long as they haven't already done one.
-
+        
         if user_name not in unique_users or user_name is 'Anonymous':
-
+            
             unique_users.add(user_name)
             listcount.append(True)
-        
+            
             sumlist = []    # List of the checksums over all possible combinations
-
+            
             # Only find data that was an actual marking, not metadata
             goodann = [x for x in c['annotations'] if (x.keys()[0] not in bad_keys)]
             n_galaxies = len(goodann)
-
+            
             # There must be at least one galaxy!
             if n_galaxies > 0:  
                 for idx,ann in enumerate(goodann):
-    
+                    
                     xmaxlist = []
                     try:
                         radio_comps = ann['radio']
-
+                        
                         # loop over all the radio components within an galaxy
                         if radio_comps != 'No Contours':
                             for rc in radio_comps:
@@ -205,7 +205,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                     except KeyError:
                         # No radio data for this classification
                         xmaxlist.append(-99)
-    
+                    
                     # To create a unique ID for the combination of radio components,
                     # take the product of all the xmax coordinates and sum them together
                     # as a crude hash. This is not an ideal method and is potentially
@@ -213,21 +213,21 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                     
                     product = reduce(operator.mul, xmaxlist, 1)
                     sumlist.append(round(product,3))
-
+                    
                 checksum = sum(sumlist)
             else:
                 # No galaxies in this classification
                 checksum = -99
-
+            
             c['checksum'] = checksum
             c['n_galaxies'] = n_galaxies
-    
+            
             # Insert checksum into dictionary with number of galaxies as the index
             if cdict.has_key(n_galaxies):
                 cdict[n_galaxies].append(checksum)
             else:
                 cdict[n_galaxies] = [checksum]
-
+            
         else:
             listcount.append(False)
     
@@ -321,7 +321,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
             print gal, zid
         except AttributeError:
             print 'No Sources, No IR recorded for {0}'.format(zid)
-    
+        
         # Make empty copy of next dict in same loop
         ir_x[k] = []
         ir_y[k] = []
@@ -330,7 +330,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
     for c in clist:
         if c['checksum'] == mc_checksum:
-    
+            
             annlist = [ann for ann in c['annotations'] if ann.keys()[0] not in bad_keys]
             for ann in annlist:
                 if 'ir' in ann.keys():
@@ -339,10 +339,10 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                         xmax_checksum = round(sum([float(ann['radio'][a]['xmax']) for a in ann['radio']]),3)
                     except TypeError:
                         xmax_checksum = -99
-
+                    
                     try:
                         k = answer[xmax_checksum]['ind']
-
+                        
                         if ann['ir'] == 'No Sources':
                             ir_x[k].append(-99)
                             ir_y[k].append(-99)
@@ -385,11 +385,10 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
         x_all = [xt * scale_ir for xt in xv]
         y_all = [yt * scale_ir for yt in yv]
-        coords_all = [(xx,yy) for xx,yy in zip(x_all,y_all)]
 
         # Find the most common IR coordinate. We want to skip the next steps
         # if they said there was no IR counterpart (-99,-99)
-        ir_Counter = Counter(coords_all)
+        ir_Counter = Counter([(xx,yy) for xx,yy in zip(xv,yv)])
         most_common_ir = ir_Counter.most_common(1)[0][0]
 
         # Check if there are enough IR points to attempt a kernel density estimate
