@@ -274,7 +274,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
             maxval = mc_best[1]
             mc_checksum = mc_best[0]
     
-    # Get an galaxy that matches the checksum so we can record the annotation data
+    # Get a galaxy that matches the checksum so we can record the annotation data
 
     try:
         cmatch = next(i for i in clist if i['checksum'] == mc_checksum)
@@ -1224,10 +1224,10 @@ if __name__ == "__main__":
 
         # update: default = True
         #
-        #   Set as True if you want to run the consensus only on the subjects 
-        #   completed since the last time the pipeline was run. If False, it
-        #   will run it on the entire set of completed subjects (which can take days for ~90,000 images).
-        update = False
+        #   Set as True if you want to run the consensus only on the subjects completed
+        #   since the last time the pipeline was run. If False, it will run it on the
+        #   entire set of completed subjects (which takes about 6 hours for 10k images).
+        update = True
 
         # subset: default = None
         #
@@ -1249,7 +1249,7 @@ if __name__ == "__main__":
         #   Execute weighting of the users based on their agreement with the science team
         #   on the gold standard subjects. If weights = 0 or weights = 1, each users' vote
         #   is counted equally in the consensus. If weights > 1, then their impact is
-        #   increased by replicating the classifications. Must be an integer.
+        #   increased by replicating the classifications. Must be a nonnegative integer.
         weights = 0
         assert (type(weights) == int) and weights >= 0, 'Weight must be a nonnegative integer'
         # If you're using weights, make sure they're up to date
