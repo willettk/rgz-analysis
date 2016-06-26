@@ -33,6 +33,17 @@ def getWISE(entry):
                 raise fn.DataAccessError(message)
             logging.exception(e)
             time.sleep(10)
+        except Exception as e:
+            if str(e) == 'Query failed\n':
+                if tryCount>5:
+                    message = 'Unable to connect to IRSA; trying again in 10 min'
+                    logging.exception(message)
+                    print message
+                    raise fn.DataAccessError(message)
+                logging.exception(e)
+                time.sleep(10)
+            else:
+                raise
     
     if len(table):
         numberMatches = 0
