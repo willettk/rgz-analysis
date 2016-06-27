@@ -88,7 +88,7 @@ def RGZcatalog():
             f.write(subject['zooniverse_id'])
         
         #iterate through all consensus groupings
-        for source in consensus.find({'zooniverse_id':subject['zooniverse_id']}):
+        for source in consensus.find({'zooniverse_id':subject['zooniverse_id'], 'first_id':{'$exists':True}}):
             
             #do not process if this object in this source is already in the catalog
             process = True
@@ -107,15 +107,15 @@ def RGZcatalog():
                 print 'Processing entry %i (consensus %s in subject %s)' % (IDnumber, source['label'], subject['zooniverse_id'])
                 entry = {'catalog_id':IDnumber, 'zooniverse_id':str(subject['zooniverse_id'])}
                 
-                #find location of FITS file
+                #find location of FITS file; once non-FIRST sources are included, modify this and line 91
                 fid = source['first_id']
-                if fid[0] == 'F':
-                    fits_loc = pathdict[fid]
-                    entry.update({'first_id':str(fid)})
-                else:
-                    raise RuntimeError('Not expecting non-FIRST data')
-                    fits_loc = '%s/rgz/raw_images/ATLAS/2x2/%s_radio.fits' % (data_path, fid)
-                    entry.update({'atlas_id':str(fid)})
+                #if fid[0] == 'F':
+                fits_loc = pathdict[fid]
+                entry.update({'first_id':str(fid)})
+                #else:
+                #    raise RuntimeError('Not expecting non-FIRST data')
+                #    fits_loc = '%s/rgz/raw_images/ATLAS/2x2/%s_radio.fits' % (data_path, fid)
+                #    entry.update({'atlas_id':str(fid)})
                 
                 #find IR counterpart from consensus data, if present
                 w = wcs.WCS(fits.getheader(fits_loc, 0)) #gets pixel-to-WCS conversion from header
