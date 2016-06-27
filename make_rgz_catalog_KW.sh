@@ -1,16 +1,23 @@
 #!/bin/bash
 
 # Script for running the data reduction pipeline for Radio Galaxy Zoo. 
-# Written by Kyle Willett (willett@physics.umn.edu) 
 
-# Sets where both input and output files are stored. Must be changed if not running on UMN servers.
+# Written by Kyle Willett (University of Minnesota). It has been tested 
+# to run on the UMN physics servers (specifically tabernacle), but may 
+# require tweaking on other systems.
+
+# Working directory. Must be changed if not running on UMN servers.
 
 RGZ_PATH='/data/tabernacle/larry/RGZdata'
 
 # Start MongoDB in the background
 
 echo "Starting MongoDB"
-numactl --interleave=all mongod --fork --logpath $RGZ_PATH"/mongodb/log/mongodb.log" --dbpath $RGZ_PATH"/data2/db"
+
+# The first two arguments manage memory on the UMN system. If this doesn't apply, just delete them and run:
+#   mongod --fork --logpath $RGZ_PATH"/mongodb/log/mongodb.log" --dbpath $RGZ_PATH"/data/db"
+
+numactl --interleave=all mongod --fork --logpath $RGZ_PATH"/mongodb/log/mongodb.log" --dbpath $RGZ_PATH"/data/db"
 
 # Restore the raw files from the mongoexport
 
@@ -37,13 +44,14 @@ mongoimport --db radio --drop --collection radio_subjects $BACKUP_PATH'/radio_su
 mongoimport --db radio --drop --collection radio_classifications $BACKUP_PATH'/radio_classifications.json'
 mongoimport --db radio --drop --collection radio_groups $BACKUP_PATH'/radio_groups.json'
 
-# Activate Python 2.7 via the modules system
+# Activate Python 2.7 via the modules system (this is UMN specific; comment it out if you already have Python 2.7)
 
 echo "Activating Python environments"
 module load python27
 
 # Load a Python virtual environment that has the necessary packages and their dependencies:
 #   astropy, astroquery, matplotlib, mechanize, numpy, pandas, PIL, pymongo, requests, scipy
+# Comment out if these packages are already installed in your local version of Python
 
 source $RGZ_PATH'/veastropy/bin/activate'
 
@@ -62,12 +70,12 @@ python2.7 $RGZ_PATH"/rgz-analysis/python/RGZcatalog.py" --consensus $RGZ_PATH"/r
 echo "Outputting static catalog"
 python2.7 $RGZ_PATH"/rgz-analysis/python/static_catalog.py"
 
-# Export the Mongo files (raw data + consensus + matched catalog) so that we have a hard copy saved to disk
+# Export the Mongo files (raw data + consensus + matched catalog) so that a hard copy is saved to disk
 
 echo "Dumping Mongo files"
 mongodump --db radio --out $RGZ_PATH'/rgz_mongo'
 
-# Deactivate the Python virtual environment and unload the version of Python
+# Deactivate the Python virtual environment and unload the version of Python (only necessary if activated above)
 
 echo "Closing Python environments"
 deactivate
@@ -76,7 +84,6 @@ module unload python27
 # Close the background MongoDB instance
 
 echo "Killing MongoDB"
-#kill $(ps aux | grep '[m]ongod --fork' | awk '{print $2}')
-mongod --shutdown --dbpath $RGZ_PATH"/data2/db"
+kill $(ps aux | grep '[m]ongod --fork' | awk '{print $2}')
 
 # Finished!

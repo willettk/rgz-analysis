@@ -58,7 +58,8 @@ client = MongoClient('localhost', 27017)
 db = client['radio'] 
 
 subjects = db['radio_subjects'] # subjects = images
-classifications = db['radio_classifications']# classifications = classifications of each subject per user
+classifications = db['radio_classifications'] # classifications = classifications of each subject per user
+consensus = db['consensus'] # consensus = output of this program
 
 # Parameters for the RGZ project
 
@@ -99,13 +100,13 @@ bad_keys = ('finished_at','started_at','user_agent','lang','pending')
 #   - your current working directory (rgz_path)
 
 def determine_paths(paths):
-
+    
     found_path = False
     for path in paths:
         if os.path.exists(path):
             found_path = True
             return path
-
+    
     if found_path == False:
         print "Unable to find the hardcoded local path:"
         print paths
@@ -161,39 +162,39 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
     # Compute the most popular combination for each NUMBER of galaxies identified in image
     
     for c in _c:
-
+        
         clist_all.append(c)
         clen_start += 1
         
         # Skip classification if they already did one. This assumes the latest classification
         # is always the best (or at least the one that will be recorded here).
-
+        
         try:
             user_name = c['user_name']
         except KeyError:
             user_name = 'Anonymous'
-
+        
         # Check the answer, as long as they haven't already done one.
-
+        
         if user_name not in unique_users or user_name is 'Anonymous':
-
+            
             unique_users.add(user_name)
             listcount.append(True)
-        
+            
             sumlist = []    # List of the checksums over all possible combinations
-
+            
             # Only find data that was an actual marking, not metadata
             goodann = [x for x in c['annotations'] if (x.keys()[0] not in bad_keys)]
             n_galaxies = len(goodann)
-
+            
             # There must be at least one galaxy!
             if n_galaxies > 0:  
                 for idx,ann in enumerate(goodann):
-    
+                    
                     xmaxlist = []
                     try:
                         radio_comps = ann['radio']
-
+                        
                         # loop over all the radio components within an galaxy
                         if radio_comps != 'No Contours':
                             for rc in radio_comps:
@@ -204,7 +205,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                     except KeyError:
                         # No radio data for this classification
                         xmaxlist.append(-99)
-    
+                    
                     # To create a unique ID for the combination of radio components,
                     # take the product of all the xmax coordinates and sum them together
                     # as a crude hash. This is not an ideal method and is potentially
@@ -212,21 +213,21 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                     
                     product = reduce(operator.mul, xmaxlist, 1)
                     sumlist.append(round(product,3))
-
+                    
                 checksum = sum(sumlist)
             else:
                 # No galaxies in this classification
                 checksum = -99
-
+            
             c['checksum'] = checksum
             c['n_galaxies'] = n_galaxies
-    
+            
             # Insert checksum into dictionary with number of galaxies as the index
             if cdict.has_key(n_galaxies):
                 cdict[n_galaxies].append(checksum)
             else:
                 cdict[n_galaxies] = [checksum]
-
+            
         else:
             listcount.append(False)
     
@@ -273,7 +274,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
             maxval = mc_best[1]
             mc_checksum = mc_best[0]
     
-    # Get an galaxy that matches the checksum so we can record the annotation data
+    # Get a galaxy that matches the checksum so we can record the annotation data
 
     try:
         cmatch = next(i for i in clist if i['checksum'] == mc_checksum)
@@ -296,7 +297,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
     cons['survey'] = survey
     ir_x,ir_y = {},{}
     cons['answer'] = {}
-    cons['n_users'] = maxval
+    cons['n_votes'] = maxval
     cons['n_total'] = len(clist)
 
     # This will be where we store the consensus parameters
@@ -320,7 +321,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
             print gal, zid
         except AttributeError:
             print 'No Sources, No IR recorded for {0}'.format(zid)
-    
+        
         # Make empty copy of next dict in same loop
         ir_x[k] = []
         ir_y[k] = []
@@ -329,7 +330,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
     for c in clist:
         if c['checksum'] == mc_checksum:
-    
+            
             annlist = [ann for ann in c['annotations'] if ann.keys()[0] not in bad_keys]
             for ann in annlist:
                 if 'ir' in ann.keys():
@@ -338,10 +339,10 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                         xmax_checksum = round(sum([float(ann['radio'][a]['xmax']) for a in ann['radio']]),3)
                     except TypeError:
                         xmax_checksum = -99
-
+                    
                     try:
                         k = answer[xmax_checksum]['ind']
-
+                        
                         if ann['ir'] == 'No Sources':
                             ir_x[k].append(-99)
                             ir_y[k].append(-99)
@@ -384,11 +385,10 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
 
         x_all = [xt * scale_ir for xt in xv]
         y_all = [yt * scale_ir for yt in yv]
-        coords_all = [(xx,yy) for xx,yy in zip(x_all,y_all)]
 
         # Find the most common IR coordinate. We want to skip the next steps
         # if they said there was no IR counterpart (-99,-99)
-        ir_Counter = Counter(coords_all)
+        ir_Counter = Counter([(xx,yy) for xx,yy in zip(xv,yv)])
         most_common_ir = ir_Counter.most_common(1)[0][0]
 
         # Check if there are enough IR points to attempt a kernel density estimate
@@ -582,7 +582,7 @@ def one_answer(zid,user_name):
     cons = {}
     cons['zid'] = zid
     cons['answer'] = {}
-    cons['n_users'] = 1
+    cons['n_votes'] = 1
     cons['n_total'] = 1
     answer = cons['answer']
 
@@ -759,7 +759,7 @@ def plot_consensus(consensus,figno=1,savefig=False):
     
     ax4.set_xlim([0, img_params[survey]['IMG_WIDTH_NEW']])
     ax4.set_ylim([img_params[survey]['IMG_HEIGHT_NEW'], 0])
-    ax4.set_title('Consensus ({0:d}/{1:d} users)'.format(consensus['n_users'],consensus['n_total']))
+    ax4.set_title('Consensus ({0:d}/{1:d} users)'.format(consensus['n_votes'],consensus['n_total']))
     
     ax4.set_aspect('equal')
     
@@ -838,7 +838,7 @@ def rc(zid):
 
     return None
 
-def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
+def run_sample(survey,update=True,subset=None,do_plot=False,weights=0):
 
     # Run the consensus algorithm on the RGZ classifications
     
@@ -917,7 +917,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
         fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'a')
     else:
         fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'w')
-        fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
+        fc.write('zooniverse_id,{0}_id,n_votes,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
 
     for idx,zid in enumerate(zooniverse_ids):
     
@@ -934,7 +934,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
 
         if cons is not None:
 
-            cons['consensus_level'] = (cons['n_users']/cons['n_total'])
+            cons['consensus_level'] = (cons['n_votes']/cons['n_total'])
 
             # JSON
 
@@ -957,10 +957,27 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
                 try:
                     fc.write('{0},{1},{2:4d},{3:4d},{4:.3f},{5:2d},{6},"{7}","{8}"\n'.format( 
                             cons['zid'],cons['source'],
-                            cons['n_users'],cons['n_total'],cons['consensus_level'],
+                            cons['n_votes'],cons['n_total'],cons['consensus_level'],
                             len(ans['xmax']),alphabet(ans['ind']),bbox_unravel(ans['bbox']),ir_peak
                             )
                     )
+                except KeyError:
+                    print zid
+                    print cons
+
+            # Mongo collection
+
+            for ans in cons['answer'].itervalues():
+                try:
+                    ir_peak = ans['ir_peak']
+                except KeyError:
+                    ir_peak = ans['ir'] if ans.has_key('ir') else (-99,-99)
+                
+                try:
+                    new_con = {'zooniverse_id':cons['zid'], '{0}_id'.format(survey):cons['source'], 'n_votes':cons['n_votes'], \
+                               'n_total':cons['n_total'], 'consensus_level':cons['consensus_level'], 'n_radio':len(ans['xmax']), \
+                               'label':alphabet(ans['ind']), 'bbox':bbox_unravel(ans['bbox']), 'ir_peak':ir_peak}
+                    consensus.insert(new_con)
                 except KeyError:
                     print zid
                     print cons
@@ -982,7 +999,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=10):
 
     if subset is None:
         # JSON
-        json75 = filter(lambda a: (a['n_users']/a['n_total']) >= 0.75, jfinal)
+        json75 = filter(lambda a: (a['n_votes']/a['n_total']) >= 0.75, jfinal)
         with open('{0}/json/{1}_75.json'.format(rgz_path,filestem),'w') as fj:
             json.dump(json75,fj)
         # CSV
@@ -1007,7 +1024,7 @@ def force_csv_update(survey='first',suffix=''):
         jmaster = json.load(fm)
     
     fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'w')
-    fc.write('zooniverse_id,{0}_id,n_users,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
+    fc.write('zooniverse_id,{0}_id,n_votes,n_total,consensus_level,n_radio,label,bbox,ir_peak\n'.format(survey))
 
     for gal in jmaster:
         for ans in gal['answer'].itervalues():
@@ -1020,9 +1037,9 @@ def force_csv_update(survey='first',suffix=''):
             fc.write('{0},{1},{2:4d},{3:4d},{4:.3f},{5:2d},{6},"{7}","{8}"\n'.format(
                     gal['zid'],
                     gal['source'],
-                    gal['n_users'],
+                    gal['n_votes'],
                     gal['n_total'],
-                    gal['n_users'] * 1./gal['n_total'],
+                    gal['n_votes'] * 1./gal['n_total'],
                     len(ans['xmax']),
                     alphabet(ans['ind']),
                     bbox_unravel(ans['bbox']),
@@ -1117,7 +1134,12 @@ def get_unique_users():
 
     return unique_users
 
-def weight_users(unique_users):
+def weight_users(unique_users, min_gs=5, min_agree=0.5):
+
+    # min_gs is the minimum number of gold standard subjects user must have seen to determine agreement. 
+    # Set to prevent upweighting on low information (eg, agreeing with the science team if the user has
+    # only seen 1 gold standard object doesn't tell us as much than if they agreed 19/20 times).
+    # min_agree is the minimum level of agreement with the science team (N_agree / N_seen)
 
     # Assigns a weight to users based on their agreement with the gold standard sample as classified by RGZ science team
 
@@ -1166,14 +1188,6 @@ def weight_users(unique_users):
             pass
 
         # Save output to CSV file
-        
-        # Minimum number of gold standard subjects user must have seen to determine agreement. 
-        # Set to prevent upweighting on low information (eg, agreeing with the science team
-        # if the user has only seen 1 gold standard object doesn't tell us as much than
-        # if they agreed 19/20 times).
-        min_gs = 5
-        # Minimum level of agreement with the science team (N_agree / N_seen)
-        min_agree = 0.50
 
         weight = 1 if gs_count > 5 and (agreed * 1./gs_count) > 0.50 else 0
         print >> wf,"{0},{1},{2},{3}".format(u_str,gs_count,agreed,weight)
@@ -1208,39 +1222,43 @@ if __name__ == "__main__":
 
         print 'Starting at',datetime.datetime.now().strftime('%H:%M:%S.%f')
 
+        # update: default = True
+        #
+        #   Set as True if you want to run the consensus only on the subjects completed
+        #   since the last time the pipeline was run. If False, it will run it on the
+        #   entire set of completed subjects (which takes about 6 hours for 10k images).
+        update = True
+
+        # subset: default = None
+        #
+        #   Run the sample only on some specific subjects. Pre-defined subsets include:
+        #       'expert100': a sample of 100 galaxies classified by science team
+        #       'goldstandard': the gold standard sample of 20 galaxies classified by all users
+        #                       and the science team. All galaxies in 'goldstandard' are also in
+        #                       'expert100'.
+        subset = None
+
+        # do_plot: default = False
+        #
+        #   Set as True if you want to make the four-panel plots of the consensus for each subject.
+        #   Useful, but adds to the total runtime.
+        do_plot = False
+
+        # weights: default = 0
+        #
+        #   Execute weighting of the users based on their agreement with the science team
+        #   on the gold standard subjects. If weights = 0 or weights = 1, each users' vote
+        #   is counted equally in the consensus. If weights > 1, then their impact is
+        #   increased by replicating the classifications. Must be a nonnegative integer.
+        weights = 0
+        assert (type(weights) == int) and weights >= 0, 'Weight must be a nonnegative integer'
+        # If you're using weights, make sure they're up to date
+        if weights > 1:
+            unique_users = get_unique_users()
+            weight_users(unique_users=unique_users, min_gs=5, min_agree=0.5)
+
         # Run the consensus separately for different surveys, since the image parameters are different
         for survey in ('atlas','first'):
-
-            # update: default = True
-            #
-            #   Set as True if you want to run the consensus only on the subjects 
-            #   completed since the last time the pipeline was run. If False, it
-            #   will run it on the entire set of completed subjects (which can take days for ~90,000 images).
-            update = True
-
-            # subset: default = None
-            #
-            #   Run the sample only on some specific subjects. Pre-defined subsets include:
-            #       'expert100': a sample of 100 galaxies classified by science team
-            #       'goldstandard': the gold standard sample of 20 galaxies classified by all users
-            #                       and the science team. All galaxies in 'goldstandard' are also in
-            #                       'expert100'.
-            subset = None
-
-            # do_plot: default = False
-            #
-            #   Set as True if you want to make the four-panel plots of the consensus for each subject.
-            #   Useful, but adds to the total runtime.
-            do_plot = False
-
-            # weights: default = 0
-            #
-            #   Execute weighting of the users based on their agreement with the science team
-            #   on the gold standard subjects. If weights = 0 or weights = 1, each users' vote
-            #   is counted equally in the consensus. If weights > 1, then their impact is
-            #   increased by replicating the classifications. Must be an integer.
-            weights = 0
-
             run_sample(survey,update,subset,do_plot,weights)
 
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')

@@ -27,12 +27,23 @@ def getWISE(entry):
             break
         except (TimeoutError, TableParseError) as e:
             if tryCount>5:
-                message = 'Unable to connect to IRSA; aborting'
+                message = 'Unable to connect to IRSA; trying again in 10 min'
                 logging.exception(message)
                 print message
                 raise fn.DataAccessError(message)
             logging.exception(e)
             time.sleep(10)
+        except Exception as e:
+            if str(e) == 'Query failed\n':
+                if tryCount>5:
+                    message = 'Unable to connect to IRSA; trying again in 10 min'
+                    logging.exception(message)
+                    print message
+                    raise fn.DataAccessError(message)
+                logging.exception(e)
+                time.sleep(10)
+            else:
+                raise
     
     if len(table):
         numberMatches = 0
@@ -90,16 +101,17 @@ def SDSS_select(sql):
          br['format'] = ['csv']
          response = br.submit()
          file_like = StringIO.StringIO(response.get_data())
+         df = pd.read_csv(file_like, skiprows=1)
          break
-      except (mechanize.URLError, mechanize.HTTPError, httplib.BadStatusLine) as e:
+      except (mechanize.URLError, mechanize.HTTPError, httplib.BadStatusLine, pd.parser.CParserError) as e:
          if tryCount>5:
-            message = 'Unable to connect to SkyServer; aborting'
+            message = 'Unable to connect to SkyServer; trying again in 10 min'
             logging.exception(message)
             print message
             raise fn.DataAccessError(message)
          logging.exception(e)
          time.sleep(10)
-   return pd.read_csv(file_like, skiprows=1)
+   return df
 
 def getSDSS(entry):
     '''
@@ -110,7 +122,7 @@ def getSDSS(entry):
     
     ir_pos = coord.SkyCoord(entry['consensus']['IR_ra'], entry['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
     
-    query = '''select objID, ra, dec, u, g, r, i, z, err_u, err_g, err_r, err_i, err_z from Galaxy
+    query = '''select objID, ra, dec, u, r, g, i, z, err_u, err_r, err_g, err_i, err_z from Galaxy
                where (ra between %f-3./3600 and %f+3./3600) and (dec between %f-3./3600 and %f+3./3600)''' \
                % (ir_pos.ra.deg, ir_pos.ra.deg, ir_pos.dec.deg, ir_pos.dec.deg)
     df = SDSS_select(query)
@@ -135,8 +147,8 @@ def getSDSS(entry):
                     numberMatches += 1
         if match is not None:
             sdss_match = {'objID':df['objID'][match.name], 'ra':match['ra'], 'dec':match['dec'], 'numberMatches':np.int16(numberMatches), \
-                          'u':match['u'], 'g':match['g'], 'r':match['r'], 'i':match['i'], 'z':match['z'], \
-                          'u_err':match['err_u'], 'g_err':match['err_g'], 'r_err':match['err_r'], 'i_err':match['err_i'], 'z_err':match['err_z']}
+                          'u':match['u'], 'r':match['r'], 'g':match['g'], 'i':match['i'], 'z':match['z'], \
+                          'u_err':match['err_u'], 'r_err':match['err_r'], 'g_err':match['err_g'], 'i_err':match['err_i'], 'z_err':match['err_z']}
         else:
             sdss_match = None
     else:
@@ -214,9 +226,9 @@ def getRadio(data, fits_loc, consensusObject):
         decRange = [ min(bboxCornersRD[0][1], bboxCornersRD[1][1]), max(bboxCornersRD[0][1], bboxCornersRD[1][1]) ]
         pos1 = coord.SkyCoord(raRange[0], decRange[0], unit=(u.deg, u.deg))
         pos2 = coord.SkyCoord(raRange[1], decRange[1], unit=(u.deg, u.deg))
-        extentArcmin = pos1.separation(pos2).arcminute
+        extentArcsec = pos1.separation(pos2).arcsecond
         solidAngleArcsec2 = tree.areaArcsec2
-        components.append({'flux':tree.fluxmJy, 'fluxErr':tree.fluxErrmJy, 'angularExtent':extentArcmin, 'solidAngle':solidAngleArcsec2, \
+        components.append({'flux':tree.fluxmJy, 'fluxErr':tree.fluxErrmJy, 'angularExtent':extentArcsec, 'solidAngle':solidAngleArcsec2, \
                            'raRange':raRange, 'decRange':decRange})
     
     #adds up total flux of all components
@@ -233,9 +245,9 @@ def getRadio(data, fits_loc, consensusObject):
         totalSolidAngleArcsec2 += component['solidAngle']
     
     #find maximum extent of component bboxes in arcseconds
-    maxAngularExtentArcmin = 0
+    maxAngularExtentArcsec = 0
     if len(components)==1:
-        maxAngularExtentArcmin = components[0]['angularExtent']
+        maxAngularExtentArcsec = components[0]['angularExtent']
     else:
         for i in range(len(components)-1):
             for j in range(1,len(components)-i):
@@ -249,8 +261,8 @@ def getRadio(data, fits_loc, consensusObject):
                                       [components[i+j]['raRange'][1], components[i+j]['decRange'][1]] ])
                 pos1 = coord.SkyCoord(corners1.T[0], corners1.T[1], unit=(u.deg, u.deg))
                 pos2 = coord.SkyCoord(corners2.T[0], corners2.T[1], unit=(u.deg, u.deg))
-                angularExtentArcmins = pos1.separation(pos2).arcminute
-                maxAngularExtentArcmin = max(np.append(angularExtentArcmins, maxAngularExtentArcmin))
+                angularExtentArcsec = pos1.separation(pos2).arcsecond
+                maxAngularExtentArcsec = max(np.append(angularExtentArcsec, maxAngularExtentArcsec))
     
     #add all peaks up into single list
     peakList = []
@@ -258,9 +270,24 @@ def getRadio(data, fits_loc, consensusObject):
         for peak in tree.peaks:
             peakList.append(peak)
     peakFluxErrmJy = contourTrees[0].sigmamJy
+
+    #find center of radio source
+    raMin, raMax, decMin, decMax = np.inf, 0, np.inf, 0
+    for comp in components:
+        if comp['raRange'][0] < raMin:
+            raMin = comp['raRange'][0]
+        if comp['raRange'][1] > raMax:
+            raMax = comp['raRange'][1]
+        if comp['decRange'][0] < decMin:
+            decMin = comp['decRange'][0]
+        if comp['decRange'][1] > decMax:
+            decMax = comp['decRange'][1]
+    meanRa = (raMax+raMin)/2.
+    meanDec = (decMax+decMin)/2.
     
     radio_data = {'radio':{'totalFlux':totalFluxmJy, 'totalFluxErr':totalFluxErrmJy, 'outermostLevel':data['contours'][0][0]['level']*1000, \
-                           'numberComponents':len(contourTrees), 'numberPeaks':len(peakList), 'maxAngularExtent':maxAngularExtentArcmin, \
-                           'totalSolidAngle':totalSolidAngleArcsec2, 'peakFluxErr':peakFluxErrmJy, 'peaks':peakList, 'components':components}}
+                           'numberComponents':len(contourTrees), 'numberPeaks':len(peakList), 'maxAngularExtent':maxAngularExtentArcsec, \
+                           'totalSolidAngle':totalSolidAngleArcsec2, 'peakFluxErr':peakFluxErrmJy, 'peaks':peakList, 'components':components, \
+                           'ra':meanRa, 'dec':meanDec}}
     
     return radio_data
