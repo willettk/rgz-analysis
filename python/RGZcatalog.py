@@ -206,7 +206,7 @@ def RGZcatalog():
                     entry.update({'rgz_name':name})
 
                     #calculate physical data using redshift
-                    if sdss_match and 'redshift' in sdss_match:
+                    if sdss_match and 'redshift' in sdss_match and sdss_match['redshift']>0:
                         z = sdss_match['redshift']
                         lz = np.log10(z)
                         DAkpc = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)*1000 #angular size distance approximation in kpc

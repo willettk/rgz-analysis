@@ -150,6 +150,8 @@ def flat_version(catalog,full=False):
                             row.append(peak_strings[field])
                         elif prefix == 'duplicateSources':
                             row.append(duplicate_strings[field])
+                        elif prefix in ['AllWISE', 'SDSS'] and prefix not in c and field == 'numberMatches':
+                            row.append(0)
                         elif prefix in c and field in c[prefix]:
                             row.append(c[prefix][field])
                         else:
