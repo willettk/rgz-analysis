@@ -159,9 +159,9 @@ def getSDSS(entry):
         query = '''select p.z as photoZ, p.zErr as photoZErr, s.z as specZ, s.zErr as specZErr,
                      oiii_5007_flux, oiii_5007_flux_err, h_beta_flux, h_beta_flux_err,
                      nii_6584_flux, nii_6584_flux_err, h_alpha_flux, h_alpha_flux_err,
-                     case when class like 'GALAXY' then 0
-                          when class like 'QSO' then 1
-                          when class like 'STAR' then 2 end as spectralClass
+                     case when class like 'GALAXY' then 'G'
+                          when class like 'QSO' then 'Q'
+                          when class like 'STAR' then 'S' end as spectralClass
                    from Photoz as p
                      full outer join SpecObj as s on p.objID = s.bestObjID
                      full outer join GalSpecLine as g on s.specobjid = g.specobjid
@@ -171,15 +171,17 @@ def getSDSS(entry):
             if not np.isnan(df['specZ'][0]):
                 redshift = df['specZ'][0]
                 redshift_err = df['specZErr'][0]
-                redshift_type = np.int16(1)
+                redshift_type = 's'
             else:
                 redshift = df['photoZ'][0]
                 redshift_err = df['photoZErr'][0]
-                redshift_type = np.int16(0)
+                redshift_type = 'p'
+            
             if redshift != -9999:
                 moreData = {'redshift':redshift, 'redshift_err':redshift_err, 'redshift_type':redshift_type}
             else:
                 moreData = {}
+            
             for key in ['oiii_5007_flux', 'oiii_5007_flux_err', 'h_beta_flux', 'h_beta_flux_err', \
                         'nii_6584_flux', 'nii_6584_flux_err', 'h_alpha_flux', 'h_alpha_flux_err', 'spectralClass']:
                 if not np.isnan(df[key][0]):
