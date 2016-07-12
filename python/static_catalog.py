@@ -46,17 +46,18 @@ def flat_version(catalog,full=False):
         # Manually order fields
         fields = ['catalog_id', 'rgz_name', 'zooniverse_id', 'first_id', \
                   'radio.ra', 'radio.dec', 'consensus.IR_ra', 'consensus.IR_dec', 'consensus.n_votes', 'consensus.n_total', 'consensus.level', \
-                      'radio.numberComponents', 'radio.numberPeaks', 'radio.maxAngularExtent', 'radio.totalSolidAngle', 'radio.outermostLevel', \
-                      'radio.maxPhysicalExtent', 'radio.totalCrossSection', \
-                  'component.peakFluxes', 'component.peakFluxErrs', 'component.peakRas', 'component.peakDecs', \
-                  'peak.fluxes', 'peak.fluxErrs', 'peak.ras', 'peak.decs', \
-                  'radio.totalFlux', 'radio.totalFluxErr', 'radio.totalLuminosity', 'radio.totalLuminosityErr', \
+                      'radio.number_components', 'radio.number_peaks', 'radio.max_angular_extent', 'radio.total_solid_angle', 'radio.outermost_level', \
+                      'radio.max_physical_extent', 'radio.total_cross_section', \
+                  'component.peak_fluxes', 'component.peak_flux_errs', 'component.peak_ras', 'component.peak_decs', \
+                  'peak.fluxes', 'peak.flux_errs', 'peak.ras', 'peak.decs', \
+                  'radio.total_flux', 'radio.total_flux_err', 'radio.total_luminosity', 'radio.total_luminosity_err', \
                   'AllWISE.designation', 'AllWISE.ra', 'AllWISE.dec', \
                       'AllWISE.w1mpro', 'AllWISE.w1sigmpro', 'AllWISE.w1snr', 'AllWISE.w2mpro', 'AllWISE.w2sigmpro', 'AllWISE.w2snr', \
-                      'AllWISE.w3mpro', 'AllWISE.w3sigmpro', 'AllWISE.w3snr', 'AllWISE.w4mpro', 'AllWISE.w4sigmpro', 'AllWISE.w4snr', 'AllWISE.numberMatches', \
+                      'AllWISE.w3mpro', 'AllWISE.w3sigmpro', 'AllWISE.w3snr', 'AllWISE.w4mpro', 'AllWISE.w4sigmpro', 'AllWISE.w4snr', 'AllWISE.number_matches', \
                   'SDSS.objID', 'SDSS.ra', 'SDSS.dec', 'SDSS.u', 'SDSS.u_err', 'SDSS.r', 'SDSS.r_err', 'SDSS.g', 'SDSS.g_err', 'SDSS.i', 'SDSS.i_err', \
-                      'SDSS.z', 'SDSS.z_err', 'SDSS.redshift', 'SDSS.redshift_err', 'SDSS.redshift_type', 'SDSS.spectralClass', 'SDSS.numberMatches', \
-                  'duplicateSources.shareComponents', 'duplicateSources.matchComponents', 'duplicateSources.WISECATmismatch']
+                      'SDSS.z', 'SDSS.z_err', 'SDSS.photo_z', 'SDSS.photo_z_err', 'SDSS.spec_z', 'SDSS.spec_z_err', \
+                      'SDSS.morphological_class', 'SDSS.spectral_class', 'SDSS.number_matches', \
+                  'duplicate_sources.share_components', 'duplicate_sources.match_components', 'duplicate_sources.WISE_cat_mismatch']
         header = ''
         for field in fields:
             header += '{},'.format(field)
@@ -67,8 +68,8 @@ def flat_version(catalog,full=False):
 
         # Find all duplicate sources for deletion
         cids_for_removal = []
-        for c in catalog.find({'duplicateSources.exactDuplicate':{'$exists':True}}):
-            if c['catalog_id'] != min(c['duplicateSources']['exactDuplicate']):
+        for c in catalog.find({'duplicate_sources.exact_duplicate':{'$exists':True}}):
+            if c['catalog_id'] != min(c['duplicate_sources']['exact_duplicate']):
                 cids_for_removal.append(c['catalog_id'])
         
         # Select all matching galaxies (in this case, sources with optical and IR counterparts)
@@ -78,27 +79,27 @@ def flat_version(catalog,full=False):
         for c in catalog.find(args).sort([('catalog_id', 1)]):
 
             # Determine component strings
-            component_strings = {'peakFluxes':'', 'peakFluxErrs':'', 'peakRas':'', 'peakDecs':''}
+            component_strings = {'peak_fluxes':'', 'peak_flux_errs':'', 'peak_ras':'', 'peak_decs':''}
             for component in c['radio']['components']:
                 maxPeak = {'flux':-99, 'ra':-99, 'dec':-99}
                 for peak in c['radio']['peaks']:
-                    if component['raRange'][0] <= peak['ra'] <= component['raRange'][1] and \
-                       component['decRange'][0] <= peak['dec'] <= component['decRange'][1] and \
+                    if component['ra_range'][0] <= peak['ra'] <= component['ra_range'][1] and \
+                       component['dec_range'][0] <= peak['dec'] <= component['dec_range'][1] and \
                        peak['flux'] > maxPeak['flux']:
                         maxPeak = peak.copy()
-                component_strings['peakFluxes'] += '{};'.format(maxPeak['flux'])
-                component_strings['peakFluxErrs'] += '{};'.format(c['radio']['peakFluxErr'])
-                component_strings['peakRas'] += '{};'.format(maxPeak['ra'])
-                component_strings['peakDecs'] += '{};'.format(maxPeak['dec'])
+                component_strings['peak_fluxes'] += '{};'.format(maxPeak['flux'])
+                component_strings['peak_flux_errs'] += '{};'.format(c['radio']['peak_flux_err'])
+                component_strings['peak_ras'] += '{};'.format(maxPeak['ra'])
+                component_strings['peak_decs'] += '{};'.format(maxPeak['dec'])
             for key in component_strings:
                 component_strings[key] = '"{}"'.format(component_strings[key][:-1])
 
             # Determine peak strings (only for single component sources)
-            peak_strings = {'fluxes':'', 'fluxErrs':'', 'ras':'', 'decs':''}
-            if c['radio']['numberComponents'] == 1:
+            peak_strings = {'fluxes':'', 'flux_errs':'', 'ras':'', 'decs':''}
+            if c['radio']['number_components'] == 1:
                 for peak in c['radio']['peaks']:
                     peak_strings['fluxes'] += '{};'.format(peak['flux'])
-                    peak_strings['fluxErrs'] += '{};'.format(c['radio']['peakFluxErr'])
+                    peak_strings['flux_errs'] += '{};'.format(c['radio']['peak_flux_err'])
                     peak_strings['ras'] += '{};'.format(peak['ra'])
                     peak_strings['decs'] += '{};'.format(peak['dec'])
                 for key in peak_strings:
@@ -108,11 +109,11 @@ def flat_version(catalog,full=False):
                     peak_strings[key] = -99
 
             # Determine overlap strings (when applicable)
-            duplicate_strings = {'shareComponents':'', 'matchComponents':'', 'WISECATmismatch':''}
-            if 'duplicateSources' in c:
+            duplicate_strings = {'share_components':'', 'match_components':'', 'WISE_cat_mismatch':''}
+            if 'duplicate_sources' in c:
                 for key in duplicate_strings:
-                    if key in c['duplicateSources']:
-                        for cid in c['duplicateSources'][key]:
+                    if key in c['duplicate_sources']:
+                        for cid in c['duplicate_sources'][key]:
                             if cid not in cids_for_removal:
                                 duplicate_strings[key] += '{};'.format(cid)
                         duplicate_strings[key] = '"{}"'.format(duplicate_strings[key][:-1])
@@ -121,10 +122,10 @@ def flat_version(catalog,full=False):
                     duplicate_strings[key] = -99
 
             # Combine sources (if duplicates exist)
-            if 'duplicateSources' in c and 'exactDuplicate' in c['duplicateSources']:
+            if 'duplicate_sources' in c and 'exact_duplicate' in c['duplicate_sources']:
                 votes, total = 0, 0
                 IR_ra, IR_dec = 0., 0.
-                for d in catalog.find({'catalog_id': {'$in': c['duplicateSources']['exactDuplicate']}}):
+                for d in catalog.find({'catalog_id': {'$in': c['duplicate_sources']['exact_duplicate']}}):
                     votes += d['consensus']['n_votes']
                     total += d['consensus']['n_total']
                     if 'IR_ra' in d['consensus']:
@@ -148,9 +149,9 @@ def flat_version(catalog,full=False):
                             row.append(component_strings[field])
                         elif prefix == 'peak':
                             row.append(peak_strings[field])
-                        elif prefix == 'duplicateSources':
+                        elif prefix == 'duplicate_sources':
                             row.append(duplicate_strings[field])
-                        elif prefix in ['AllWISE', 'SDSS'] and prefix not in c and field == 'numberMatches':
+                        elif prefix in ['AllWISE', 'SDSS'] and prefix not in c and field == 'number_matches':
                             row.append(0)
                         elif prefix in c and field in c[prefix]:
                             row.append(c[prefix][field])

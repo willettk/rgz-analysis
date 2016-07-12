@@ -20,11 +20,11 @@ def coordinate_match(ra0,dec0,ra1,dec1,tol_ra=5e-4,tol_dec=5e-4):
 def component_match(c1_components,c2_components):
     
     # Bounding box surrounding a radio component in Image 2
-    c2_ra0,c2_ra1 = c2_components['raRange']
-    c2_dec0,c2_dec1 = c2_components['decRange']
+    c2_ra0,c2_ra1 = c2_components['ra_range']
+    c2_dec0,c2_dec1 = c2_components['dec_range']
     # Bounding box surrounding a radio component in Image 1
-    c1_ra0,c1_ra1 = c1_components['raRange']
-    c1_dec0,c1_dec1 = c1_components['decRange']
+    c1_ra0,c1_ra1 = c1_components['ra_range']
+    c1_dec0,c1_dec1 = c1_components['dec_range']
     
     # Does the lower left corner of the component match for Image 1 and Image 2?
     ll_match = coordinate_match(c2_ra0,c2_dec0,c1_ra0,c1_dec0)
@@ -35,45 +35,45 @@ def component_match(c1_components,c2_components):
 
 def append_overlaps(c1,c2,field):
     
-    newField = 'duplicateSources.{0}'.format(field)
+    newField = 'duplicate_sources.{0}'.format(field)
     c1_cid = c1['catalog_id']
     c2_cid = c2['catalog_id']
     
-    if c1.has_key('duplicateSources'):
+    if c1.has_key('duplicate_sources'):
         #print "{0} has key 'duplicateSources'".format(c1_cid)
-        if c1['duplicateSources'].has_key(field):
+        if c1['duplicate_sources'].has_key(field):
             #print "Has {0}".format(newField)
-            if c2_cid not in c1['duplicateSources'][field]:
+            if c2_cid not in c1['duplicate_sources'][field]:
                 #print "Appending {0} to list".format(c2_cid)
                 catalog.update({'catalog_id': c1_cid},{'$addToSet':{newField:c2_cid}})
         else:
             #print "Didn't have '{2}'; creating and appending {0} to {1}".format(c2_cid,c1_cid,newField)
             catalog.update({'catalog_id': c1_cid},{'$set':{newField:[c2_cid,]}})
-        if field == 'matchComponents':
-            catalog.update({'catalog_id': c1_cid},{'$pull':{'duplicateSources.shareComponents':c2_cid}})
+        if field == 'match_components':
+            catalog.update({'catalog_id': c1_cid},{'$pull':{'duplicate_sources.share_components':c2_cid}})
     
     else:
         #print "{1} didn't have key 'duplicateSources'; creating and appending {0} under '{2}'".format(c2_cid,c1_cid,field)
         catalog.update({'catalog_id': c1_cid},{'$set':{newField:[c2_cid,]}})
     
-    if c2.has_key('duplicateSources'):
+    if c2.has_key('duplicate_sources'):
         #print "{0} has key 'duplicateSources'".format(c2_cid)
-        if c2['duplicateSources'].has_key(field):
+        if c2['duplicate_sources'].has_key(field):
             #print "Has {0}".format(newField)
-            if c1_cid not in c2['duplicateSources'][field]:
+            if c1_cid not in c2['duplicate_sources'][field]:
                 #print "Appending {0} to list".format(c1_cid)
                 catalog.update({'catalog_id': c2_cid},{'$addToSet':{newField:c1_cid}})
         else:
             #print "Didn't have '{2}'; creating and appending {0} to {1}".format(c1_cid,c2_cid,newField)
             catalog.update({'catalog_id': c2_cid},{'$set':{newField:[c1_cid,]}})
-        if field=='matchComponents':
-            catalog.update({'catalog_id': c2_cid},{'$pull':{'duplicateSources.shareComponents':c1_cid}})
+        if field=='match_components':
+            catalog.update({'catalog_id': c2_cid},{'$pull':{'duplicate_sources.share_components':c1_cid}})
     
     else:
         #print "{1} didn't have key 'duplicateSources'; creating and appending {0} under '{2}'".format(c1_cid,c2_cid,field)
         catalog.update({'catalog_id': c2_cid},{'$set':{newField:[c1_cid,]}})
     
-    if field == 'exactDuplicate':
+    if field == 'exact_duplicate':
         catalog.update({'catalog_id': c1_cid},{'$addToSet':{newField:c1_cid}})
         catalog.update({'catalog_id': c2_cid},{'$addToSet':{newField:c2_cid}})
     
@@ -82,15 +82,15 @@ def append_overlaps(c1,c2,field):
 def check_symmetry(zooniverse_ids):
     returnVal = True
     for z in zooniverse_ids:
-        for subject1 in catalog.find({ 'zooniverse_id':z, 'duplicateSources':{'$exists':True} }):
+        for subject1 in catalog.find({ 'zooniverse_id':z, 'duplicate_sources':{'$exists':True} }):
             cid1 = subject1['catalog_id']
-            for duplicateCategory in subject1['duplicateSources']:
-                for cid2 in subject1['duplicateSources'][duplicateCategory]:
+            for duplicateCategory in subject1['duplicate_sources']:
+                for cid2 in subject1['duplicate_sources'][duplicateCategory]:
                     subject2 = catalog.find_one({'catalog_id':cid2})
-                    if ('duplicateSources' not in subject2) or \
-                       (duplicateCategory not in subject2['duplicateSources']) or \
-                       (cid1 not in subject2['duplicateSources'][duplicateCategory]):
-                        print "{1}'s 'duplicateSources.{2}' should contain {0} but doesn't".format(cid1, cid2, duplicateCategory)
+                    if ('duplicate_sources' not in subject2) or \
+                       (duplicateCategory not in subject2['duplicate_sources']) or \
+                       (cid1 not in subject2['duplicate_sources'][duplicateCategory]):
+                        print "{1}'s 'duplicate_sources.{2}' should contain {0} but doesn't".format(cid1, cid2, duplicateCategory)
                         returnVal = False
     #print "All symmetric"
     return returnVal
@@ -124,11 +124,11 @@ def find_duplicates(zid):
                         
                         if anymatch:
                             print "Shared components found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
-                            append_overlaps(c1,c2,'shareComponents')
+                            append_overlaps(c1,c2,'share_components')
                             c1 = catalog.find_one({'catalog_id':c1_id})
                             c2 = catalog.find_one({'catalog_id':c2_id})
                         
-                        if c1['radio']['numberComponents'] == c2['radio']['numberComponents']:
+                        if c1['radio']['number_components'] == c2['radio']['number_components']:
                             
                             # For all possible orders of the components in both lists, 
                             # is there a set that matches within the tolerance?
@@ -156,14 +156,14 @@ def find_duplicates(zid):
                                     # Record the answer by appending it to the catalog entry
                                     # Only do it once, otherwise it'll repeat when the second one rolls around.
                                     
-                                    append_overlaps(c1,c2,'matchComponents')
+                                    append_overlaps(c1,c2,'match_components')
                                     c1 = catalog.find_one({'catalog_id':c1_id})
                                     c2 = catalog.find_one({'catalog_id':c2_id})
                                     
                                     #check if IR matches as well
                                     if 'IR_ra' not in c1['consensus'] and 'IR_ra' not in c2['consensus']:
                                         print "Exact match (no WISE ID) found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
-                                        append_overlaps(c1,c2,'exactDuplicate')
+                                        append_overlaps(c1,c2,'exact_duplicate')
                                         c1 = catalog.find_one({'catalog_id':c1_id})
                                         c2 = catalog.find_one({'catalog_id':c2_id})
                                         
@@ -171,7 +171,7 @@ def find_duplicates(zid):
                                         if ('AllWISE' in c1 and 'AllWISE' in c2 and c1['AllWISE']==c2['AllWISE']) or \
                                            ('AllWISE' not in c1 and 'AllWISE' not in c2):
                                             print "Exact match (same WISE catalog ID) found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
-                                            append_overlaps(c1,c2,'exactDuplicate')
+                                            append_overlaps(c1,c2,'exact_duplicate')
                                             c1 = catalog.find_one({'catalog_id':c1_id})
                                             c2 = catalog.find_one({'catalog_id':c2_id})
                                             
@@ -180,7 +180,7 @@ def find_duplicates(zid):
                                             c2_ir = coord.SkyCoord(c2['consensus']['IR_ra'], c2['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
                                             if c1_ir.separation(c2_ir).arcsecond < 3.0:
                                                 print "WISE catalog mismatch found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
-                                                append_overlaps(c1,c2,'WISECATmismatch')
+                                                append_overlaps(c1,c2,'WISE_cat_mismatch')
                                                 c1 = catalog.find_one({'catalog_id':c1_id})
                                                 c2 = catalog.find_one({'catalog_id':c2_id})
                                     

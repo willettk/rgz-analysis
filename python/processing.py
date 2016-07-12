@@ -61,7 +61,7 @@ def getWISE(entry):
                     dist = match['dist']
                     numberMatches += 1
         if match:
-            wise_match = {'designation':'WISEA'+match['designation'], 'ra':match['ra'], 'dec':match['dec'], 'numberMatches':np.int16(numberMatches), \
+            wise_match = {'designation':'WISEA'+match['designation'], 'ra':match['ra'], 'dec':match['dec'], 'number_matches':np.int16(numberMatches), \
                           'w1mpro':match['w1mpro'], 'w1sigmpro':match['w1sigmpro'], 'w1snr':match['w1snr'], \
                           'w2mpro':match['w2mpro'], 'w2sigmpro':match['w2sigmpro'], 'w2snr':match['w2snr'], \
                           'w3mpro':match['w3mpro'], 'w3sigmpro':match['w3sigmpro'], 'w3snr':match['w3snr'], \
@@ -122,7 +122,11 @@ def getSDSS(entry):
     
     ir_pos = coord.SkyCoord(entry['consensus']['IR_ra'], entry['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
     
-    query = '''select objID, ra, dec, u, r, g, i, z, err_u, err_r, err_g, err_i, err_z from Galaxy
+    query = '''select objID, ra, dec, u, r, g, i, z, err_u, err_r, err_g, err_i, err_z,
+                 case when type = 3 then 'G'
+                      when type = 6 then 'S'
+                      else 'U' end as class
+               from PhotoPrimary
                where (ra between %f-3./3600 and %f+3./3600) and (dec between %f-3./3600 and %f+3./3600)''' \
                % (ir_pos.ra.deg, ir_pos.ra.deg, ir_pos.dec.deg, ir_pos.dec.deg)
     df = SDSS_select(query)
@@ -147,45 +151,53 @@ def getSDSS(entry):
                     numberMatches += 1
         if match is not None:
             sdss_match = {'objID':df['objID'][match.name], 'ra':match['ra'], 'dec':match['dec'], 'numberMatches':np.int16(numberMatches), \
-                          'u':match['u'], 'r':match['r'], 'g':match['g'], 'i':match['i'], 'z':match['z'], \
+                          'morphological_class':match['class'], 'u':match['u'], 'r':match['r'], 'g':match['g'], 'i':match['i'], 'z':match['z'], \
                           'u_err':match['err_u'], 'r_err':match['err_r'], 'g_err':match['err_g'], 'i_err':match['err_i'], 'z_err':match['err_z']}
         else:
             sdss_match = None
     else:
         sdss_match = None
 
-    if sdss_match:
+    if sdss_match and sdss_match['morphological_class'] == 'G': #query the galaxy tables
 
-        query = '''select p.z as photoZ, p.zErr as photoZErr, s.z as specZ, s.zErr as specZErr,
+        query = '''select p.z as photo_z, p.zErr as photo_z_err, s.z as spec_z, s.zErr as spec_z_err,
                      oiii_5007_flux, oiii_5007_flux_err, h_beta_flux, h_beta_flux_err,
-                     nii_6584_flux, nii_6584_flux_err, h_alpha_flux, h_alpha_flux_err,
-                     case when class like 'GALAXY' then 'G'
-                          when class like 'QSO' then 'Q'
-                          when class like 'STAR' then 'S' end as spectralClass
+                     nii_6584_flux, nii_6584_flux_err, h_alpha_flux, h_alpha_flux_err, class
                    from Photoz as p
                      full outer join SpecObj as s on p.objID = s.bestObjID
                      full outer join GalSpecLine as g on s.specobjid = g.specobjid
                    where p.objID = %i''' % sdss_match['objID']
         df = SDSS_select(query)
         if len(df):
-            if not np.isnan(df['specZ'][0]):
-                redshift = df['specZ'][0]
-                redshift_err = df['specZErr'][0]
-                redshift_type = 's'
-            else:
-                redshift = df['photoZ'][0]
-                redshift_err = df['photoZErr'][0]
-                redshift_type = 'p'
-            
-            if redshift != -9999:
-                moreData = {'redshift':redshift, 'redshift_err':redshift_err, 'redshift_type':redshift_type}
-            else:
-                moreData = {}
-            
+            moreData = {}
+            if not np.isnan(df['spec_z'][0]):
+                moreData['spec_z'] = df['spec_z'][0]
+                moreData['spec_z_err'] = df['spec_z_err'][0]
+            if df['photo_z'][0] != -9999:
+                moreData['photo_z'] = df['photo_z'][0]
+                moreData['photo_z_err'] = df['photo_z_err'][0]
+            if not np.isnan(df['class'][0]):
+                moreData['spectral_class'] = df['class'][0][0]
             for key in ['oiii_5007_flux', 'oiii_5007_flux_err', 'h_beta_flux', 'h_beta_flux_err', \
-                        'nii_6584_flux', 'nii_6584_flux_err', 'h_alpha_flux', 'h_alpha_flux_err', 'spectralClass']:
+                        'nii_6584_flux', 'nii_6584_flux_err', 'h_alpha_flux', 'h_alpha_flux_err']:
                 if not np.isnan(df[key][0]):
                     moreData[key] = df[key][0]
+            sdss_match.update(moreData)
+
+    elif sdss_match and sdss_match['morphological_class'] == 'S': #query the star tables
+
+        query = '''select so.z as spec_z, so.zErr as spec_z_err, class
+                     from Star as s
+                       full outer join SpecObj as so on s.objID=so.bestObjID
+                   where s.objID = %i''' % sdss_match['objID']
+        df = SDSS_select(query)
+        if len(df):
+            moreData = {}
+            if not np.isnan(df['spec_z'][0]):
+                moreData['spec_z'] = df['spec_z'][0]
+                moreData['spec_z_err'] = df['spec_z_err'][0]
+            if not np.isnan(df['class'][0]):
+                moreData['spectral_class'] = df['class'][0][0]
             sdss_match.update(moreData)
 
     if sdss_match:
@@ -230,37 +242,37 @@ def getRadio(data, fits_loc, consensusObject):
         pos2 = coord.SkyCoord(raRange[1], decRange[1], unit=(u.deg, u.deg))
         extentArcsec = pos1.separation(pos2).arcsecond
         solidAngleArcsec2 = tree.areaArcsec2
-        components.append({'flux':tree.fluxmJy, 'fluxErr':tree.fluxErrmJy, 'angularExtent':extentArcsec, 'solidAngle':solidAngleArcsec2, \
-                           'raRange':raRange, 'decRange':decRange})
+        components.append({'flux':tree.fluxmJy, 'flux_err':tree.fluxErrmJy, 'angular_extent':extentArcsec, 'solid_angle':solidAngleArcsec2, \
+                           'ra_range':raRange, 'dec_range':decRange})
     
     #adds up total flux of all components
     totalFluxmJy = 0
     totalFluxErrmJy2 = 0
     for component in components:
         totalFluxmJy += component['flux']
-        totalFluxErrmJy2 += np.square(component['fluxErr'])
+        totalFluxErrmJy2 += np.square(component['flux_err'])
     totalFluxErrmJy = np.sqrt(totalFluxErrmJy2)
     
     #finds total area enclosed by contours in arcminutes
     totalSolidAngleArcsec2 = 0
     for component in components:
-        totalSolidAngleArcsec2 += component['solidAngle']
+        totalSolidAngleArcsec2 += component['solid_angle']
     
     #find maximum extent of component bboxes in arcseconds
     maxAngularExtentArcsec = 0
     if len(components)==1:
-        maxAngularExtentArcsec = components[0]['angularExtent']
+        maxAngularExtentArcsec = components[0]['angular_extent']
     else:
         for i in range(len(components)-1):
             for j in range(1,len(components)-i):
-                corners1 = np.array([ [components[i]['raRange'][0], components[i]['decRange'][0]], \
-                                      [components[i]['raRange'][0], components[i]['decRange'][1]], \
-                                      [components[i]['raRange'][1], components[i]['decRange'][0]], \
-                                      [components[i]['raRange'][1], components[i]['decRange'][1]] ])
-                corners2 = np.array([ [components[i+j]['raRange'][0], components[i+j]['decRange'][0]], \
-                                      [components[i+j]['raRange'][0], components[i+j]['decRange'][1]], \
-                                      [components[i+j]['raRange'][1], components[i+j]['decRange'][0]], \
-                                      [components[i+j]['raRange'][1], components[i+j]['decRange'][1]] ])
+                corners1 = np.array([ [components[i]['ra_range'][0], components[i]['dec_range'][0]], \
+                                      [components[i]['ra_range'][0], components[i]['dec_range'][1]], \
+                                      [components[i]['ra_range'][1], components[i]['dec_range'][0]], \
+                                      [components[i]['ra_range'][1], components[i]['dec_range'][1]] ])
+                corners2 = np.array([ [components[i+j]['ra_range'][0], components[i+j]['dec_range'][0]], \
+                                      [components[i+j]['ra_range'][0], components[i+j]['dec_range'][1]], \
+                                      [components[i+j]['ra_range'][1], components[i+j]['dec_range'][0]], \
+                                      [components[i+j]['ra_range'][1], components[i+j]['dec_range'][1]] ])
                 pos1 = coord.SkyCoord(corners1.T[0], corners1.T[1], unit=(u.deg, u.deg))
                 pos2 = coord.SkyCoord(corners2.T[0], corners2.T[1], unit=(u.deg, u.deg))
                 angularExtentArcsec = pos1.separation(pos2).arcsecond
@@ -276,20 +288,20 @@ def getRadio(data, fits_loc, consensusObject):
     #find center of radio source
     raMin, raMax, decMin, decMax = np.inf, 0, np.inf, 0
     for comp in components:
-        if comp['raRange'][0] < raMin:
-            raMin = comp['raRange'][0]
-        if comp['raRange'][1] > raMax:
-            raMax = comp['raRange'][1]
-        if comp['decRange'][0] < decMin:
-            decMin = comp['decRange'][0]
-        if comp['decRange'][1] > decMax:
-            decMax = comp['decRange'][1]
+        if comp['ra_range'][0] < raMin:
+            raMin = comp['ra_range'][0]
+        if comp['ra_range'][1] > raMax:
+            raMax = comp['ra_range'][1]
+        if comp['dec_range'][0] < decMin:
+            decMin = comp['dec_range'][0]
+        if comp['dec_range'][1] > decMax:
+            decMax = comp['dec_range'][1]
     meanRa = (raMax+raMin)/2.
     meanDec = (decMax+decMin)/2.
     
-    radio_data = {'radio':{'totalFlux':totalFluxmJy, 'totalFluxErr':totalFluxErrmJy, 'outermostLevel':data['contours'][0][0]['level']*1000, \
-                           'numberComponents':len(contourTrees), 'numberPeaks':len(peakList), 'maxAngularExtent':maxAngularExtentArcsec, \
-                           'totalSolidAngle':totalSolidAngleArcsec2, 'peakFluxErr':peakFluxErrmJy, 'peaks':peakList, 'components':components, \
+    radio_data = {'radio':{'total_flux':totalFluxmJy, 'total_flux_err':totalFluxErrmJy, 'outermost_level':data['contours'][0][0]['level']*1000, \
+                           'number_components':len(contourTrees), 'number_peaks':len(peakList), 'max_angular_extent':maxAngularExtentArcsec, \
+                           'total_solid_angle':totalSolidAngleArcsec2, 'peak_flux_err':peakFluxErrmJy, 'peaks':peakList, 'components':components, \
                            'ra':meanRa, 'dec':meanDec}}
     
     return radio_data

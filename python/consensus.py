@@ -60,6 +60,7 @@ db = client['radio']
 subjects = db['radio_subjects'] # subjects = images
 classifications = db['radio_classifications'] # classifications = classifications of each subject per user
 consensus = db['consensus'] # consensus = output of this program
+user_weights = db['user_weights']
 
 # Parameters for the RGZ project
 
@@ -123,7 +124,7 @@ pathdict = make_pathdict()
 # Begin the actual code
 ########################################
 
-def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_data=True,weights=0):
+def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_data=True,weights=0,scheme='scaling'):
 
     # Find the consensus for all users who have classified a subject
 
@@ -243,9 +244,13 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
         weighted_c = []
         for c in clist:
             if c.has_key('user_name'):
-                weight = get_weight(c['user_name'])
-                if weight == 1:
+                weight = user_weights.find_one({'user_name':c['user_name']})['weight']
+                if scheme == 'threshold' and weight == 1:
                     for i in range(weights):
+                        weighted_c.append(c)
+                        cdict[c['n_galaxies']].append(c['checksum'])
+                elif scheme == 'scaling' and weight > 0:
+                    for i in range(weight):
                         weighted_c.append(c)
                         cdict[c['n_galaxies']].append(c['checksum'])
         if len(weighted_c) > 0:
@@ -838,7 +843,7 @@ def rc(zid):
 
     return None
 
-def run_sample(survey,update=True,subset=None,do_plot=False,weights=0):
+def run_sample(survey,update=True,subset=None,do_plot=False,weights=0,scheme='scaling'):
 
     # Run the consensus algorithm on the RGZ classifications
     
@@ -925,7 +930,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=0):
         if not idx % 100:
             print idx, datetime.datetime.now().strftime('%H:%M:%S.%f')
 
-        cons = checksum(zid,include_peak_data=do_plot,weights=weights)
+        cons = checksum(zid,include_peak_data=do_plot,weights=weights,scheme=scheme)
         if do_plot:
 
             plot_consensus(cons,savefig=True)
@@ -1134,40 +1139,47 @@ def get_unique_users():
 
     return unique_users
 
-def weight_users(unique_users, min_gs=5, min_agree=0.5):
-
+def weight_users(unique_users, scheme, min_gs=5, min_agree=0.5, scaling=5):
+    
     # min_gs is the minimum number of gold standard subjects user must have seen to determine agreement. 
     # Set to prevent upweighting on low information (eg, agreeing with the science team if the user has
     # only seen 1 gold standard object doesn't tell us as much than if they agreed 19/20 times).
-    # min_agree is the minimum level of agreement with the science team (N_agree / N_seen)
+    # min_agree is the minimum level of agreement with the science team (N_agree / N_seen).
+    # scaling is the multiplicative factor for a sliding scale weighting scheme.
 
+    print 'Calculating weights for {} users using {} method, using parameters:'.format(len(unique_users), scheme)
+    if scheme == 'threshold':
+        print '\tminimum gold standard classified = {}\n\tminimum agreement level = {}'.format(min_gs, min_agree)
+    else:
+        print '\tminimum gold standard classified = {}\n\tscaling factor = {}'.format(min_gs, scaling)
+    
     # Assigns a weight to users based on their agreement with the gold standard sample as classified by RGZ science team
-
-    gs_count = classifications.find({'goldstandard':True}).count()
+    
+    gs_count = subjects.find({'goldstandard':True}).count()
     if gs_count < 1:
         update_gs_subjects()
-
+    
     ex_count = classifications.find({'expert':True}).count()
     if ex_count < 1:
         update_experts()
-
-    # Data will be written to CSV file (could also be stored in Mongo)
-    wf = open("{0}/csv/user_weights.csv".format(rgz_path),'w')
-    print >> wf,"user_name,gs_seen,agreed,weight"
-
+    
     # Find the science team answers:
     
     gs_zids = [s['zooniverse_id'] for s in subjects.find({"goldstandard":True})]
     science_answers = {}
-
+    
     for zid in gs_zids:
         s = checksum(zid,experts_only=True)
         science_answers[zid] = s['answer'].keys()
-
+    
     gs_ids = [s['_id'] for s in subjects.find({"goldstandard":True})]
-
+    count = 0
+    
     # For each user, find the gold standard subjects they saw and whether it agreed with the experts
     for u in list(unique_users):
+        count += 1
+        print count, u
+        
         agreed = 0
         u_str = u.encode('utf8')
         # Gold standard classifications by the user
@@ -1186,33 +1198,29 @@ def weight_users(unique_users, min_gs=5, min_agree=0.5):
         else:
             #print "\t{0} did not classify any subjects in gold standard sample.".format(u_str)
             pass
+        
+        # Save output Mongo
+        
+        if scheme == 'threshold' and gs_count > min_gs and (1.*agreed/gs_count) > min_agree:
+            weight = 1
+        elif scheme == 'scaling' and gs_count > min_gs:
+            weight = int(round(1.*scaling*agreed/gs_count))
+        else:
+            weight = 0
 
-        # Save output to CSV file
-
-        weight = 1 if gs_count > 5 and (agreed * 1./gs_count) > 0.50 else 0
-        print >> wf,"{0},{1},{2},{3}".format(u_str,gs_count,agreed,weight)
-
+        user_weights.update({'user_name':u_str}, {'$set':{'agreed':agreed, 'gs_seen':gs_count, 'weight':weight}}, upsert=True)
+    
     return None
 
-def get_weight(user_name):
-
-    # Compute the classification weight for a single user
+def print_user_weights(weight=0):
     
-    rf = open("{0}/csv/user_weights.csv".format(rgz_path),'r')
-    for line in rf:
-        uname,gs_seen,agreed,weight = line.strip().split(',')
-        if uname.decode('utf8') == user_name:
-            rf.close()
-            try:
-                if int(weight) == 1:
-                    return 1
-                else:
-                    return 0
-            except:
-                return 0
+    # Prints the user weights to a CSV
+    # Note that user names can include commas
     
-    rf.close()
-    return 0
+    with open('{0}/csv/user_weights_{1}.csv'.format(rgz_path, weight), 'w') as f:
+        print >> f, 'user_name,gs_seen,agreed,weight'
+        for user in user_weights.find():
+            print >> f, '"{0}",{1},{2},{3}'.format(user['user_name'].encode('utf8'), user['gs_seen'], user['agreed'], user['weight'])
 
 if __name__ == "__main__":
 
@@ -1247,19 +1255,21 @@ if __name__ == "__main__":
         # weights: default = 0
         #
         #   Execute weighting of the users based on their agreement with the science team
-        #   on the gold standard subjects. If weights = 0 or weights = 1, each users' vote
+        #   on the gold standard subjects. If weights = 0 or weights = 1, each user's vote
         #   is counted equally in the consensus. If weights > 1, then their impact is
         #   increased by replicating the classifications. Must be a nonnegative integer.
-        weights = 0
+        weights = 5
         assert (type(weights) == int) and weights >= 0, 'Weight must be a nonnegative integer'
+        scheme = 'scaling'
+        assert scheme in ['threshold', 'scaling'], 'Weighting scheme must be threshold or sliding, not {}'.format(scheme)
         # If you're using weights, make sure they're up to date
         if weights > 1:
             unique_users = get_unique_users()
-            weight_users(unique_users=unique_users, min_gs=5, min_agree=0.5)
+            weight_users(unique_users, scheme, min_gs=5, min_agree=0.5, scaling=weights)
 
         # Run the consensus separately for different surveys, since the image parameters are different
         for survey in ('atlas','first'):
-            run_sample(survey,update,subset,do_plot,weights)
+            run_sample(survey,update,subset,do_plot,weights,scheme)
 
         print 'Finished at',datetime.datetime.now().strftime('%H:%M:%S.%f')
     else:

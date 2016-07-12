@@ -37,8 +37,6 @@ def RGZcatalog():
         updateConsensus(args.consensus)
     
     #connect to database of subjects
-    #logging.info('Connecting to MongoDB')
-    #db = pymongo.MongoClient()['radio']
     subjects = db['radio_subjects']
     consensus = db['consensus']
     catalog = db['catalog'] #this is being populated by this program
@@ -206,26 +204,31 @@ def RGZcatalog():
                     entry.update({'rgz_name':name})
 
                     #calculate physical data using redshift
-                    if sdss_match and 'redshift' in sdss_match and sdss_match['redshift']>0:
-                        z = sdss_match['redshift']
-                        lz = np.log10(z)
-                        DAkpc = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)*1000 #angular size distance approximation in kpc
-                        DLkpc = DAkpc*np.square(1+z) #luminosity distance approximation in kpc
-                        maxPhysicalExtentKpc = DAkpc*radio_data['radio']['maxAngularExtent']*np.pi/180/3600 #arcseconds to radians
-                        totalCrossSectionKpc2 = np.square(DAkpc)*radio_data['radio']['totalSolidAngle']*np.square(np.pi/180/3600) #arcseconds^2 to radians^2
-                        totalLuminosityWHz = radio_data['radio']['totalFlux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19) #mJy to W/(m^2 Hz), kpc to m
-                        totalLuminosityErrWHz = radio_data['radio']['totalFluxErr']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                        peakLuminosityErrWHz = radio_data['radio']['peakFluxErr']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                        for component in radio_data['radio']['components']:
-                            component['physicalExtent'] = DAkpc*component['angularExtent']*np.pi/180/3600
-                            component['crossSection'] = np.square(DAkpc)*component['solidAngle']*np.square(np.pi/180/3600)
-                            component['luminosity'] = component['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                            component['luminosityErr'] = component['fluxErr']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                        for peak in radio_data['radio']['peaks']:
-                            peak['luminosity'] = peak['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                        entry['radio'].update({'maxPhysicalExtent':maxPhysicalExtentKpc, 'totalCrossSection':totalCrossSectionKpc2, \
-                                               'totalLuminosity':totalLuminosityWHz, 'totalLuminosityErr':totalLuminosityErrWHz, \
-                                               'peakLuminosityErr':peakLuminosityErrWHz})
+                    if sdss_match:
+                        z = 0
+                        if 'spec_z' in sdss_match:
+                            z = sdss_match['spec_z']
+                        elif 'photo_z' in sdss_match:
+                            z = sdss_match['photo_z']
+                        if z>0:
+                            lz = np.log10(z)
+                            DAkpc = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)*1000 #angular size distance approximation in kpc
+                            DLkpc = DAkpc*np.square(1+z) #luminosity distance approximation in kpc
+                            maxPhysicalExtentKpc = DAkpc*radio_data['radio']['max_angular_extent']*np.pi/180/3600 #arcseconds to radians
+                            totalCrossSectionKpc2 = np.square(DAkpc)*radio_data['radio']['total_solid_angle']*np.square(np.pi/180/3600) #arcseconds^2 to radians^2
+                            totalLuminosityWHz = radio_data['radio']['total_flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19) #mJy to W/(m^2 Hz), kpc to m
+                            totalLuminosityErrWHz = radio_data['radio']['total_flux_err']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                            peakLuminosityErrWHz = radio_data['radio']['peak_flux_err']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                            for component in radio_data['radio']['components']:
+                                component['physical_extent'] = DAkpc*component['angular_extent']*np.pi/180/3600
+                                component['cross_section'] = np.square(DAkpc)*component['solid_angle']*np.square(np.pi/180/3600)
+                                component['luminosity'] = component['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                                component['luminosity_err'] = component['flux_err']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                            for peak in radio_data['radio']['peaks']:
+                                peak['luminosity'] = peak['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                            entry['radio'].update({'max_physical_extent':maxPhysicalExtentKpc, 'total_cross_section':totalCrossSectionKpc2, \
+                                                   'total_luminosity':totalLuminosityWHz, 'total_luminosity_err':totalLuminosityErrWHz, \
+                                                   'peak_luminosity_err':peakLuminosityErrWHz})
 
                     logging.info('Radio data added')
                                        
