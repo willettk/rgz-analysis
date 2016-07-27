@@ -974,7 +974,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=0,scheme='sc
         fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'a')
     else:
         fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'w')
-        fc.write('zooniverse_id,{0}_id,n_votes,n_total,consensus_level,n_radio,label,bbox,ir_peak,n_ir\n'.format(survey))
+        fc.write('zooniverse_id,{0}_id,n_votes,n_total,consensus_level,n_radio,label,bbox,ir_peak,ir_level,n_ir\n'.format(survey))
 
     for idx,zid in enumerate(zooniverse_ids):
     
