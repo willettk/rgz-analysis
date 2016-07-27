@@ -60,7 +60,7 @@ class Node(object):
             if newNode.value['k'] == self.value['k'] + 1: #add a contour one level higher as a child
                 self.children.append(newNode)
             elif newNode.value['k'] <= self.value['k']: #if a contour of lower level appears, something went wrong
-                raise Exception('Inside-out contour')
+                raise RuntimeError('Inside-out contour')
             else: #otherwise, find the next level that has a bounding box enclosing the new contour
                 inner = fn.findBox(newNode.value['arr'])
                 for child in self.children:
@@ -73,7 +73,7 @@ class Node(object):
         if self.value is None:
             print 'Empty'
         else:
-            print 'Level ' + str(self.value['k']) + ': ' + str(fn.findBox(self.value['arr']))
+            print 'Level {}: {}'.format(self.value['k'], fn.findBox(self.value['arr']))
             if self.children == []:
                 print 'End'
             else:

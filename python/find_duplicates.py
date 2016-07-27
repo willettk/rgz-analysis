@@ -4,7 +4,7 @@
 from astropy import coordinates as coord, units as u
 from astropy.io import fits
 from consensus import rgz_path,db
-import itertools
+import itertools, logging
 
 #contains groups of subjects within 3' of each other, determined in TopCat
 internal = fits.getdata("{0}/fits/internal_matches.fits".format(rgz_path),1)
@@ -124,6 +124,7 @@ def find_duplicates(zid):
                         
                         if anymatch:
                             print "Shared components found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
+                            logging.info("Shared components found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id))
                             append_overlaps(c1,c2,'share_components')
                             c1 = catalog.find_one({'catalog_id':c1_id})
                             c2 = catalog.find_one({'catalog_id':c2_id})
@@ -152,6 +153,7 @@ def find_duplicates(zid):
                                     
                                 if results:
                                     print "Matching components found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
+                                    logging.info("Matching components found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id))
                                     
                                     # Record the answer by appending it to the catalog entry
                                     # Only do it once, otherwise it'll repeat when the second one rolls around.
@@ -161,25 +163,28 @@ def find_duplicates(zid):
                                     c2 = catalog.find_one({'catalog_id':c2_id})
                                     
                                     #check if IR matches as well
-                                    if 'IR_ra' not in c1['consensus'] and 'IR_ra' not in c2['consensus']:
-                                        print "Exact match (no WISE ID) found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
+                                    if 'ir_ra' not in c1['consensus'] and 'ir_ra' not in c2['consensus']:
+                                        print "Exact match (no IR) found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
+                                        logging.info("Exact match (no IR) found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id))
                                         append_overlaps(c1,c2,'exact_duplicate')
                                         c1 = catalog.find_one({'catalog_id':c1_id})
                                         c2 = catalog.find_one({'catalog_id':c2_id})
                                         
-                                    elif 'IR_ra' in c1['consensus'] and 'IR_ra' in c2['consensus']:
+                                    elif 'ir_ra' in c1['consensus'] and 'ir_ra' in c2['consensus']:
                                         if ('AllWISE' in c1 and 'AllWISE' in c2 and c1['AllWISE']==c2['AllWISE']) or \
                                            ('AllWISE' not in c1 and 'AllWISE' not in c2):
                                             print "Exact match (same WISE catalog ID) found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
+                                            logging.info("Exact match (same WISE catalog ID) found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id))
                                             append_overlaps(c1,c2,'exact_duplicate')
                                             c1 = catalog.find_one({'catalog_id':c1_id})
                                             c2 = catalog.find_one({'catalog_id':c2_id})
                                             
                                         else:
-                                            c1_ir = coord.SkyCoord(c1['consensus']['IR_ra'], c1['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
-                                            c2_ir = coord.SkyCoord(c2['consensus']['IR_ra'], c2['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
+                                            c1_ir = coord.SkyCoord(c1['consensus']['ir_ra'], c1['consensus']['ir_dec'], unit=(u.deg,u.deg), frame='icrs')
+                                            c2_ir = coord.SkyCoord(c2['consensus']['ir_ra'], c2['consensus']['ir_dec'], unit=(u.deg,u.deg), frame='icrs')
                                             if c1_ir.separation(c2_ir).arcsecond < 3.0:
                                                 print "WISE catalog mismatch found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id)
+                                                logging.info("WISE catalog mismatch found for GroupID {0}: sources {1} and {2}".format(groupID,c1_id,c2_id))
                                                 append_overlaps(c1,c2,'WISE_cat_mismatch')
                                                 c1 = catalog.find_one({'catalog_id':c1_id})
                                                 c2 = catalog.find_one({'catalog_id':c2_id})

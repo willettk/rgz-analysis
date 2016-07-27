@@ -17,7 +17,7 @@ def getWISE(entry):
     returns updated entry
     '''
     
-    ir_pos = coord.SkyCoord(entry['consensus']['IR_ra'], entry['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
+    ir_pos = coord.SkyCoord(entry['consensus']['ir_ra'], entry['consensus']['ir_dec'], unit=(u.deg,u.deg), frame='icrs')
     
     tryCount = 0
     while(True): #in case of error, wait 10 sec and try again; give up after 5 tries
@@ -46,11 +46,11 @@ def getWISE(entry):
                 raise
     
     if len(table):
-        numberMatches = 0
+        number_matches = 0
         if table[0]['w1snr']>5:
             match = table[0]
             dist = match['dist']
-            numberMatches += 1
+            number_matches += 1
         else:
             match = None
             dist = np.inf
@@ -59,9 +59,9 @@ def getWISE(entry):
                 if row['dist']<dist and row['w1snr']>5:
                     match = row
                     dist = match['dist']
-                    numberMatches += 1
+                    number_matches += 1
         if match:
-            wise_match = {'designation':'WISEA'+match['designation'], 'ra':match['ra'], 'dec':match['dec'], 'number_matches':np.int16(numberMatches), \
+            wise_match = {'designation':'WISEA'+match['designation'], 'ra':match['ra'], 'dec':match['dec'], 'number_matches':np.int16(number_matches), \
                           'w1mpro':match['w1mpro'], 'w1sigmpro':match['w1sigmpro'], 'w1snr':match['w1snr'], \
                           'w2mpro':match['w2mpro'], 'w2sigmpro':match['w2sigmpro'], 'w2snr':match['w2snr'], \
                           'w3mpro':match['w3mpro'], 'w3sigmpro':match['w3sigmpro'], 'w3snr':match['w3snr'], \
@@ -120,37 +120,37 @@ def getSDSS(entry):
     spectral class and spec redshift and uncertainty from SpecPhoto table
     '''
     
-    ir_pos = coord.SkyCoord(entry['consensus']['IR_ra'], entry['consensus']['IR_dec'], unit=(u.deg,u.deg), frame='icrs')
+    ir_pos = coord.SkyCoord(entry['consensus']['ir_ra'], entry['consensus']['ir_dec'], unit=(u.deg,u.deg), frame='icrs')
     
     query = '''select objID, ra, dec, u, r, g, i, z, err_u, err_r, err_g, err_i, err_z,
                  case when type = 3 then 'G'
                       when type = 6 then 'S'
-                      else 'U' end as class
+                      else -99 end as class
                from PhotoPrimary
                where (ra between %f-3./3600 and %f+3./3600) and (dec between %f-3./3600 and %f+3./3600)''' \
                % (ir_pos.ra.deg, ir_pos.ra.deg, ir_pos.dec.deg, ir_pos.dec.deg)
     df = SDSS_select(query)
     if len(df):
-        numberMatches = 0
-        matchPos = coord.SkyCoord(df.iloc[0]['ra'], df.iloc[0]['dec'], unit=(u.deg, u.deg))
-        tempDist = ir_pos.separation(matchPos).arcsecond
-        if tempDist<3.:
+        number_matches = 0
+        match_pos = coord.SkyCoord(df.iloc[0]['ra'], df.iloc[0]['dec'], unit=(u.deg, u.deg))
+        temp_dist = ir_pos.separation(match_pos).arcsecond
+        if temp_dist<3.:
             match = df.iloc[0]
-            dist = tempDist
-            numberMatches += 1
+            dist = temp_dist
+            number_matches += 1
         else:
             match = None
             dist = np.inf
         if len(df)>1:
             for i in range(len(df)):
-                matchPos = coord.SkyCoord(df.iloc[i]['ra'], df.iloc[i]['dec'], unit=(u.deg, u.deg))
-                tempDist = ir_pos.separation(matchPos).arcsecond
-                if tempDist<3. and tempDist<dist:
+                match_pos = coord.SkyCoord(df.iloc[i]['ra'], df.iloc[i]['dec'], unit=(u.deg, u.deg))
+                temp_dist = ir_pos.separation(match_pos).arcsecond
+                if temp_dist<3. and temp_dist<dist:
                     match = df.iloc[i]
-                    dist = tempDist
-                    numberMatches += 1
+                    dist = temp_dist
+                    number_matches += 1
         if match is not None:
-            sdss_match = {'objID':df['objID'][match.name], 'ra':match['ra'], 'dec':match['dec'], 'numberMatches':np.int16(numberMatches), \
+            sdss_match = {'objID':df['objID'][match.name], 'ra':match['ra'], 'dec':match['dec'], 'number_matches':np.int16(number_matches), \
                           'morphological_class':match['class'], 'u':match['u'], 'r':match['r'], 'g':match['g'], 'i':match['i'], 'z':match['z'], \
                           'u_err':match['err_u'], 'r_err':match['err_r'], 'g_err':match['err_g'], 'i_err':match['err_i'], 'z_err':match['err_z']}
         else:
@@ -160,7 +160,7 @@ def getSDSS(entry):
 
     if sdss_match and sdss_match['morphological_class'] == 'G': #query the galaxy tables
 
-        query = '''select p.z as photo_z, p.zErr as photo_z_err, s.z as spec_z, s.zErr as spec_z_err,
+        query = '''select p.z as photo_redshift, p.zErr as photo_redshift_err, s.z as spec_redshift, s.zErr as spec_redshift_err,
                      oiii_5007_flux, oiii_5007_flux_err, h_beta_flux, h_beta_flux_err,
                      nii_6584_flux, nii_6584_flux_err, h_alpha_flux, h_alpha_flux_err, class
                    from Photoz as p
@@ -169,36 +169,36 @@ def getSDSS(entry):
                    where p.objID = %i''' % sdss_match['objID']
         df = SDSS_select(query)
         if len(df):
-            moreData = {}
-            if not np.isnan(df['spec_z'][0]):
-                moreData['spec_z'] = df['spec_z'][0]
-                moreData['spec_z_err'] = df['spec_z_err'][0]
-            if df['photo_z'][0] != -9999:
-                moreData['photo_z'] = df['photo_z'][0]
-                moreData['photo_z_err'] = df['photo_z_err'][0]
+            more_data = {}
+            if not np.isnan(df['spec_redshift'][0]):
+                more_data['spec_redshift'] = df['spec_redshift'][0]
+                more_data['spec_redshift_err'] = df['spec_redshift_err'][0]
+            if df['photo_redshift'][0] != -9999:
+                more_data['photo_redshift'] = df['photo_redshift'][0]
+                more_data['photo_redshift_err'] = df['photo_redshift_err'][0]
             if not np.isnan(df['class'][0]):
-                moreData['spectral_class'] = df['class'][0][0]
+                more_data['spectral_class'] = df['class'][0][0]
             for key in ['oiii_5007_flux', 'oiii_5007_flux_err', 'h_beta_flux', 'h_beta_flux_err', \
                         'nii_6584_flux', 'nii_6584_flux_err', 'h_alpha_flux', 'h_alpha_flux_err']:
                 if not np.isnan(df[key][0]):
-                    moreData[key] = df[key][0]
-            sdss_match.update(moreData)
+                    more_data[key] = df[key][0]
+            sdss_match.update(more_data)
 
     elif sdss_match and sdss_match['morphological_class'] == 'S': #query the star tables
 
-        query = '''select so.z as spec_z, so.zErr as spec_z_err, class
+        query = '''select so.z as spec_redshift, so.zErr as spec_redshift_err, class
                      from Star as s
                        full outer join SpecObj as so on s.objID=so.bestObjID
                    where s.objID = %i''' % sdss_match['objID']
         df = SDSS_select(query)
         if len(df):
-            moreData = {}
-            if not np.isnan(df['spec_z'][0]):
-                moreData['spec_z'] = df['spec_z'][0]
-                moreData['spec_z_err'] = df['spec_z_err'][0]
+            more_data = {}
+            if not np.isnan(df['spec_redshift'][0]):
+                more_data['spec_redshift'] = df['spec_redshift'][0]
+                more_data['spec_redshift_err'] = df['spec_redshift_err'][0]
             if not np.isnan(df['class'][0]):
-                moreData['spectral_class'] = df['class'][0][0]
-            sdss_match.update(moreData)
+                more_data['spectral_class'] = df['class'][0][0]
+            sdss_match.update(more_data)
 
     if sdss_match:
         logging.info('SDSS match found')

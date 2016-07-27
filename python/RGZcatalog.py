@@ -30,11 +30,11 @@ def RGZcatalog():
     logging.captureWarnings(True)
 
     #check if consensus collection needs to be updated; if so, drop entire consensus collection and replace it with entries from the designated CSV file
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--consensus', help='replace the current consensus collection with a specified csv')
-    args = parser.parse_args()
-    if args.consensus:
-        updateConsensus(args.consensus)
+##    parser = argparse.ArgumentParser()
+##    parser.add_argument('-c', '--consensus', help='replace the current consensus collection with a specified csv')
+##    args = parser.parse_args()
+##    if args.consensus:
+##        updateConsensus(args.consensus)
     
     #connect to database of subjects
     subjects = db['radio_subjects']
@@ -72,7 +72,7 @@ def RGZcatalog():
     if os.path.exists(in_progress_file):
         with open(in_progress_file, 'r') as f:
             in_progress_zid = f.read()
-        to_be_completed.discard(in_progress_zid)
+        to_be_completed = to_be_completed.union(in_progress_zid)
     to_be_completed = list(to_be_completed)
     
     #iterate through all noncompleted subjects
@@ -130,11 +130,11 @@ def RGZcatalog():
                     ir_peak = p2w( np.array([[ir_ra_pixels, ir_dec_pixels]]), 1)
                     ir_pos = coord.SkyCoord(ir_peak[0][0], ir_peak[0][1], unit=(u.deg,u.deg), frame='icrs')
 
-                entry.update({'consensus':{'n_votes':source['n_votes'], 'n_total':source['n_total'], \
-                                           'level':source['consensus_level'], 'label':source['label']}})
+                entry.update({'consensus':{'n_radio':source['n_votes'], 'n_total':source['n_total'], 'n_ir':source['n_ir'], \
+                                           'ir_level':source['ir_level'], 'radio_level':source['consensus_level'], 'label':source['label']}})
                 if ir_pos:
                     logging.info('IR counterpart found')
-                    entry['consensus'].update({'IR_ra':ir_pos.ra.deg, 'IR_dec':ir_pos.dec.deg})
+                    entry['consensus'].update({'ir_ra':ir_pos.ra.deg, 'ir_dec':ir_pos.dec.deg})
                 else:
                     logging.info('No IR counterpart found')
 
@@ -206,10 +206,10 @@ def RGZcatalog():
                     #calculate physical data using redshift
                     if sdss_match:
                         z = 0
-                        if 'spec_z' in sdss_match:
-                            z = sdss_match['spec_z']
-                        elif 'photo_z' in sdss_match:
-                            z = sdss_match['photo_z']
+                        if 'spec_redshift' in sdss_match:
+                            z = sdss_match['spec_redshift']
+                        elif 'photo_redshift' in sdss_match:
+                            z = sdss_match['photo_redshift']
                         if z>0:
                             lz = np.log10(z)
                             DAkpc = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)*1000 #angular size distance approximation in kpc
