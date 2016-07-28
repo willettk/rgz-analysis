@@ -236,6 +236,20 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
     
     clist = [c for lc,c in zip(listcount,clist_all) if lc and c['checksum'] != -99]
     
+    clist_debugged = []
+    for ix, c in enumerate(clist):
+        if ix and 'user_name' not in c and 'user_name' not in clist[ix-1]:
+            c0 = clist[ix-1]
+            if ([anno for anno in c['annotations'] if 'ir' in anno] != [anno for anno in c0['annotations'] if 'ir' in anno]) or \
+               (abs(c['created_at']-c0['created_at']).seconds > 30):
+                clist_debugged.append(c)
+            else:
+                cdict[c['n_galaxies']].remove(c['checksum'])
+        else:
+            clist_debugged.append(c)
+
+    clist = clist_debugged
+    
     # Implement the weighting scheme, if desired. Simply add duplicate classifications
     # for users who have been upweighted based on their agreement with the science team
     # on gold-standard subjects.
@@ -462,7 +476,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                         for x0, y0 in zip(x_exists, y_exists):
                             if np.sqrt(np.square(xpeak-x0)+np.square(ypeak-y0)) <= (xmax-xmin)/60.:
                                 agreed += 1
-                        answer[k]['n_ir'] = len(xv)
+                        answer[k]['n_ir'] = agreed
                         answer[k]['ir_level'] = 1.0*agreed/len(xv)
             
             # Kernel is finite; should be able to get a position
@@ -507,7 +521,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                         for x0, y0 in zip(x_exists, y_exists):
                             if np.sqrt(np.square(xpeak-x0)+np.square(ypeak-y0)) <= (xmax-xmin)/60.:
                                 agreed += 1
-                        answer[k]['n_ir'] = len(xv)
+                        answer[k]['n_ir'] = agreed
                         answer[k]['ir_level'] = 1.0*agreed/len(xv)
                         # Don't write to consensus for serializable JSON object 
                         if include_peak_data:
@@ -532,12 +546,12 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                         for x0, y0 in zip(x_exists, y_exists):
                             if np.sqrt(np.square(xpeak-x0)+np.square(ypeak-y0)) <= (xmax-xmin)/60.:
                                 agreed += 1
-                        answer[k]['n_ir'] = len(xv)
+                        answer[k]['n_ir'] = agreed
                         answer[k]['ir_level'] = 1.0*agreed/len(xv)
                     # Case 2: most users have selected No Sources
                     else:
                         answer[k]['ir'] = (-99,-99)
-                        answer[k]['n_ir'] = len(xv)
+                        answer[k]['n_ir'] = xv.count(-99)
                         answer[k]['ir_level'] = 1.0*xv.count(-99)/len(xv)
 
     # Final answer
