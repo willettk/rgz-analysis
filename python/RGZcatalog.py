@@ -130,7 +130,7 @@ def RGZcatalog():
                     ir_peak = p2w( np.array([[ir_ra_pixels, ir_dec_pixels]]), 1)
                     ir_pos = coord.SkyCoord(ir_peak[0][0], ir_peak[0][1], unit=(u.deg,u.deg), frame='icrs')
 
-                entry.update({'consensus':{'n_radio':source['n_votes'], 'n_total':source['n_total'], 'n_ir':source['n_ir'], \
+                entry.update({'consensus':{'n_radio':source['n_votes'], 'n_total':source['n_total'], 'n_ir':source['n_ir'], 'ir_flag':source['ir_flag'], \
                                            'ir_level':source['ir_level'], 'radio_level':source['consensus_level'], 'label':source['label']}})
                 if ir_pos:
                     logging.info('IR counterpart found')

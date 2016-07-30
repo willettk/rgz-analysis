@@ -448,8 +448,9 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                         for x0, y0 in zip(x_exists, y_exists):
                             if np.sqrt(np.square(xpeak-x0)+np.square(ypeak-y0)) <= (xmax-xmin)/60.:
                                 agreed += 1
-                        answer[k]['n_ir'] = len(xv)
+                        answer[k]['n_ir'] = agreed
                         answer[k]['ir_level'] = 1.0*agreed/len(xv)
+                        answer[k]['ir_flag'] = 0
                 continue
             
             # Even if there are more than 2 sets of points, if they are mutually co-linear, 
@@ -478,6 +479,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                                 agreed += 1
                         answer[k]['n_ir'] = agreed
                         answer[k]['ir_level'] = 1.0*agreed/len(xv)
+                        answer[k]['ir_flag'] = 0
             
             # Kernel is finite; should be able to get a position
             else:
@@ -523,6 +525,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                                 agreed += 1
                         answer[k]['n_ir'] = agreed
                         answer[k]['ir_level'] = 1.0*agreed/len(xv)
+                        answer[k]['ir_flag'] = 1
                         # Don't write to consensus for serializable JSON object 
                         if include_peak_data:
                             answer[k]['peak_data'] = pd
@@ -539,7 +542,7 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                 if v['ind'] == xk:
                     # Case 1: multiple users selected IR source, but not enough unique points to pinpoint peak
                     if most_common_ir != (-99,-99) and len(x_exists) > 0 and len(y_exists) > 0:
-                        xpeak, ypeak = x_exists[0], y_exists[0]
+                        xpeak, ypeak = np.mean(x_exists), np.mean(y_exists)
                         answer[k]['ir'] = (xpeak, ypeak)
                         # Count the number of clicks within 3"
                         agreed = 0
@@ -548,11 +551,13 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
                                 agreed += 1
                         answer[k]['n_ir'] = agreed
                         answer[k]['ir_level'] = 1.0*agreed/len(xv)
+                        answer[k]['ir_flag'] = 0
                     # Case 2: most users have selected No Sources
                     else:
                         answer[k]['ir'] = (-99,-99)
                         answer[k]['n_ir'] = xv.count(-99)
                         answer[k]['ir_level'] = 1.0*xv.count(-99)/len(xv)
+                        answer[k]['ir_flag'] = 0
 
     # Final answer
    
@@ -988,7 +993,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=0,scheme='sc
         fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'a')
     else:
         fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'w')
-        fc.write('zooniverse_id,{0}_id,n_votes,n_total,consensus_level,n_radio,label,bbox,ir_peak,ir_level,n_ir\n'.format(survey))
+        fc.write('zooniverse_id,{0}_id,n_votes,n_total,consensus_level,n_radio,label,bbox,ir_peak,ir_level,ir_flag,n_ir\n'.format(survey))
 
     for idx,zid in enumerate(zooniverse_ids):
     
@@ -1028,7 +1033,7 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=0,scheme='sc
                 try:
                     fc.write('{0},{1},{2:4d},{3:4d},{4:.3f},{5:2d},{6},"{7}","{8}",{9:.3f}\n'.format( \
                             cons['zid'],cons['source'],cons['n_votes'],cons['n_total'],cons['consensus_level'], \
-                            len(ans['xmax']),alphabet(ans['ind']),bbox_unravel(ans['bbox']),ir_peak,ans['ir_level'],ans['n_ir']))
+                            len(ans['xmax']),alphabet(ans['ind']),bbox_unravel(ans['bbox']),ir_peak,ans['ir_level'],ans['ir_flag'],ans['n_ir']))
                 except KeyError:
                     print zid
                     print cons
@@ -1045,7 +1050,8 @@ def run_sample(survey,update=True,subset=None,do_plot=False,weights=0,scheme='sc
                 try:
                     new_con = {'zooniverse_id':cons['zid'], '{0}_id'.format(survey):cons['source'], 'n_votes':cons['n_votes'], \
                                'n_total':cons['n_total'], 'consensus_level':cons['consensus_level'], 'n_radio':len(ans['xmax']), \
-                               'label':alphabet(ans['ind']), 'bbox':bbox_unravel(ans['bbox']), 'ir_peak':ir_peak, 'ir_level':ans['ir_level'], 'n_ir':ans['n_ir']}
+                               'label':alphabet(ans['ind']), 'bbox':bbox_unravel(ans['bbox']), 'ir_peak':ir_peak, 'ir_level':ans['ir_level'], \
+                               'ir_flag':ans['ir_flag'], 'n_ir':ans['n_ir']}
                     consensus.insert(new_con)
                 except KeyError:
                     print zid
@@ -1095,7 +1101,7 @@ def force_csv_update(survey='first',suffix=''):
         jmaster = json.load(fm)
     
     fc = open('{0}/csv/{1}{2}.csv'.format(rgz_path,filestem,suffix),'w')
-    fc.write('zooniverse_id,{0}_id,n_votes,n_total,consensus_level,n_radio,label,bbox,ir_peak,ir_level,n_ir\n'.format(survey))
+    fc.write('zooniverse_id,{0}_id,n_votes,n_total,consensus_level,n_radio,label,bbox,ir_peak,ir_level,ir_flag,n_ir\n'.format(survey))
 
     for gal in jmaster:
         for ans in gal['answer'].itervalues():
@@ -1116,6 +1122,7 @@ def force_csv_update(survey='first',suffix=''):
                     bbox_unravel(ans['bbox']),
                     ir_peak,
                     ans['ir_level'],
+                    ans['ir_flag'],
                     ans['n_ir']
                     )
                 )
@@ -1343,8 +1350,9 @@ if __name__ == "__main__":
             assert (type(weights) == int) and weights >= 0, 'Weight must be a nonnegative integer'
             scheme = 'scaling'
             assert scheme in ['threshold', 'scaling'], 'Weighting scheme must be threshold or sliding, not {}'.format(scheme)
+            
             # If you're using weights, make sure they're up to date
-            if weights > 1:
+            if not update and weights > 1:
                 unique_users = get_unique_users()
                 weight_users(unique_users, scheme, min_gs=5, min_agree=0.5, scaling=weights)
 
