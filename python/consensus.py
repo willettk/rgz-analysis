@@ -1248,7 +1248,7 @@ def weight_users(unique_users, scheme, min_gs=5, min_agree=0.5, scaling=5):
     
     gs_ids = [s['_id'] for s in subjects.find({"goldstandard":True})]
     count = 0
-    
+
     # For each user, find the gold standard subjects they saw and whether it agreed with the experts
     for u in list(unique_users):
         count += 1
@@ -1257,22 +1257,20 @@ def weight_users(unique_users, scheme, min_gs=5, min_agree=0.5, scaling=5):
         
         agreed = 0
         u_str = u.encode('utf8')
-        # Gold standard classifications by the user
-        gs = classifications.find({'user_name':u,'subject_ids':{"$in":gs_ids}})
-        gs_count = gs.count()
-        if gs_count > 0:
-            # For each match, see if they agreed with the science team. This may have (against design) happened more than once. 
-            for g in gs:
-                zid = g['subjects'][0]['zooniverse_id']
+        zid_seen = set()
+        
+        # For each match, see if they agreed with the science team. If this happened more than once, only keep first classification.
+        for g in classifications.find({'user_name':u, 'subject_ids':{'$in':gs_ids}}):
+            zid = g['subjects'][0]['zooniverse_id']
+            if zid not in zid_seen:
+                zid_seen = zid_seen.union([zid])
                 their_answer = one_answer(zid,u)
                 their_checksums = their_answer['answer'].keys()
                 science_checksums = science_answers[zid]
                 if set(their_checksums) == set(science_checksums):
                     agreed += 1
-            #print "{0:20} agreed with {1:3d}/{2:3d} gold standard subjects seen.".format(u_str,agreed,gs_count)
-        else:
-            #print "\t{0} did not classify any subjects in gold standard sample.".format(u_str)
-            pass
+        
+        gs_count = len(zid_seen)
         
         # Save output Mongo
         
@@ -1282,7 +1280,7 @@ def weight_users(unique_users, scheme, min_gs=5, min_agree=0.5, scaling=5):
             weight = int(round(1.*scaling*agreed/gs_count))
         else:
             weight = 0
-
+        
         user_weights.update({'user_name':u_str}, {'$set':{'agreed':agreed, 'gs_seen':gs_count, 'weight':weight}}, upsert=True)
     
     return None
