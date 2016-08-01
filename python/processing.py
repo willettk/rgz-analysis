@@ -123,9 +123,9 @@ def getSDSS(entry):
     ir_pos = coord.SkyCoord(entry['consensus']['ir_ra'], entry['consensus']['ir_dec'], unit=(u.deg,u.deg), frame='icrs')
     
     query = '''select objID, ra, dec, u, r, g, i, z, err_u, err_r, err_g, err_i, err_z,
-                 case when type = 3 then 'G'
-                      when type = 6 then 'S'
-                      else -99 end as class
+                 case type when 3 then 'G'
+                           when 6 then 'S'
+                           else 'U' end as class
                from PhotoPrimary
                where (ra between %f-3./3600 and %f+3./3600) and (dec between %f-3./3600 and %f+3./3600)''' \
                % (ir_pos.ra.deg, ir_pos.ra.deg, ir_pos.dec.deg, ir_pos.dec.deg)
@@ -176,7 +176,7 @@ def getSDSS(entry):
             if df['photo_redshift'][0] != -9999:
                 more_data['photo_redshift'] = df['photo_redshift'][0]
                 more_data['photo_redshift_err'] = df['photo_redshift_err'][0]
-            if not np.isnan(df['class'][0]):
+            if type(df['class'][0]) is not np.float64 or not np.isnan(df['class'][0]):
                 more_data['spectral_class'] = df['class'][0][0]
             for key in ['oiii_5007_flux', 'oiii_5007_flux_err', 'h_beta_flux', 'h_beta_flux_err', \
                         'nii_6584_flux', 'nii_6584_flux_err', 'h_alpha_flux', 'h_alpha_flux_err']:
@@ -196,7 +196,7 @@ def getSDSS(entry):
             if not np.isnan(df['spec_redshift'][0]):
                 more_data['spec_redshift'] = df['spec_redshift'][0]
                 more_data['spec_redshift_err'] = df['spec_redshift_err'][0]
-            if not np.isnan(df['class'][0]):
+            if type(df['class'][0]) is not np.float64 or not np.isnan(df['class'][0]):
                 more_data['spectral_class'] = df['class'][0][0]
             sdss_match.update(more_data)
 
