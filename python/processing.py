@@ -88,7 +88,6 @@ def getWISE(entry):
 def SDSS_select(sql):
    '''pass an SQL query to SDSS and return a pandas dataframe
    in case of error, wait 10 seconds and try again; give up after 5 tries'''
-   logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
    br = mechanize.Browser()
    br.set_handle_robots(False)
    tryCount = 0

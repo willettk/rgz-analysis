@@ -26,7 +26,7 @@ def RGZcatalog():
     starttime = time.time()
     
     #begin logging even if not run from command line
-    logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(filename='{}/RGZcatalog_dr1.log'.format(rgz_path), level=logging.DEBUG, format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
 
     #check if consensus collection needs to be updated; if so, drop entire consensus collection and replace it with entries from the designated CSV file
@@ -38,8 +38,8 @@ def RGZcatalog():
     
     #connect to database of subjects
     subjects = db['radio_subjects']
-    consensus = db['consensus']
-    catalog = db['catalog'] #this is being populated by this program
+    consensus = db['consensus_dr1']
+    catalog = db['catalog_dr1'] #this is being populated by this program
     if catalog.count():
         logging.info('Catalog contains entries; appending')
     else:
@@ -256,7 +256,7 @@ def RGZcatalog():
     return count
 
 if __name__ == '__main__':
-    logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(filename='{}/RGZcatalog_dr1.log'.format(rgz_path), level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
     logging.info('Catalog run from command line')
     done = False

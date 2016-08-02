@@ -60,8 +60,8 @@ db = client['radio']
 
 subjects = db['radio_subjects'] # subjects = images
 classifications = db['radio_classifications'] # classifications = classifications of each subject per user
-consensus = db['consensus'] # consensus = output of this program
-user_weights = db['user_weights']
+consensus = db['consensus_dr1'] # consensus = output of this program
+user_weights = db['user_weights_dr1']
 
 # Parameters for the RGZ project
 
@@ -1306,7 +1306,7 @@ if __name__ == "__main__":
 
     # Run the consensus pipeline from the command line
 
-    logging.basicConfig(filename='consensus.log', level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(filename='{}/consensus_dr1.log'.format(rgz_path), level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
     logging.info('Consensus run from command line')
 

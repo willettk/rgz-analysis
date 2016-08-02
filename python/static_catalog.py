@@ -30,7 +30,7 @@ def load_data():
     client = MongoClient('localhost', 27017)
     db = client['radio'] 
     
-    catalog = db['catalog']
+    catalog = db['catalog_dr1']
 
     return catalog
 
@@ -45,9 +45,9 @@ def flat_version(catalog):
 
         # Manually order fields
         fields = ['catalog_id', 'rgz_name', 'zooniverse_id', 'first_id', \
-                  'radio.ra', 'radio.dec', 'consensus.ir_ra', 'consensus.ir_dec', 'consensus.n_total', 'consensus.n_radio', 'consensus.n_ir', \
-                      'consensus.radio_level', 'consensus.ir_level', 'radio.number_components', 'radio.number_peaks', 'radio.max_angular_extent', \
-                      'radio.total_solid_angle', 'radio.outermost_level', 'radio.max_physical_extent', 'radio.total_cross_section', \
+                  'radio.ra', 'radio.dec', 'consensus.ir_ra', 'consensus.ir_dec', 'consensus.ir_flag', 'consensus.n_total', 'consensus.n_radio', \
+                      'consensus.n_ir', 'consensus.radio_level', 'consensus.ir_level', 'radio.number_components', 'radio.number_peaks', \
+                      'radio.max_angular_extent', 'radio.total_solid_angle', 'radio.outermost_level', 'radio.max_physical_extent', 'radio.total_cross_section', \
                   'component.peak_fluxes', 'component.peak_flux_errs', 'component.peak_ras', 'component.peak_decs', \
                   'peak.fluxes', 'peak.flux_errs', 'peak.ras', 'peak.decs', \
                   'radio.total_flux', 'radio.total_flux_err', 'radio.total_luminosity', 'radio.total_luminosity_err', \
@@ -139,6 +139,7 @@ def flat_version(catalog):
                 c['consensus']['n_ir'] = n_ir
                 c['consensus']['radio_level'] = 1.0*n_radio/n_total
                 c['consensus']['ir_level'] = 1.0*n_ir/n_radio
+                c['consensus']['ir_flag'] = 0
                 if ir_ra:
                     c['consensus']['ir_ra'] = ir_ra
                     c['consensus']['ir_dec'] = ir_dec
@@ -196,9 +197,9 @@ def paired_version(catalog):
         with open(component_filename,'w') as cf:
 
             h_fields = ['catalog_id', 'rgz_name', 'zooniverse_id', 'first_id', \
-                        'radio.ra', 'radio.dec', 'consensus.ir_ra', 'consensus.ir_dec', 'consensus.n_total', 'consensus.n_radio', 'consensus.n_ir', \
-                            'consensus.radio_level', 'consensus.ir_level', 'radio.number_components', 'radio.number_peaks', 'radio.max_angular_extent', \
-                            'radio.total_solid_angle', 'radio.outermost_level', 'radio.max_physical_extent', 'radio.total_cross_section', \
+                        'radio.ra', 'radio.dec', 'consensus.ir_ra', 'consensus.ir_dec', 'consensus.ir_flag', 'consensus.n_total', 'consensus.n_radio', \
+                            'consensus.n_ir', 'consensus.radio_level', 'consensus.ir_level', 'radio.number_components', 'radio.number_peaks', \
+                            'radio.max_angular_extent', 'radio.total_solid_angle', 'radio.outermost_level', 'radio.max_physical_extent', 'radio.total_cross_section', \
                         'radio.total_flux', 'radio.total_flux_err', 'radio.total_luminosity', 'radio.total_luminosity_err', \
                         'AllWISE.designation', 'AllWISE.ra', 'AllWISE.dec', \
                             'AllWISE.w1mpro', 'AllWISE.w1sigmpro', 'AllWISE.w1snr', 'AllWISE.w2mpro', 'AllWISE.w2sigmpro', 'AllWISE.w2snr', \
@@ -270,6 +271,7 @@ def paired_version(catalog):
                     c['consensus']['n_ir'] = n_ir
                     c['consensus']['radio_level'] = 1.0*n_radio/n_total
                     c['consensus']['ir_level'] = 1.0*n_ir/n_radio
+                    c['consensus']['ir_flag'] = 0
                     if ir_ra:
                         c['consensus']['ir_ra'] = ir_ra
                         c['consensus']['ir_dec'] = ir_dec

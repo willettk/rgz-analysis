@@ -9,7 +9,7 @@ import itertools, logging
 #contains groups of subjects within 3' of each other, determined in TopCat
 internal = fits.getdata("{0}/fits/internal_matches.fits".format(rgz_path),1)
 
-catalog = db['catalog']
+catalog = db['catalog_dr1']
 
 # Test case
 
