@@ -194,7 +194,7 @@ def RGZcatalog():
                     #use WISE catalog name if available
                     if wise_match:
                         entry.update({'rgz_name':'RGZ{}{}'.format(wise_match['designation'][5:14], wise_match['designation'][15:22])})
-                    
+                        
                     else:
                         #if not, try consensus IR position
                         if ir_pos:
@@ -204,15 +204,14 @@ def RGZcatalog():
                         else:
                             ra = radio_data['radio']['ra']
                             dec = radio_data['radio']['dec']
-                                                
+                        
                         ra_h = int(ra/15.)
                         ra_m = int((ra - ra_h*15)*4)
                         ra_s = (ra - ra_h*15 - ra_m/4.)*240
                         dec_d = int(dec)
                         dec_m = int((dec - dec_d)*60)
                         dec_s = int((dec - dec_d - dec_m/60.)*3600)
-                        name = 'RGZJ{:0=2}{:0=2}{:0=4.1f}{:0=+3}{:0=2}{:0=2}'.format(ra_h, ra_m, ra_s, dec_d, dec_m, dec_s)
-                        entry.update({'rgz_name':name})
+                        entry.update({'rgz_name':'RGZJ{:0=2}{:0=2}{:0=4.1f}{:0=+3}{:0=2}{:0=2}'.format(ra_h, ra_m, ra_s, dec_d, dec_m, dec_s)})
                     
                     #calculate physical data using redshift
                     if sdss_match:
