@@ -191,18 +191,29 @@ def RGZcatalog():
                     radio_data = p.getRadio(data, fits_loc, source)
                     entry.update(radio_data)
 
-                    #create RGZ name from radio position
-                    radio_ra = radio_data['radio']['ra']
-                    ra_h = int(radio_ra/15.)
-                    ra_m = int((radio_ra - ra_h*15)*4)
-                    ra_s = (radio_ra - ra_h*15 - ra_m/4.)*240
-                    radio_dec = radio_data['radio']['dec']
-                    dec_d = int(radio_dec)
-                    dec_m = int((radio_dec - dec_d)*60)
-                    dec_s = int((radio_dec - dec_d - dec_m/60.)*3600)
-                    name = 'RGZJ{:0=2}{:0=2}{:0=4.1f}{:0=+3}{:0=2}{:0=2}'.format(ra_h, ra_m, ra_s, dec_d, dec_m, dec_s)
-                    entry.update({'rgz_name':name})
-
+                    #use WISE catalog name if available
+                    if wise_match:
+                        entry.update({'rgz_name':'RGZ{}{}'.format(wise_match['designation'][5:14], wise_match['designation'][15:22])})
+                    
+                    else:
+                        #if not, try consensus IR position
+                        if ir_pos:
+                            ra = ir_pos.ra.deg
+                            dec = ir_pos.dec.deg
+                        #finally, just use radio center
+                        else:
+                            ra = radio_data['radio']['ra']
+                            dec = radio_data['radio']['dec']
+                                                
+                        ra_h = int(ra/15.)
+                        ra_m = int((ra - ra_h*15)*4)
+                        ra_s = (ra - ra_h*15 - ra_m/4.)*240
+                        dec_d = int(dec)
+                        dec_m = int((dec - dec_d)*60)
+                        dec_s = int((dec - dec_d - dec_m/60.)*3600)
+                        name = 'RGZJ{:0=2}{:0=2}{:0=4.1f}{:0=+3}{:0=2}{:0=2}'.format(ra_h, ra_m, ra_s, dec_d, dec_m, dec_s)
+                        entry.update({'rgz_name':name})
+                    
                     #calculate physical data using redshift
                     if sdss_match:
                         z = 0
