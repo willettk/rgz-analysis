@@ -26,22 +26,20 @@ def RGZcatalog():
     starttime = time.time()
     
     #begin logging even if not run from command line
-    logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(filename='{}/RGZcatalog_dr1.log'.format(rgz_path), level=logging.DEBUG, format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
 
     #check if consensus collection needs to be updated; if so, drop entire consensus collection and replace it with entries from the designated CSV file
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--consensus', help='replace the current consensus collection with a specified csv')
-    args = parser.parse_args()
-    if args.consensus:
-        updateConsensus(args.consensus)
+##    parser = argparse.ArgumentParser()
+##    parser.add_argument('-c', '--consensus', help='replace the current consensus collection with a specified csv')
+##    args = parser.parse_args()
+##    if args.consensus:
+##        updateConsensus(args.consensus)
     
     #connect to database of subjects
-    #logging.info('Connecting to MongoDB')
-    #db = pymongo.MongoClient()['radio']
     subjects = db['radio_subjects']
-    consensus = db['consensus']
-    catalog = db['catalog'] #this is being populated by this program
+    consensus = db['consensus_dr1']
+    catalog = db['catalog_dr1'] #this is being populated by this program
     if catalog.count():
         logging.info('Catalog contains entries; appending')
     else:
@@ -74,7 +72,7 @@ def RGZcatalog():
     if os.path.exists(in_progress_file):
         with open(in_progress_file, 'r') as f:
             in_progress_zid = f.read()
-        to_be_completed.discard(in_progress_zid)
+        to_be_completed = to_be_completed.union(in_progress_zid)
     to_be_completed = list(to_be_completed)
     
     #iterate through all noncompleted subjects
@@ -132,11 +130,11 @@ def RGZcatalog():
                     ir_peak = p2w( np.array([[ir_ra_pixels, ir_dec_pixels]]), 1)
                     ir_pos = coord.SkyCoord(ir_peak[0][0], ir_peak[0][1], unit=(u.deg,u.deg), frame='icrs')
 
-                entry.update({'consensus':{'n_votes':source['n_votes'], 'n_total':source['n_total'], \
-                                           'level':source['consensus_level'], 'label':source['label']}})
+                entry.update({'consensus':{'n_radio':source['n_votes'], 'n_total':source['n_total'], 'n_ir':source['n_ir'], 'ir_flag':source['ir_flag'], \
+                                           'ir_level':source['ir_level'], 'radio_level':source['consensus_level'], 'label':source['label']}})
                 if ir_pos:
                     logging.info('IR counterpart found')
-                    entry['consensus'].update({'IR_ra':ir_pos.ra.deg, 'IR_dec':ir_pos.dec.deg})
+                    entry['consensus'].update({'ir_ra':ir_pos.ra.deg, 'ir_dec':ir_pos.dec.deg})
                 else:
                     logging.info('No IR counterpart found')
 
@@ -193,39 +191,54 @@ def RGZcatalog():
                     radio_data = p.getRadio(data, fits_loc, source)
                     entry.update(radio_data)
 
-                    #create RGZ name from radio position
-                    radio_ra = radio_data['radio']['ra']
-                    ra_h = int(radio_ra/15.)
-                    ra_m = int((radio_ra - ra_h*15)*4)
-                    ra_s = (radio_ra - ra_h*15 - ra_m/4.)*240
-                    radio_dec = radio_data['radio']['dec']
-                    dec_d = int(radio_dec)
-                    dec_m = int((radio_dec - dec_d)*60)
-                    dec_s = int((radio_dec - dec_d - dec_m/60.)*3600)
-                    name = 'RGZJ{:0=2}{:0=2}{:0=4.1f}{:0=+3}{:0=2}{:0=2}'.format(ra_h, ra_m, ra_s, dec_d, dec_m, dec_s)
-                    entry.update({'rgz_name':name})
-
+                    #use WISE catalog name if available
+                    if wise_match:
+                        entry.update({'rgz_name':'RGZ{}{}'.format(wise_match['designation'][5:14], wise_match['designation'][15:22])})
+                        
+                    else:
+                        #if not, try consensus IR position
+                        if ir_pos:
+                            ra = ir_pos.ra.deg
+                            dec = ir_pos.dec.deg
+                        #finally, just use radio center
+                        else:
+                            ra = radio_data['radio']['ra']
+                            dec = radio_data['radio']['dec']
+                        
+                        ra_h = int(ra/15.)
+                        ra_m = int((ra - ra_h*15)*4)
+                        ra_s = (ra - ra_h*15 - ra_m/4.)*240
+                        dec_d = int(dec)
+                        dec_m = int((dec - dec_d)*60)
+                        dec_s = int((dec - dec_d - dec_m/60.)*3600)
+                        entry.update({'rgz_name':'RGZJ{:0=2}{:0=2}{:0=4.1f}{:0=+3}{:0=2}{:0=2}'.format(ra_h, ra_m, ra_s, dec_d, dec_m, dec_s)})
+                    
                     #calculate physical data using redshift
-                    if sdss_match and 'redshift' in sdss_match:
-                        z = sdss_match['redshift']
-                        lz = np.log10(z)
-                        DAkpc = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)*1000 #angular size distance approximation in kpc
-                        DLkpc = DAkpc*np.square(1+z) #luminosity distance approximation in kpc
-                        maxPhysicalExtentKpc = DAkpc*radio_data['radio']['maxAngularExtent']*np.pi/180/3600 #arcseconds to radians
-                        totalCrossSectionKpc2 = np.square(DAkpc)*radio_data['radio']['totalSolidAngle']*np.square(np.pi/180/3600) #arcseconds^2 to radians^2
-                        totalLuminosityWHz = radio_data['radio']['totalFlux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19) #mJy to W/(m^2 Hz), kpc to m
-                        totalLuminosityErrWHz = radio_data['radio']['totalFluxErr']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                        peakLuminosityErrWHz = radio_data['radio']['peakFluxErr']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                        for component in radio_data['radio']['components']:
-                            component['physicalExtent'] = DAkpc*component['angularExtent']*np.pi/180/3600
-                            component['crossSection'] = np.square(DAkpc)*component['solidAngle']*np.square(np.pi/180/3600)
-                            component['luminosity'] = component['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                            component['luminosityErr'] = component['fluxErr']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                        for peak in radio_data['radio']['peaks']:
-                            peak['luminosity'] = peak['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                        entry['radio'].update({'maxPhysicalExtent':maxPhysicalExtentKpc, 'totalCrossSection':totalCrossSectionKpc2, \
-                                               'totalLuminosity':totalLuminosityWHz, 'totalLuminosityErr':totalLuminosityErrWHz, \
-                                               'peakLuminosityErr':peakLuminosityErrWHz})
+                    if sdss_match:
+                        z = 0
+                        if 'spec_redshift' in sdss_match:
+                            z = sdss_match['spec_redshift']
+                        elif 'photo_redshift' in sdss_match:
+                            z = sdss_match['photo_redshift']
+                        if z>0:
+                            lz = np.log10(z)
+                            DAkpc = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)*1000 #angular size distance approximation in kpc
+                            DLkpc = DAkpc*np.square(1+z) #luminosity distance approximation in kpc
+                            maxPhysicalExtentKpc = DAkpc*radio_data['radio']['max_angular_extent']*np.pi/180/3600 #arcseconds to radians
+                            totalCrossSectionKpc2 = np.square(DAkpc)*radio_data['radio']['total_solid_angle']*np.square(np.pi/180/3600) #arcseconds^2 to radians^2
+                            totalLuminosityWHz = radio_data['radio']['total_flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19) #mJy to W/(m^2 Hz), kpc to m
+                            totalLuminosityErrWHz = radio_data['radio']['total_flux_err']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                            peakLuminosityErrWHz = radio_data['radio']['peak_flux_err']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                            for component in radio_data['radio']['components']:
+                                component['physical_extent'] = DAkpc*component['angular_extent']*np.pi/180/3600
+                                component['cross_section'] = np.square(DAkpc)*component['solid_angle']*np.square(np.pi/180/3600)
+                                component['luminosity'] = component['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                                component['luminosity_err'] = component['flux_err']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                            for peak in radio_data['radio']['peaks']:
+                                peak['luminosity'] = peak['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                            entry['radio'].update({'max_physical_extent':maxPhysicalExtentKpc, 'total_cross_section':totalCrossSectionKpc2, \
+                                                   'total_luminosity':totalLuminosityWHz, 'total_luminosity_err':totalLuminosityErrWHz, \
+                                                   'peak_luminosity_err':peakLuminosityErrWHz})
 
                     logging.info('Radio data added')
                                        
@@ -253,7 +266,7 @@ def RGZcatalog():
     return count
 
 if __name__ == '__main__':
-    logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(filename='{}/RGZcatalog_dr1.log'.format(rgz_path), level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
     logging.info('Catalog run from command line')
     done = False
