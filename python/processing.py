@@ -94,7 +94,7 @@ def SDSS_select(sql):
    while(True):
       tryCount += 1
       try:
-         br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
+         br.open('http://skyserver.sdss.org/dr13/en/tools/search/sql.aspx', timeout=4)
          br.select_form(name='sql')
          br['cmd'] = sql
          br['format'] = ['csv']
