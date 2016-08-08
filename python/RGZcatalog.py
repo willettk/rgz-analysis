@@ -48,6 +48,7 @@ def RGZcatalog():
     #get dictionary for finding the path to FITS files and WCS headers
     with open('%s/first_fits.txt' % rgz_path) as f:
         lines = f.readlines()
+    
     pathdict = {}
     for l in lines:
         spl = l.split(' ')
@@ -144,10 +145,20 @@ def RGZcatalog():
                     wise_match = p.getWISE(entry)
                     if wise_match:
                         entry.update({'AllWISE':wise_match})
-                    
-                    sdss_match = p.getSDSS(entry)
-                    if sdss_match:
-                        entry.update({'SDSS':sdss_match})
+
+                    try:
+                        sdss_match = p.getSDSS(entry)
+                        if sdss_match:
+                            entry.update({'SDSS':sdss_match})
+                    except KeyError as e:
+                        if e.message == 'ra':
+                            #unable to reproduce; no error when I try again, so let's just do that
+                            message = 'Bad response from SkyServer; trying again in 10 min'
+                            logging.exception(message)
+                            print message
+                            raise fn.DataAccessError(message)
+                        else:
+                            raise e
 
                 #try block attempts to read JSON from web; if it exists, calculate data
                 try:
