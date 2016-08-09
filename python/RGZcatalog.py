@@ -146,19 +146,26 @@ def RGZcatalog():
                     if wise_match:
                         entry.update({'AllWISE':wise_match})
 
-                    try:
-                        sdss_match = p.getSDSS(entry)
-                        if sdss_match:
-                            entry.update({'SDSS':sdss_match})
-                    except KeyError as e:
-                        if e.message == 'ra':
-                            #unable to reproduce; no error when I try again, so let's just do that
-                            message = 'Bad response from SkyServer; trying again in 10 min'
-                            logging.exception(message)
-                            print message
-                            raise fn.DataAccessError(message)
-                        else:
-                            raise e
+                    tryCount = 0
+                    while(True):
+                        tryCount += 1
+                        try:
+                            sdss_match = p.getSDSS(entry)
+                            if sdss_match:
+                                entry.update({'SDSS':sdss_match})
+                            break
+                        except KeyError as e:
+                            if tryCount>5:
+                                message = 'Bad response from SkyServer; trying again in 10 min'
+                                logging.exception(message)
+                                print message
+                                raise fn.DataAccessError(message)
+                            elif e.message == 'ra':
+                                #unable to reproduce; no error when I try again, so let's just do that
+                                logging.exception(e)
+                                time.sleep(10)
+                            else:
+                                raise e
 
                 #try block attempts to read JSON from web; if it exists, calculate data
                 try:
