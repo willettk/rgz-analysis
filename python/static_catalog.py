@@ -89,10 +89,10 @@ def flat_version(catalog):
             for component in c['radio']['components']:
                 maxPeak = {'flux':-99, 'ra':-99, 'dec':-99}
                 for peak in c['radio']['peaks']:
-                    if component['ra_range'][0] <= peak['ra'] <= component['ra_range'][1] and \
-                       component['dec_range'][0] <= peak['dec'] <= component['dec_range'][1] and \
+                    if component['ra_range'][0]-1e5 <= peak['ra'] <= component['ra_range'][1]+1e5 and \
+                       component['dec_range'][0]-1e5 <= peak['dec'] <= component['dec_range'][1]+1e5 and \
                        peak['flux'] > maxPeak['flux']:
-                        maxPeak = peak.copy()
+                        maxPeak = peak
                 component_strings['peak_fluxes'] += '{};'.format(maxPeak['flux'])
                 component_strings['peak_flux_errs'] += '{};'.format(c['radio']['peak_flux_err'])
                 component_strings['peak_ras'] += '{};'.format(maxPeak['ra'])
@@ -353,7 +353,7 @@ def paired_version(catalog):
                     #Find the peak in the component, unfortunately not marked in Mongo
                     peak = {'ra':-99, 'dec':-99, 'flux':-99}
                     for p in c['radio']['peaks']:
-                        if (comp['ra_range'][0] <= p['ra'] <= comp['ra_range'][1]) and (comp['dec_range'][0] <= p['dec'] <= comp['dec_range'][1]) \
+                        if (comp['ra_range'][0]-1e5 <= p['ra'] <= comp['ra_range'][1]+1e5) and (comp['dec_range'][0]-1e5 <= p['dec'] <= comp['dec_range'][1]+1e5) \
                            and p['flux'] > peak['flux']:
                             peak = p
 
