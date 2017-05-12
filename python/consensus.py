@@ -58,10 +58,14 @@ from PIL import Image
 client = MongoClient('localhost', 27017)
 db = client['radio'] 
 
+# Select which version of the catalog to use
+version = '_live'
 subjects = db['radio_subjects'] # subjects = images
 classifications = db['radio_classifications'] # classifications = classifications of each subject per user
-consensus = db['consensus_dr1'] # consensus = output of this program
-user_weights = db['user_weights_dr1']
+consensus = db['consensus{}'.format(version)] # consensus = output of this program
+user_weights = db['user_weights{}'.format(version)]
+
+logfile = 'consensus{}.log'.format(version)
 
 # Parameters for the RGZ project
 
@@ -258,7 +262,10 @@ def checksum(zid,experts_only=False,excluded=[],no_anonymous=False,include_peak_
         weighted_c = []
         for c in clist:
             if c.has_key('user_name'):
-                weight = user_weights.find_one({'user_name':c['user_name']})['weight']
+            	try:
+            		weight = user_weights.find_one({'user_name':c['user_name']})['weight']
+                except TypeError:
+					weight = 0
                 if scheme == 'threshold' and weight == 1:
                     for i in range(weights):
                         weighted_c.append(c)
@@ -1306,7 +1313,7 @@ if __name__ == "__main__":
 
     # Run the consensus pipeline from the command line
 
-    logging.basicConfig(filename='{}/consensus_dr1.log'.format(rgz_path), level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(filename='{}/{}'.format(rgz_path,logfile), level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
     logging.info('Consensus run from command line')
 
@@ -1323,7 +1330,7 @@ if __name__ == "__main__":
             #   Set as True if you want to run the consensus only on the subjects completed
             #   since the last time the pipeline was run. If False, it will run it on the
             #   entire set of completed subjects (which takes about 6 hours for 10k images).
-            update = False
+            update = True
 
             # subset: default = None
             #
@@ -1352,7 +1359,7 @@ if __name__ == "__main__":
             assert scheme in ['threshold', 'scaling'], 'Weighting scheme must be threshold or sliding, not {}'.format(scheme)
             
             # If you're using weights, make sure they're up to date
-            if not update and weights > 1:
+            if weights > 1:
                 unique_users = get_unique_users()
                 weight_users(unique_users, scheme, min_gs=5, min_agree=0.5, scaling=weights)
 

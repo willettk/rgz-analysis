@@ -4,7 +4,7 @@ consensus matching information, radio morphology, IR counterpart location, and d
 AllWISE and SDSS catalogs.
 '''
 
-import logging, urllib2, time, argparse, json, os, datetime
+import logging, urllib2, time, json, os, datetime
 import pymongo
 import numpy as np
 import StringIO, gzip
@@ -14,10 +14,9 @@ from astropy import wcs, coordinates as coord, units as u
 #custom modules for the RGZ catalog pipeline
 import catalog_functions as fn #contains miscellaneous helper functions
 import processing as p #contains functions that process the data
-from update_consensus_csv import updateConsensus #replaces the current consensus collection with a specified csv
 from find_duplicates import find_duplicates #finds and marks any radio components that are duplicated between sources
 
-from consensus import rgz_path, data_path, db
+from consensus import rgz_path, data_path, db, version, logfile
 in_progress_file = '%s/subject_in_progress.txt' % rgz_path
 
 def RGZcatalog():
@@ -26,20 +25,13 @@ def RGZcatalog():
     starttime = time.time()
     
     #begin logging even if not run from command line
-    logging.basicConfig(filename='{}/RGZcatalog_dr1.log'.format(rgz_path), level=logging.DEBUG, format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(filename='{}/{}'.format(rgz_path,logfile), level=logging.DEBUG, format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
-
-    #check if consensus collection needs to be updated; if so, drop entire consensus collection and replace it with entries from the designated CSV file
-##    parser = argparse.ArgumentParser()
-##    parser.add_argument('-c', '--consensus', help='replace the current consensus collection with a specified csv')
-##    args = parser.parse_args()
-##    if args.consensus:
-##        updateConsensus(args.consensus)
     
     #connect to database of subjects
     subjects = db['radio_subjects']
-    consensus = db['consensus_dr1']
-    catalog = db['catalog_dr1'] #this is being populated by this program
+    consensus = db['consensus{}'.format(version)]
+    catalog = db['catalog{}'.format(version)] #this is being populated by this program
     if catalog.count():
         logging.info('Catalog contains entries; appending')
     else:
@@ -48,6 +40,7 @@ def RGZcatalog():
     #get dictionary for finding the path to FITS files and WCS headers
     with open('%s/first_fits.txt' % rgz_path) as f:
         lines = f.readlines()
+    
     pathdict = {}
     for l in lines:
         spl = l.split(' ')
@@ -144,10 +137,27 @@ def RGZcatalog():
                     wise_match = p.getWISE(entry)
                     if wise_match:
                         entry.update({'AllWISE':wise_match})
-                    
-                    sdss_match = p.getSDSS(entry)
-                    if sdss_match:
-                        entry.update({'SDSS':sdss_match})
+
+                    tryCount = 0
+                    while(True):
+                        tryCount += 1
+                        try:
+                            sdss_match = p.getSDSS(entry)
+                            if sdss_match:
+                                entry.update({'SDSS':sdss_match})
+                            break
+                        except KeyError as e:
+                            if tryCount>5:
+                                message = 'Bad response from SkyServer; trying again in 10 min'
+                                logging.exception(message)
+                                print message
+                                raise fn.DataAccessError(message)
+                            elif e.message == 'ra':
+                                #unable to reproduce; no error when I try again, so let's just do that
+                                logging.exception(e)
+                                time.sleep(10)
+                            else:
+                                raise e
 
                 #try block attempts to read JSON from web; if it exists, calculate data
                 try:
@@ -266,7 +276,7 @@ def RGZcatalog():
     return count
 
 if __name__ == '__main__':
-    logging.basicConfig(filename='{}/RGZcatalog_dr1.log'.format(rgz_path), level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(filename='{}/{}'.format(rgz_path,logfile), level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
     logging.info('Catalog run from command line')
     done = False

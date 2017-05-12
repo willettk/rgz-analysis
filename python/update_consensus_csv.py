@@ -1,15 +1,17 @@
 '''
+DEPRECATED
+
 Updates the consensus database in Mongo so that new entries may be added to the catalog.
 '''
 
 import logging
 import csv
 from ast import literal_eval
-from consensus import db
+from consensus import db, logfile
 
 def updateConsensus(csvPath):
     
-    logging.basicConfig(filename='RGZcatalog.log', level=logging.DEBUG, format='%(asctime)s %(message)s')
+    logging.basicConfig(filename='{}/{}'.format(rgz_path,logfile), level=logging.DEBUG, format='%(asctime)s %(message)s')
     logging.captureWarnings(True)
     logging.info('New consensus collection added from %s', csvPath)
     

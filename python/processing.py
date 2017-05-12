@@ -23,7 +23,7 @@ def getWISE(entry):
     while(True): #in case of error, wait 10 sec and try again; give up after 5 tries
         tryCount += 1
         try:
-            table = Irsa.query_region(ir_pos, catalog='wise_allwise_p3as_psd', radius=3.*u.arcsec)
+            table = Irsa.query_region(ir_pos, catalog='allwise_p3as_psd', radius=3.*u.arcsec)
             break
         except (TimeoutError, TableParseError) as e:
             if tryCount>5:
@@ -94,7 +94,7 @@ def SDSS_select(sql):
    while(True):
       tryCount += 1
       try:
-         br.open('http://skyserver.sdss.org/dr12/en/tools/search/sql.aspx', timeout=4)
+         br.open('http://skyserver.sdss.org/dr13/en/tools/search/sql.aspx', timeout=4)
          br.select_form(name='sql')
          br['cmd'] = sql
          br['format'] = ['csv']

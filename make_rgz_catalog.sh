@@ -59,7 +59,7 @@ python2.7 $RGZ_PATH"/rgz-analysis/python/RGZcatalog.py"
 
 # Create a flat static version of the catalog
 
-echo "Outputting static catalog"
+#echo "Outputting static catalog"
 python2.7 $RGZ_PATH"/rgz-analysis/python/static_catalog.py"
 
 # Export the Mongo files (raw data + consensus + matched catalog) so that we have a hard copy saved to disk
