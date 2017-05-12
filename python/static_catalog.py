@@ -13,7 +13,7 @@ with consensus_level = 0 and then perform cuts later in their analysis, since co
 is included as an output parameter.
 '''
 
-from consensus import rgz_path
+from consensus import rgz_path, version
 consensus_level = 0.0
 
 # Define a suffix that will be appended to the filename of the new catalog output.
@@ -30,7 +30,7 @@ def load_data():
     client = MongoClient('localhost', 27017)
     db = client['radio'] 
     
-    catalog = db['catalog_dr1']
+    catalog = db['catalog{}'.format(version)]
 
     return catalog
 
