@@ -10,6 +10,7 @@ import numpy as np
 import StringIO, gzip
 from astropy.io import fits
 from astropy import wcs, coordinates as coord, units as u
+from astropy.cosmology import Planck13 as cosmo
 
 #custom modules for the RGZ catalog pipeline
 import catalog_functions as fn #contains miscellaneous helper functions
@@ -35,7 +36,7 @@ def RGZcatalog():
     if catalog.count():
         logging.info('Catalog contains entries; appending')
     else:
-        catalog.create_index([('catalog_id', 1)])
+        catalog.create_index('catalog_id')
     
     #get dictionary for finding the path to FITS files and WCS headers
     with open('%s/first_fits.txt' % rgz_path) as f:
@@ -136,6 +137,10 @@ def RGZcatalog():
 
                     wise_match = p.getWISE(entry)
                     if wise_match:
+                    	designation = wise_match['designation'][5:]
+                    	pz = db['wise_pz'].find_one({'wiseX':designation})
+                    	if pz is not None:
+	                    	wise_match['photo_redshift'] = pz['zPhoto_Corr']
                         entry.update({'AllWISE':wise_match})
 
                     tryCount = 0
@@ -223,7 +228,7 @@ def RGZcatalog():
                         dec_s = int((dec - dec_d - dec_m/60.)*3600)
                         entry.update({'rgz_name':'RGZJ{:0=2}{:0=2}{:0=4.1f}{:0=+3}{:0=2}{:0=2}'.format(ra_h, ra_m, ra_s, dec_d, dec_m, dec_s)})
                     
-                    #calculate physical data using redshift
+                    #calculate physical data using redshift from SDSS
                     if sdss_match:
                         z = 0
                         if 'spec_redshift' in sdss_match:
@@ -231,21 +236,20 @@ def RGZcatalog():
                         elif 'photo_redshift' in sdss_match:
                             z = sdss_match['photo_redshift']
                         if z>0:
-                            lz = np.log10(z)
-                            DAkpc = pow(10, -0.0799*pow(lz,3)-0.406*pow(lz,2)+0.3101*lz+3.2239)*1000 #angular size distance approximation in kpc
-                            DLkpc = DAkpc*np.square(1+z) #luminosity distance approximation in kpc
-                            maxPhysicalExtentKpc = DAkpc*radio_data['radio']['max_angular_extent']*np.pi/180/3600 #arcseconds to radians
+                        	DAkpc = float(cosmo.angular_diameter_distance(z)/u.kpc)
+                        	DLm = float(cosmo.luminosity_distance(z)/u.m)
+                        	maxPhysicalExtentKpc = DAkpc*radio_data['radio']['max_angular_extent']*np.pi/180/3600 #arcseconds to radians
                             totalCrossSectionKpc2 = np.square(DAkpc)*radio_data['radio']['total_solid_angle']*np.square(np.pi/180/3600) #arcseconds^2 to radians^2
-                            totalLuminosityWHz = radio_data['radio']['total_flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19) #mJy to W/(m^2 Hz), kpc to m
-                            totalLuminosityErrWHz = radio_data['radio']['total_flux_err']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                            peakLuminosityErrWHz = radio_data['radio']['peak_flux_err']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                            totalLuminosityWHz = radio_data['radio']['total_flux']*1e-29*4*np.pi*np.square(DLm) #mJy to W/(m^2 Hz), kpc to m
+                            totalLuminosityErrWHz = radio_data['radio']['total_flux_err']*1e-29*4*np.pi*np.square(DLm)
+                            peakLuminosityErrWHz = radio_data['radio']['peak_flux_err']*1e-29*4*np.pi*np.square(DLm)
                             for component in radio_data['radio']['components']:
                                 component['physical_extent'] = DAkpc*component['angular_extent']*np.pi/180/3600
                                 component['cross_section'] = np.square(DAkpc)*component['solid_angle']*np.square(np.pi/180/3600)
-                                component['luminosity'] = component['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
-                                component['luminosity_err'] = component['flux_err']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                                component['luminosity'] = component['flux']*1e-29*4*np.pi*np.square(DLm)
+                                component['luminosity_err'] = component['flux_err']*1e-29*4*np.pi*np.square(DLm)
                             for peak in radio_data['radio']['peaks']:
-                                peak['luminosity'] = peak['flux']*1e-29*4*np.pi*np.square(DLkpc*3.09e19)
+                                peak['luminosity'] = peak['flux']*1e-29*4*np.pi*np.square(DLm)
                             entry['radio'].update({'max_physical_extent':maxPhysicalExtentKpc, 'total_cross_section':totalCrossSectionKpc2, \
                                                    'total_luminosity':totalLuminosityWHz, 'total_luminosity_err':totalLuminosityErrWHz, \
                                                    'peak_luminosity_err':peakLuminosityErrWHz})
@@ -279,6 +283,11 @@ if __name__ == '__main__':
     logging.basicConfig(filename='{}/{}'.format(rgz_path,logfile), level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     logging.captureWarnings(True)
     logging.info('Catalog run from command line')
+    
+    assert db['radio_subjects'].count()>0, 'RGZ subjects collection not in Mongo database'
+    assert db['consensus{}'.format(version)].count()>0, 'RGZ consensus{} collection not in Mongo database'.format(version)
+    assert db['wise_pz'].count()>0, 'WISExSCOSPZ catalog not in Mongo database'
+    
     done = False
     while not done:
         try:
