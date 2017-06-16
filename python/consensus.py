@@ -59,7 +59,7 @@ client = MongoClient('localhost', 27017)
 db = client['radio'] 
 
 # Select which version of the catalog to use
-version = '_live'
+version = '_bending'
 subjects = db['radio_subjects'] # subjects = images
 classifications = db['radio_classifications'] # classifications = classifications of each subject per user
 consensus = db['consensus{}'.format(version)] # consensus = output of this program
@@ -1330,7 +1330,7 @@ if __name__ == "__main__":
             #   Set as True if you want to run the consensus only on the subjects completed
             #   since the last time the pipeline was run. If False, it will run it on the
             #   entire set of completed subjects (which takes about 6 hours for 10k images).
-            update = True
+            update = False 
 
             # subset: default = None
             #
