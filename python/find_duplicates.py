@@ -3,13 +3,13 @@
 
 from astropy import coordinates as coord, units as u
 from astropy.io import fits
-from consensus import rgz_path,db
+from consensus import rgz_path, db, version
 import itertools, logging
 
 #contains groups of subjects within 3' of each other, determined in TopCat
 internal = fits.getdata("{0}/fits/internal_matches.fits".format(rgz_path),1)
 
-catalog = db['catalog_dr1']
+catalog = db['catalog{}'.format(version)]
 
 # Test case
 

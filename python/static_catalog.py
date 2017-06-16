@@ -50,18 +50,18 @@ def flat_version(catalog):
                       'consensus.n_total', 'consensus.n_radio', \
                       'consensus.n_ir', 'consensus.radio_level', 'consensus.ir_level', \
                   'radio.number_components', 'radio.number_peaks', 'radio.max_angular_extent', 'radio.total_solid_angle', 'radio.outermost_level', \
-                      #'radio.max_physical_extent', 'radio.total_cross_section', \
+                      'radio.max_physical_extent', 'radio.total_cross_section', \
                   'component.peak_fluxes', 'component.peak_flux_errs', 'component.peak_ras', 'component.peak_decs', \
                       'component.fluxes', 'component.flux_errs', 'component.angular_extents', 'component.solid_angles', \
-                      #'component.physical_extents', 'component.cross_sections', \
+                      'component.physical_extents', 'component.cross_sections', \
                   'radio.total_flux', 'radio.total_flux_err', \
-                      #'radio.total_luminosity', 'radio.total_luminosity_err', \
+                      'radio.total_luminosity', 'radio.total_luminosity_err', \
                   'AllWISE.designation', 'AllWISE.ra', 'AllWISE.dec', \
                       'AllWISE.w1mpro', 'AllWISE.w1sigmpro', 'AllWISE.w1snr', 'AllWISE.w2mpro', 'AllWISE.w2sigmpro', 'AllWISE.w2snr', \
                       'AllWISE.w3mpro', 'AllWISE.w3sigmpro', 'AllWISE.w3snr', 'AllWISE.w4mpro', 'AllWISE.w4sigmpro', 'AllWISE.w4snr', 'AllWISE.number_matches', \
-                  #'SDSS.objID', 'SDSS.ra', 'SDSS.dec', 'SDSS.u', 'SDSS.u_err', 'SDSS.r', 'SDSS.r_err', 'SDSS.g', 'SDSS.g_err', 'SDSS.i', 'SDSS.i_err', \
-                  #    'SDSS.z', 'SDSS.z_err', 'SDSS.photo_redshift', 'SDSS.photo_redshift_err', 'SDSS.spec_redshift', 'SDSS.spec_redshift_err', \
-                  #    'SDSS.morphological_class', 'SDSS.spectral_class', 'SDSS.number_matches', \
+                  'SDSS.objID', 'SDSS.ra', 'SDSS.dec', 'SDSS.u', 'SDSS.u_err', 'SDSS.r', 'SDSS.r_err', 'SDSS.g', 'SDSS.g_err', 'SDSS.i', 'SDSS.i_err', \
+                      'SDSS.z', 'SDSS.z_err', 'SDSS.photo_redshift', 'SDSS.photo_redshift_err', 'SDSS.spec_redshift', 'SDSS.spec_redshift_err', \
+                      'SDSS.morphological_class', 'SDSS.spectral_class', 'SDSS.number_matches', \
                   'duplicate_sources.share_components', 'duplicate_sources.match_components', 'duplicate_sources.WISE_cat_mismatch']
         header = ''
         for field in fields:
@@ -89,8 +89,8 @@ def flat_version(catalog):
             for component in c['radio']['components']:
                 maxPeak = {'flux':-99, 'ra':-99, 'dec':-99}
                 for peak in c['radio']['peaks']:
-                    if component['ra_range'][0]-1e5 <= peak['ra'] <= component['ra_range'][1]+1e5 and \
-                       component['dec_range'][0]-1e5 <= peak['dec'] <= component['dec_range'][1]+1e5 and \
+                    if component['ra_range'][0]-1e-5 <= peak['ra'] <= component['ra_range'][1]+1e-5 and \
+                       component['dec_range'][0]-1e-5 <= peak['dec'] <= component['dec_range'][1]+1e-5 and \
                        peak['flux'] > maxPeak['flux']:
                         maxPeak = peak
                 component_strings['peak_fluxes'] += '{};'.format(maxPeak['flux'])
@@ -228,15 +228,15 @@ def paired_version(catalog):
                             'consensus.n_total', 'consensus.n_radio', \
                             'consensus.n_ir', 'consensus.radio_level', 'consensus.ir_level', \
                         'radio.number_components', 'radio.number_peaks', 'radio.max_angular_extent', 'radio.total_solid_angle', 'radio.outermost_level', \
-                            #'radio.max_physical_extent', 'radio.total_cross_section', \
+                            'radio.max_physical_extent', 'radio.total_cross_section', \
                             'radio.total_flux', 'radio.total_flux_err', \
-                            #'radio.total_luminosity', 'radio.total_luminosity_err', \
+                            'radio.total_luminosity', 'radio.total_luminosity_err', \
                         'AllWISE.designation', 'AllWISE.ra', 'AllWISE.dec', \
                             'AllWISE.w1mpro', 'AllWISE.w1sigmpro', 'AllWISE.w1snr', 'AllWISE.w2mpro', 'AllWISE.w2sigmpro', 'AllWISE.w2snr', \
                             'AllWISE.w3mpro', 'AllWISE.w3sigmpro', 'AllWISE.w3snr', 'AllWISE.w4mpro', 'AllWISE.w4sigmpro', 'AllWISE.w4snr', 'AllWISE.number_matches', \
-                        #'SDSS.objID', 'SDSS.ra', 'SDSS.dec', 'SDSS.u', 'SDSS.u_err', 'SDSS.r', 'SDSS.r_err', 'SDSS.g', 'SDSS.g_err', 'SDSS.i', 'SDSS.i_err', \
-                        #    'SDSS.z', 'SDSS.z_err', 'SDSS.photo_redshift', 'SDSS.photo_redshift_err', 'SDSS.spec_redshift', 'SDSS.spec_redshift_err', \
-                        #    'SDSS.morphological_class', 'SDSS.spectral_class', 'SDSS.number_matches', \
+                        'SDSS.objID', 'SDSS.ra', 'SDSS.dec', 'SDSS.u', 'SDSS.u_err', 'SDSS.r', 'SDSS.r_err', 'SDSS.g', 'SDSS.g_err', 'SDSS.i', 'SDSS.i_err', \
+                            'SDSS.z', 'SDSS.z_err', 'SDSS.photo_redshift', 'SDSS.photo_redshift_err', 'SDSS.spec_redshift', 'SDSS.spec_redshift_err', \
+                            'SDSS.morphological_class', 'SDSS.spectral_class', 'SDSS.number_matches', \
                         'duplicate_sources.share_components', 'duplicate_sources.match_components', 'duplicate_sources.WISE_cat_mismatch']
 
             h_header = ''
@@ -249,7 +249,7 @@ def paired_version(catalog):
 
             c_fields = ['catalog_id', 'rgz_name', 'zooniverse_id', 'outermost_level', 'peak_flux', 'peak_flux_err', 'peak_ra', 'peak_dec', \
                         'flux', 'flux_err', 'angular_extent', 'solid_angle', \
-                        #'physical_extent', 'cross_section'
+                        'physical_extent', 'cross_section'
                         ]
 
             c_header = ''
@@ -353,7 +353,7 @@ def paired_version(catalog):
                     #Find the peak in the component, unfortunately not marked in Mongo
                     peak = {'ra':-99, 'dec':-99, 'flux':-99}
                     for p in c['radio']['peaks']:
-                        if (comp['ra_range'][0]-1e5 <= p['ra'] <= comp['ra_range'][1]+1e5) and (comp['dec_range'][0]-1e5 <= p['dec'] <= comp['dec_range'][1]+1e5) \
+                        if (comp['ra_range'][0]-1e-5 <= p['ra'] <= comp['ra_range'][1]+1e-5) and (comp['dec_range'][0]-1e-5 <= p['dec'] <= comp['dec_range'][1]+1e-5) \
                            and p['flux'] > peak['flux']:
                             peak = p
 

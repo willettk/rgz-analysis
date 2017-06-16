@@ -236,8 +236,8 @@ def RGZcatalog():
                         elif 'photo_redshift' in sdss_match:
                             z = sdss_match['photo_redshift']
                         if z>0:
-                        	DAkpc = float(cosmo.angular_diameter_distance(z)/u.kpc)
-                        	DLm = float(cosmo.luminosity_distance(z)/u.m)
+                        	DAkpc = float(cosmo.angular_diameter_distance(z)/u.kpc) #angular diameter distance in kpc
+                        	DLm = float(cosmo.luminosity_distance(z)/u.m) #luminosity distance in m
                         	maxPhysicalExtentKpc = DAkpc*radio_data['radio']['max_angular_extent']*np.pi/180/3600 #arcseconds to radians
                             totalCrossSectionKpc2 = np.square(DAkpc)*radio_data['radio']['total_solid_angle']*np.square(np.pi/180/3600) #arcseconds^2 to radians^2
                             totalLuminosityWHz = radio_data['radio']['total_flux']*1e-29*4*np.pi*np.square(DLm) #mJy to W/(m^2 Hz), kpc to m
