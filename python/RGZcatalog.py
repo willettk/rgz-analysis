@@ -119,8 +119,8 @@ def RGZcatalog():
                 else:
                     #this only works for FIRST images; will need changing when ATLAS is added
                     p2w = w.wcs_pix2world
-                    ir_ra_pixels = ir_coords[0] * 132./500.
-                    ir_dec_pixels = 133 - ir_coords[1] * 132./500.
+                    ir_ra_pixels = ir_coords[0]*w._naxis1/500.
+                    ir_dec_pixels = 1 + w._naxis2 - ir_coords[1]*w._naxis2/500.
                     ir_peak = p2w( np.array([[ir_ra_pixels, ir_dec_pixels]]), 1)
                     ir_pos = coord.SkyCoord(ir_peak[0][0], ir_peak[0][1], unit=(u.deg,u.deg), frame='icrs')
 
@@ -153,9 +153,7 @@ def RGZcatalog():
                             break
                         except KeyError as e:
                             if tryCount>5:
-                                message = 'Bad response from SkyServer; trying again in 10 min'
-                                logging.exception(message)
-                                print message
+                                output('Bad response from SkyServer; trying again in 10 min', logging.exception)
                                 raise fn.DataAccessError(message)
                             elif e.message == 'ra':
                                 #unable to reproduce; no error when I try again, so let's just do that
@@ -192,9 +190,7 @@ def RGZcatalog():
                                 break
                             except (urllib2.URLError, urllib2.HTTPError) as e:
                                 if tryCount>5:
-                                    message = 'Unable to connect to Amazon Web Services; trying again in 10 min'
-                                    logging.exception(message)
-                                    print message
+                                    output('Unable to connect to Amazon Web Services; trying again in 10 min', logging.exception)
                                     raise fn.DataAccessError(message)
                                 logging.exception(e)
                                 time.sleep(10)
@@ -273,11 +269,16 @@ def RGZcatalog():
         
     #end timer
     endtime = time.time()
-    output = 'Time taken: %f' % (endtime-starttime)
-    logging.info(output)
-    print output
+    output('Time taken: %f' % (endtime-starttime))
 
     return count
+
+def output(string, fn=logging.info):
+	'''
+	Print a string to screen and the logfile
+	'''
+	fn(string)
+	print string
 
 if __name__ == '__main__':
     logging.basicConfig(filename='{}/{}'.format(rgz_path,logfile), level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
@@ -291,20 +292,14 @@ if __name__ == '__main__':
     done = False
     while not done:
         try:
-            output = '%i entries added.' % RGZcatalog()
-            logging.info(output)
-            print output
+            output('%i entries added.' % RGZcatalog())
             done = True
         except pymongo.errors.CursorNotFound as c:
             time.sleep(10)
-            output = 'Cursor timed out; starting again.'
-            logging.info(output)
-            print output
+            output('Cursor timed out; starting again.')
         except fn.DataAccessError as d:
             resume = datetime.datetime.now() + datetime.timedelta(minutes=10)
-            output = "RGZcatalog.py can't connect to external server; will resume at {:%H:%M}".format(resume)
-            logging.info(output)
-            print output
+            output("RGZcatalog.py can't connect to external server; will resume at {:%H:%M}".format(resume))
             time.sleep(600)
         except BaseException as e:
             logging.exception(e)

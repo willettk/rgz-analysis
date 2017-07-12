@@ -627,43 +627,27 @@ def bending(args, peak_count):
 	
 	morphology = 'double' if peak_count == 2 else 'triple'
 	
-	# While loop lasts as long as cursor keeps timing out
-	done = False
-	while not done:
-		
-		# Determine which sources have already been processed
-		completed = []
-		if os.path.exists(completed_file):
-			with open(completed_file, 'r') as f:
-				lines = f.readlines()
-				for line in lines:
-					completed.append(int(line))
-		
-		previous = len(lines)
-		args['$and'][0]['catalog_id'] = {'$nin':completed}
-		
-		# Find the bending and cluster results for each source that matches
-		try:
-			count = bending_coll.find({'RGZ.morphology':morphology}).count()
-			with open(completed_file, 'a') as f:
-				for source in catalog.find(args).batch_size(100):
-					entry = get_entry(source, peak_count)
-					print >> f, source['catalog_id']
-					if entry is not None:
-						count += 1
-						output('%i %s' % (count, source['zooniverse_id']))
-						bending_coll.insert(entry)
-		
-		except pymongo.errors.CursorNotFound as e:
-			output(e, logging.exception)
-			with open(completed_file, 'r') as f:
-				lines = f.readlines()
-			new = len(lines) - previous
-			if not new:
-				raise
-		
-		# If the try block finishes, everything is processed
-		done = True
+	# Determine which sources have already been processed
+	completed = []
+	if os.path.exists(completed_file):
+		with open(completed_file, 'r') as f:
+			lines = f.readlines()
+			for line in lines:
+				completed.append(int(line))
+	
+	previous = len(lines)
+	args['$and'][0]['catalog_id'] = {'$nin':completed}
+	
+	# Find the bending and cluster results for each source that matches
+	count = bending_coll.find({'RGZ.morphology':morphology}).count()
+	with open(completed_file, 'a') as f:
+		for source in catalog.find(args).batch_size(50):
+			entry = get_entry(source, peak_count)
+			print >> f, source['catalog_id']
+			if entry is not None:
+				count += 1
+				output('%i %s' % (count, source['zooniverse_id']))
+				bending_coll.insert(entry)
 	
 	return count
 
@@ -735,12 +719,18 @@ if __name__ == '__main__':
 						   {'SDSS.spec_redshift':{'$gte':z_range[0], '$lt':z_range[1]}}, \
 						   {'AllWISE.photo_redshift':{'$gte':z_range[0], '$lt':z_range[1]}}] }]}
 	
-	try:
-		output('Processing double sources from RGZ')
-		output('%i double sources matched to clusters' % bending(double_args, 2))
-		output('Processing triple sources from RGZ')
-		output('%i triple sources matched to clusters' % bending(triple_args, 3))
-		to_file('%s/csv/bending_control_15.csv' % rgz_path, bending_coll)
-	except BaseException as e:
-		output(e, logging.exception)
-		raise
+	done = False
+	while not done:
+		try:
+			output('Processing double sources from RGZ')
+			output('%i double sources matched to clusters' % bending(double_args, 2))
+			output('Processing triple sources from RGZ')
+			output('%i triple sources matched to clusters' % bending(triple_args, 3))
+			to_file('%s/csv/bending_control_15.csv' % rgz_path, bending_coll)
+			done = True
+		except pymongo.errors.CursorNotFound as c:
+			time.sleep(10)
+			output('Cursor timed out; starting again.')
+		except BaseException as e:
+			logging.exception(e)
+			raise
