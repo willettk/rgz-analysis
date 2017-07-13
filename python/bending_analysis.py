@@ -21,7 +21,7 @@ rm_m = db['redmapper_members']
 rm_c = db['redmapper_clusters']
 amf = db['AMFDR9']
 xmatch = db['cluster_xmatch']
-bending_coll = db['bending_control']
+bending_coll = db['bending_15']
 
 # Get dictionary for finding the path to FITS files and WCS headers
 with open('%s/first_fits.txt' % rgz_path) as f:
@@ -514,7 +514,7 @@ def get_entry(source, peak_count, method=None):
 	contour_list = [child.path for child in contour_tree.children if any(child.contains(peak_pos))]
 	
 	# Match to cluster catalogs
-	cluster_w = get_whl(ir, z, z_err, 15, 10.04*(1+z))
+	cluster_w = get_whl(ir, z, z_err, 15, 0.04*(1+z))
 	whl_prop = {}
 	if cluster_w is not None:
 		c_pos = coord.SkyCoord(cluster_w['RAdeg'], cluster_w['DEdeg'], unit=(u.deg,u.deg), frame='icrs')
@@ -527,7 +527,7 @@ def get_entry(source, peak_count, method=None):
 				whl_prop[key] = cluster_w[key]
 	
 	objID = source['SDSS']['objID'] if 'SDSS' in source else None
-	cluster_r = get_redmapper(objID, ir, z, z_err, 15, 10.04*(1+z))
+	cluster_r = None #get_redmapper(objID, ir, z, z_err, 15, 0.04*(1+z))
 	rm_prop = {}
 	if cluster_r is not None:
 		c_pos = coord.SkyCoord(cluster_r['RAdeg'], cluster_r['DEdeg'], unit=(u.deg,u.deg), frame='icrs')
@@ -539,7 +539,7 @@ def get_entry(source, peak_count, method=None):
 			if key in cluster_r:
 				rm_prop[key] = cluster_r[key]
 	
-	cluster_a = get_amf(ir, z, z_err, 15, 10.04*(1+z))
+	cluster_a = None #get_amf(ir, z, z_err, 15, 0.04*(1+z))
 	amf_prop = {}
 	if cluster_a is not None:
 		c_pos = coord.SkyCoord(cluster_a['ra'], cluster_a['dec'], unit=(u.deg,u.deg), frame='icrs')
@@ -547,7 +547,7 @@ def get_entry(source, peak_count, method=None):
 		c_sep_mpc = float(cosmo.angular_diameter_distance(cluster_a['z'])/u.Mpc * c_sep_arc.to(u.rad)/u.rad)
 		c_pos_angle = c_pos.position_angle(ir)
 		amf_prop = {'ra':c_pos.ra.deg, 'dec':c_pos.dec.deg, 'separation_deg':c_sep_arc.deg, 'separation_Mpc':c_sep_mpc, 'position_angle':c_pos_angle.wrap_at(2*np.pi*u.rad).deg}
-		for key in ['_id', 'r200', 'richness', 'core_radius', 'AMF_id', 'concentration', 'likelihood']:
+		for key in ['_id', 'z', 'r200', 'richness', 'core_radius', 'AMF_id', 'concentration', 'likelihood']:
 			if key in cluster_a:
 				amf_prop[key] = cluster_a[key]
 	
@@ -568,7 +568,7 @@ def get_entry(source, peak_count, method=None):
 			tail_lengths_physical.append(cosmo.angular_diameter_distance(z) * tail.rad)
 		ratios = peak_edge_ratio(w, ir, peaks, tail_lengths_apparent)
 		asymmetry = ratios[1]/ratios[0]
-		using_contour = {'tail_deg_0':tail_lengths_apparent[0], 'tail_deg_1':tail_lengths_apparent[1], 'tail_kpc_0':float(tail_lengths_physical[0]/u.kpc), 'tail_kpc_1':float(tail_lengths_physical[1]/u.kpc), 'ratio_0':ratios[0], 'ratio_1':ratios[1], 'asymmetry':max(asymmetry,1./asymmetry)}
+		using_contour = {'tail_deg_0':tail_lengths_apparent[0], 'tail_deg_1':tail_lengths_apparent[1], 'size_deg':sum(tail_length_apparent), 'tail_kpc_0':float(tail_lengths_physical[0]/u.kpc), 'tail_kpc_1':float(tail_lengths_physical[1]/u.kpc), 'size_kpc':sum(tail_length_physical), 'ratio_0':ratios[0], 'ratio_1':ratios[1], 'asymmetry':max(asymmetry,1./asymmetry)}
 		using_contour.update(bending_angles)
 		for key in using_contour.keys():
 			if type(using_contour[key]) is coord.angles.Angle:
@@ -583,8 +583,7 @@ def get_entry(source, peak_count, method=None):
 			tail_lengths_physical.append(cosmo.angular_diameter_distance(z) * tail.rad)
 		ratios = peak_edge_ratio(w, ir, peaks, tail_lengths_apparent)
 		asymmetry = ratios[1]/ratios[0]
-		using_peaks = {'tail_deg_0':tail_lengths_apparent[0], 'tail_deg_1':tail_lengths_apparent[1], 'tail_kpc_0':float(tail_lengths_physical[0]/u.kpc), 'tail_kpc_1':float(tail_lengths_physical[1]/u.kpc), 'ratio_0':ratios[0], 'ratio_1':ratios[1], 'asymmetry':max(asymmetry,1./asymmetry)}
-		using_peaks.update(bending_angles)
+		using_peaks = {'tail_deg_0':tail_lengths_apparent[0], 'tail_deg_1':tail_lengths_apparent[1], 'size_deg':sum(tail_length_apparent), 'tail_kpc_0':float(tail_lengths_physical[0]/u.kpc), 'tail_kpc_1':float(tail_lengths_physical[1]/u.kpc), 'size_kpc':sum(tail_length_physical), 'ratio_0':ratios[0], 'ratio_1':ratios[1], 'asymmetry':max(asymmetry,1./asymmetry)}
 		using_peaks.update(bending_angles)
 		for key in using_peaks.keys():
 			if type(using_peaks[key]) is coord.angles.Angle:
@@ -667,7 +666,8 @@ def to_file(filename, collection):
 	wise_keys = ['ra', 'dec', 'designation', 'photo_redshift', 'w1mpro', 'w1sigmpro', 'w1snr', 'w2mpro', 'w2sigmpro', 'w2snr', 'w3mpro', 'w3sigmpro', 'w3snr', 'w4mpro', 'w4sigmpro', 'w4snr']
 	whl_keys = ['name', 'ra', 'dec', 'zphot', 'zspec', 'N500', 'N500sp', 'RL*500', 'r500', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
 	#rm_keys = ['name', 'ra', 'dec', 'zlambda', 'zspec', 'S', 'lambda', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
-	bending_keys = ['pos_angle_0', 'pos_angle_1', 'opening_angle', 'bisector', 'tail_deg_0', 'tail_deg_1', 'tail_kpc_0', 'tail_kpc_1', 'ratio_1', 'ratio_0', 'asymmetry']
+	#amf_keys = ['AMF_id', 'ra', 'dec', 'z', 'r200', 'richness', 'core_radius', 'concentration', 'likelihood', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks'
+	bending_keys = ['pos_angle_0', 'pos_angle_1', 'opening_angle', 'bisector', 'tail_deg_0', 'tail_deg_1', 'size_deg', 'tail_kpc_0', 'tail_kpc_1', 'size_kpc', 'ratio_1', 'ratio_0', 'asymmetry']
 	
 	all_keys = [rgz_keys, sdss_keys, wise_keys, whl_keys, bending_keys, bending_keys]
 	dict_names = ['RGZ', 'SDSS', 'AllWISE', 'WHL', 'using_contour', 'using_peaks']
@@ -699,7 +699,7 @@ def to_file(filename, collection):
 
 if __name__ == '__main__':
 	
-	# When changing parameters, check lines 13, 23, 517, 530, 542, and 724
+	# When changing parameters, check lines 13, 23, 517, 530, 542, and 730
 	
 	logging.basicConfig(filename='%s/bending.log' % rgz_path, level=logging.DEBUG, format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 	logging.captureWarnings(True)
@@ -722,11 +722,12 @@ if __name__ == '__main__':
 	done = False
 	while not done:
 		try:
+		    bending_coll.create_index('RGZ.RGZ_id', unique=True)
 			output('Processing double sources from RGZ')
 			output('%i double sources matched to clusters' % bending(double_args, 2))
 			output('Processing triple sources from RGZ')
 			output('%i triple sources matched to clusters' % bending(triple_args, 3))
-			to_file('%s/csv/bending_control_15.csv' % rgz_path, bending_coll)
+			to_file('%s/csv/bending_catalog_15.csv' % rgz_path, bending_coll)
 			done = True
 		except pymongo.errors.CursorNotFound as c:
 			time.sleep(10)

@@ -36,7 +36,7 @@ def RGZcatalog():
     if catalog.count():
         logging.info('Catalog contains entries; appending')
     else:
-        catalog.create_index('catalog_id')
+        catalog.create_index('catalog_id', unique=True)
     
     #get dictionary for finding the path to FITS files and WCS headers
     with open('%s/first_fits.txt' % rgz_path) as f:
