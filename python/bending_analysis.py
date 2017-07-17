@@ -526,41 +526,43 @@ def get_entry(source, peak_count, method=None):
 			if key in cluster_w:
 				whl_prop[key] = cluster_w[key]
 	
-	objID = source['SDSS']['objID'] if 'SDSS' in source else None
-	cluster_r = None #get_redmapper(objID, ir, z, z_err, 15, 0.04*(1+z))
-	rm_prop = {}
-	if cluster_r is not None:
-		c_pos = coord.SkyCoord(cluster_r['RAdeg'], cluster_r['DEdeg'], unit=(u.deg,u.deg), frame='icrs')
-		c_sep_arc = c_pos.separation(ir)
-		c_sep_mpc = float(cosmo.angular_diameter_distance(cluster_r['zspec'] if 'zspec' in cluster_r else cluster_r['zlambda'])/u.Mpc * c_sep_arc.to(u.rad)/u.rad)
-		c_pos_angle = c_pos.position_angle(ir)
-		rm_prop = {'ra':c_pos.ra.deg, 'dec':c_pos.dec.deg, 'separation_deg':c_sep_arc.deg, 'separation_Mpc':c_sep_mpc, 'position_angle':c_pos_angle.wrap_at(2*np.pi*u.rad).deg, 'objID':cluster_r['ObjID'], 'name':cluster_r['Name']}
-		for key in ['_id', 'zlambda', 'zspec', 'lambda', 'S']:
-			if key in cluster_r:
-				rm_prop[key] = cluster_r[key]
-	
-	cluster_a = None #get_amf(ir, z, z_err, 15, 0.04*(1+z))
-	amf_prop = {}
-	if cluster_a is not None:
-		c_pos = coord.SkyCoord(cluster_a['ra'], cluster_a['dec'], unit=(u.deg,u.deg), frame='icrs')
-		c_sep_arc = c_pos.separation(ir)
-		c_sep_mpc = float(cosmo.angular_diameter_distance(cluster_a['z'])/u.Mpc * c_sep_arc.to(u.rad)/u.rad)
-		c_pos_angle = c_pos.position_angle(ir)
-		amf_prop = {'ra':c_pos.ra.deg, 'dec':c_pos.dec.deg, 'separation_deg':c_sep_arc.deg, 'separation_Mpc':c_sep_mpc, 'position_angle':c_pos_angle.wrap_at(2*np.pi*u.rad).deg}
-		for key in ['_id', 'z', 'r200', 'richness', 'core_radius', 'AMF_id', 'concentration', 'likelihood']:
-			if key in cluster_a:
-				amf_prop[key] = cluster_a[key]
+#	objID = source['SDSS']['objID'] if 'SDSS' in source else None
+#	cluster_r = get_redmapper(objID, ir, z, z_err, 15, 0.04*(1+z))
+#	rm_prop = {}
+#	if cluster_r is not None:
+#		c_pos = coord.SkyCoord(cluster_r['RAdeg'], cluster_r['DEdeg'], unit=(u.deg,u.deg), frame='icrs')
+#		c_sep_arc = c_pos.separation(ir)
+#		c_sep_mpc = float(cosmo.angular_diameter_distance(cluster_r['zspec'] if 'zspec' in cluster_r else cluster_r['zlambda'])/u.Mpc * c_sep_arc.to(u.rad)/u.rad)
+#		c_pos_angle = c_pos.position_angle(ir)
+#		rm_prop = {'ra':c_pos.ra.deg, 'dec':c_pos.dec.deg, 'separation_deg':c_sep_arc.deg, 'separation_Mpc':c_sep_mpc, 'position_angle':c_pos_angle.wrap_at(2*np.pi*u.rad).deg, 'objID':cluster_r['ObjID'], 'name':cluster_r['Name']}
+#		for key in ['_id', 'zlambda', 'zspec', 'lambda', 'S']:
+#			if key in cluster_r:
+#				rm_prop[key] = cluster_r[key]
+#	
+#	cluster_a = get_amf(ir, z, z_err, 15, 0.04*(1+z))
+#	amf_prop = {}
+#	if cluster_a is not None:
+#		c_pos = coord.SkyCoord(cluster_a['ra'], cluster_a['dec'], unit=(u.deg,u.deg), frame='icrs')
+#		c_sep_arc = c_pos.separation(ir)
+#		c_sep_mpc = float(cosmo.angular_diameter_distance(cluster_a['z'])/u.Mpc * c_sep_arc.to(u.rad)/u.rad)
+#		c_pos_angle = c_pos.position_angle(ir)
+#		amf_prop = {'ra':c_pos.ra.deg, 'dec':c_pos.dec.deg, 'separation_deg':c_sep_arc.deg, 'separation_Mpc':c_sep_mpc, 'position_angle':c_pos_angle.wrap_at(2*np.pi*u.rad).deg}
+#		for key in ['_id', 'z', 'r200', 'richness', 'core_radius', 'AMF_id', 'concentration', 'likelihood']:
+#			if key in cluster_a:
+#				amf_prop[key] = cluster_a[key]
 	
 	# Only continue if a cluster was matched
-	if cluster_w is None and cluster_r is None and cluster_a is None:
+	if cluster_w is None: #and cluster_r is None and cluster_a is None:
 		
 		output("%s didn't match to a cluster" % source['zooniverse_id'])
 		return
 	
 	else:
-	
+	    
+	    z = cluster_w['zspec'] if 'zspec' in cluster_w else cluster_w['zphot']
+	    
 		# Using the 'contour' method
-		#if method == 'contour':
+#		if method == 'contour':
 		bending_angles = get_bending_angles(w, ir, 'contour', contour_list)
 		tail_lengths_apparent = get_tail_lengths(w, ir, 'contour', contour_list)
 		tail_lengths_physical = []
@@ -575,7 +577,7 @@ def get_entry(source, peak_count, method=None):
 				using_contour[key] = using_contour[key].deg
 		
 		# Using the 'peak' method
-		#elif method == 'peak':
+#		elif method == 'peak':
 		bending_angles = get_bending_angles(w, ir, 'peak', peaks)
 		tail_lengths_apparent = get_tail_lengths(w, ir, 'peak', contour_list, peaks)
 		tail_lengths_physical = []
@@ -590,17 +592,18 @@ def get_entry(source, peak_count, method=None):
 				using_peaks[key] = using_peaks[key].deg
 		
 		# Tail length properties
-		#ratios = peak_edge_ratio(w, ir, peaks, tail_lengths_apparent)
-		#asymmetry = ratios[1]/ratios[0]
+#		ratios = peak_edge_ratio(w, ir, peaks, tail_lengths_apparent)
+#		asymmetry = ratios[1]/ratios[0]
 		
 		# Calculate the orientation angle
-		for cluster,prop in zip([cluster_w,cluster_r,cluster_a], [whl_prop,rm_prop,amf_prop]):
-			if cluster is not None:
-				for method,using in zip(['contour','peaks'], [using_contour,using_peaks]):
-					orientation = coord.angles.Angle(prop['position_angle'] - using['bisector'], unit=u.deg).wrap_at(360.*u.deg).deg
-					if orientation > 180.:
-						orientation = 360. - orientation
-					prop['orientation_%s' % method] = orientation
+#		for cluster,prop in zip([cluster_w,cluster_r,cluster_a], [whl_prop,rm_prop,amf_prop]):
+#			if cluster is not None:
+		cluster, prop = cluster_w, whl_prop
+		for method,using in zip(['contour','peaks'], [using_contour,using_peaks]):
+			orientation = coord.angles.Angle(prop['position_angle'] - using['bisector'], unit=u.deg).wrap_at(360.*u.deg).deg
+			if orientation > 180.:
+				orientation = 360. - orientation
+			prop['orientation_%s' % method] = orientation
 		
 		# Compile all results
 		morphology = 'double' if peak_count == 2 else 'triple'
@@ -612,10 +615,10 @@ def get_entry(source, peak_count, method=None):
 			entry['AllWISE'] = source['AllWISE']
 		if cluster_w is not None:
 			entry['WHL'] = whl_prop
-		if cluster_r is not None:
-			entry['redMaPPer'] = rm_prop
-		if cluster_a is not None:
-			entry['AMFDR9'] = amf_prop
+#		if cluster_r is not None:
+#			entry['redMaPPer'] = rm_prop
+#		if cluster_a is not None:
+#			entry['AMFDR9'] = amf_prop
 		
 		return entry
 

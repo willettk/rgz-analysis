@@ -99,7 +99,7 @@ def RGZcatalog():
                 print 'Processing entry %i (consensus %s in subject %s)' % (IDnumber, source['label'], subject['zooniverse_id'])
                 entry = {'catalog_id':IDnumber, 'zooniverse_id':str(subject['zooniverse_id'])}
                 
-                #find location of FITS file; once non-FIRST sources are included, modify this and line 91
+                #find location of FITS file; once non-FIRST sources are included, modify this
                 fid = source['first_id']
                 #if fid[0] == 'F':
                 fits_loc = pathdict[fid]
