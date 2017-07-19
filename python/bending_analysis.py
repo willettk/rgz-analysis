@@ -605,8 +605,6 @@ def random_control():
 			bending_control.insert(entry)
 	
 	to_file('%s/csv/bending_control_15.csv' % rgz_path, bending_control)
-	
-	return count
 
 def output(string, fn=logging.info):
 	'''
