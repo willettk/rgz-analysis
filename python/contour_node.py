@@ -109,11 +109,23 @@ class Node(object):
             pList = []
         if self.children == []:
             bbox = fn.bboxToDS9(fn.findBox(self.value['arr']), self.imgSize)[0] #bbox of innermost contour
-            fluxDensityJyBeam = self.img[ bbox[3]-1:bbox[1]+1, bbox[2]-1:bbox[0]+1 ].max() #peak flux in bbox, with 1 pixel padding
-            locP = np.where(self.img == fluxDensityJyBeam) #location in pixels
-            locRD = self.w.wcs_pix2world( np.array( [[locP[1][0]+1, locP[0][0]+1]] ), 1) #location in ra and dec
-            peak = dict(ra=locRD[0][0], dec=locRD[0][1], flux=fluxDensityJyBeam*1000)
-            pList.append(peak)
+            fluxDensityJyBeam = self.img[ int(bbox[3]):int(bbox[1]+1), int(bbox[2]):int(bbox[0]+1) ].max() #peak flux in bbox, with 1 pixel padding
+            x, y = [i[0]+1 for i in np.where(self.img == fluxDensityJyBeam)] #location in pixels
+            
+            #make sure it's not a multi-pixel peak
+            ignore = False
+            remove = []
+            for ix, p in enumerate(pList):
+                if abs(x-p['x'])<=1 and abs(y-p['y'])<=1:
+                    if fluxDensityJyBeam*1000 < p['flux']:
+                        ignore = True
+                    else:
+                        remove.append(ix)
+            pList[:] = [peak for ix, peak in enumerate(pList) if ix not in remove]
+            if not ignore:
+                locRD = self.w.wcs_pix2world( np.array([[x, y]]), 1) #location in ra and dec
+                peak = {'x':x, 'y':y, 'ra':locRD[0][0], 'dec':locRD[0][1], 'flux':fluxDensityJyBeam*1000}
+                pList.append(peak)
         else:
             for child in self.children:
                 child.getPeaks(pList)
@@ -126,3 +138,10 @@ class Node(object):
             return self.pathOutline.contains_point(point)
         else:
             return 0
+	
+    def print_contour_levels(self):
+        '''Print the values of the contours to screen'''
+        if 'level' in self.value:
+            print self.value['level']
+        for child in self.children:
+            child.print_contour_levels()

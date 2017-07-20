@@ -59,6 +59,7 @@ def flat_version(catalog):
                   'AllWISE.designation', 'AllWISE.ra', 'AllWISE.dec', \
                       'AllWISE.w1mpro', 'AllWISE.w1sigmpro', 'AllWISE.w1snr', 'AllWISE.w2mpro', 'AllWISE.w2sigmpro', 'AllWISE.w2snr', \
                       'AllWISE.w3mpro', 'AllWISE.w3sigmpro', 'AllWISE.w3snr', 'AllWISE.w4mpro', 'AllWISE.w4sigmpro', 'AllWISE.w4snr', 'AllWISE.number_matches', \
+                      'AllWISE.photo_redshift', \
                   'SDSS.objID', 'SDSS.ra', 'SDSS.dec', 'SDSS.u', 'SDSS.u_err', 'SDSS.r', 'SDSS.r_err', 'SDSS.g', 'SDSS.g_err', 'SDSS.i', 'SDSS.i_err', \
                       'SDSS.z', 'SDSS.z_err', 'SDSS.photo_redshift', 'SDSS.photo_redshift_err', 'SDSS.spec_redshift', 'SDSS.spec_redshift_err', \
                       'SDSS.morphological_class', 'SDSS.spectral_class', 'SDSS.number_matches', \
@@ -234,6 +235,7 @@ def paired_version(catalog):
                         'AllWISE.designation', 'AllWISE.ra', 'AllWISE.dec', \
                             'AllWISE.w1mpro', 'AllWISE.w1sigmpro', 'AllWISE.w1snr', 'AllWISE.w2mpro', 'AllWISE.w2sigmpro', 'AllWISE.w2snr', \
                             'AllWISE.w3mpro', 'AllWISE.w3sigmpro', 'AllWISE.w3snr', 'AllWISE.w4mpro', 'AllWISE.w4sigmpro', 'AllWISE.w4snr', 'AllWISE.number_matches', \
+                            'AllWISE.photo_redshift', \
                         'SDSS.objID', 'SDSS.ra', 'SDSS.dec', 'SDSS.u', 'SDSS.u_err', 'SDSS.r', 'SDSS.r_err', 'SDSS.g', 'SDSS.g_err', 'SDSS.i', 'SDSS.i_err', \
                             'SDSS.z', 'SDSS.z_err', 'SDSS.photo_redshift', 'SDSS.photo_redshift_err', 'SDSS.spec_redshift', 'SDSS.spec_redshift_err', \
                             'SDSS.morphological_class', 'SDSS.spectral_class', 'SDSS.number_matches', \

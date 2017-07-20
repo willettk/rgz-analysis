@@ -5,6 +5,7 @@ from astroquery.exceptions import TimeoutError, TableParseError
 from astroquery.irsa import Irsa
 import numpy as np
 import pandas as pd
+import itertools
 
 #custom modules for the RGZ catalog
 import catalog_functions as fn #contains miscellaneous helper functions
@@ -222,13 +223,11 @@ def getRadio(data, fits_loc, consensusObject):
     
     #create list of trees, each containing a contour and its contents
     contourTrees = []
-    consensusBboxes = consensusObject['bbox']
-    for contour in data['contours']:
-        for bbox in consensusBboxes:
-            if fn.approx(contour[0]['bbox'][0], bbox[0]) and fn.approx(contour[0]['bbox'][1], bbox[1]) and \
-               fn.approx(contour[0]['bbox'][2], bbox[2]) and fn.approx(contour[0]['bbox'][3], bbox[3]):
-                tree = c.Node(contour=contour, fits_loc=fits_loc)
-                contourTrees.append(tree)
+    for contour, bbox in itertools.product(data['contours'], consensusObject['bbox']):
+        if fn.approx(contour[0]['bbox'][0], bbox[0]) and fn.approx(contour[0]['bbox'][1], bbox[1]) and \
+           fn.approx(contour[0]['bbox'][2], bbox[2]) and fn.approx(contour[0]['bbox'][3], bbox[3]):
+            tree = c.Node(contour=contour, fits_loc=fits_loc)
+            contourTrees.append(tree)
     
     #get component fluxes and sizes
     components = []
@@ -262,25 +261,26 @@ def getRadio(data, fits_loc, consensusObject):
     if len(components)==1:
         maxAngularExtentArcsec = components[0]['angular_extent']
     else:
-        for i in range(len(components)-1):
-            for j in range(1,len(components)-i):
-                corners1 = np.array([ [components[i]['ra_range'][0], components[i]['dec_range'][0]], \
-                                      [components[i]['ra_range'][0], components[i]['dec_range'][1]], \
-                                      [components[i]['ra_range'][1], components[i]['dec_range'][0]], \
-                                      [components[i]['ra_range'][1], components[i]['dec_range'][1]] ])
-                corners2 = np.array([ [components[i+j]['ra_range'][0], components[i+j]['dec_range'][0]], \
-                                      [components[i+j]['ra_range'][0], components[i+j]['dec_range'][1]], \
-                                      [components[i+j]['ra_range'][1], components[i+j]['dec_range'][0]], \
-                                      [components[i+j]['ra_range'][1], components[i+j]['dec_range'][1]] ])
-                pos1 = coord.SkyCoord(corners1.T[0], corners1.T[1], unit=(u.deg, u.deg))
-                pos2 = coord.SkyCoord(corners2.T[0], corners2.T[1], unit=(u.deg, u.deg))
-                angularExtentArcsec = pos1.separation(pos2).arcsecond
-                maxAngularExtentArcsec = max(np.append(angularExtentArcsec, maxAngularExtentArcsec))
+        for i, j in itertools.combinations(range(len(components)), 2):
+            corners1 = np.array([ [components[i]['ra_range'][0], components[i]['dec_range'][0]], \
+                                  [components[i]['ra_range'][0], components[i]['dec_range'][1]], \
+                                  [components[i]['ra_range'][1], components[i]['dec_range'][0]], \
+                                  [components[i]['ra_range'][1], components[i]['dec_range'][1]] ])
+            corners2 = np.array([ [components[j]['ra_range'][0], components[j]['dec_range'][0]], \
+                                  [components[j]['ra_range'][0], components[j]['dec_range'][1]], \
+                                  [components[j]['ra_range'][1], components[j]['dec_range'][0]], \
+                                  [components[j]['ra_range'][1], components[j]['dec_range'][1]] ])
+            pos1 = coord.SkyCoord(corners1.T[0], corners1.T[1], unit=(u.deg, u.deg))
+            pos2 = coord.SkyCoord(corners2.T[0], corners2.T[1], unit=(u.deg, u.deg))
+            angularExtentArcsec = pos1.separation(pos2).arcsecond
+            maxAngularExtentArcsec = max(np.append(angularExtentArcsec, maxAngularExtentArcsec))
     
     #add all peaks up into single list
     peakList = []
     for tree in contourTrees:
         for peak in tree.peaks:
+            peak.pop('x', None)
+            peak.pop('y', None)
             peakList.append(peak)
     peakFluxErrmJy = contourTrees[0].sigmamJy
 
