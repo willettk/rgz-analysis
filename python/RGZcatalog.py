@@ -201,6 +201,20 @@ def RGZcatalog():
                     
                     radio_data = p.getRadio(data, fits_loc, source)
                     entry.update(radio_data)
+                    
+                    #check if a component is straddling the edge of the image
+                    source_bbox = np.array(source['bbox'])
+                    for c in data['contours']:
+                        bbox = np.array(c[0]['bbox'])
+                        if bbox in source_bbox:
+                            vertices = []
+                            for pos in c[0]['arr']:
+                                vertices.append([pos['x'], pos['y']])
+                            vertices = np.array(vertices)
+                            diff = vertices[0] - vertices[-1]
+                            if np.sqrt(diff[0]**2 + diff[1]**2) > 1 and (np.any(vertices[0] <= 4) or np.any(vertices[0] >= 128)):
+                                entry.update({'overedge':True})
+                                break
 
                     #use WISE catalog name if available
                     if wise_match:
@@ -232,9 +246,9 @@ def RGZcatalog():
                         elif 'photo_redshift' in sdss_match:
                             z = sdss_match['photo_redshift']
                         if z>0:
-                        	DAkpc = float(cosmo.angular_diameter_distance(z)/u.kpc) #angular diameter distance in kpc
-                        	DLm = float(cosmo.luminosity_distance(z)/u.m) #luminosity distance in m
-                        	maxPhysicalExtentKpc = DAkpc*radio_data['radio']['max_angular_extent']*np.pi/180/3600 #arcseconds to radians
+                            DAkpc = float(cosmo.angular_diameter_distance(z)/u.kpc) #angular diameter distance in kpc
+                            DLm = float(cosmo.luminosity_distance(z)/u.m) #luminosity distance in m
+                            maxPhysicalExtentKpc = DAkpc*radio_data['radio']['max_angular_extent']*np.pi/180/3600 #arcseconds to radians
                             totalCrossSectionKpc2 = np.square(DAkpc)*radio_data['radio']['total_solid_angle']*np.square(np.pi/180/3600) #arcseconds^2 to radians^2
                             totalLuminosityWHz = radio_data['radio']['total_flux']*1e-29*4*np.pi*np.square(DLm) #mJy to W/(m^2 Hz), kpc to m
                             totalLuminosityErrWHz = radio_data['radio']['total_flux_err']*1e-29*4*np.pi*np.square(DLm)

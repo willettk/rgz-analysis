@@ -214,7 +214,7 @@ def getSDSS(entry):
     
     return sdss_match
 
-def getRadio(data, fits_loc, consensusObject):
+def getRadio(data, fits_loc, source):
     '''
     calculates all of the radio parameters from the fits file
     data is a JSON object downloaded from the online RGZ interface
@@ -223,7 +223,7 @@ def getRadio(data, fits_loc, consensusObject):
     
     #create list of trees, each containing a contour and its contents
     contourTrees = []
-    for contour, bbox in itertools.product(data['contours'], consensusObject['bbox']):
+    for contour, bbox in itertools.product(data['contours'], source['bbox']):
         if fn.approx(contour[0]['bbox'][0], bbox[0]) and fn.approx(contour[0]['bbox'][1], bbox[1]) and \
            fn.approx(contour[0]['bbox'][2], bbox[2]) and fn.approx(contour[0]['bbox'][3], bbox[3]):
             tree = c.Node(contour=contour, fits_loc=fits_loc)
