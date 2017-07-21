@@ -403,9 +403,11 @@ def get_bending(source, peak_count):
 	# Using the 'contour' method
 	bending_angles = get_angles(w, ir, 'contour', contour_list)
 	tail_lengths_apparent = get_tail_lengths(w, ir, 'contour', contour_list)
+	for tail in tail_lengths_apparent:
+			tail_lengths_physical.append(cosmo.angular_diameter_distance(z) * tail.to(u.rad)/u.rad)
 	ratios = peak_edge_ratio(w, ir, peaks, tail_lengths_apparent)
 	asymmetry = ratios[1]/ratios[0]
-	using_contour = {'tail_deg_0':tail_lengths_apparent[0], 'tail_deg_1':tail_lengths_apparent[1], 'size_deg':sum(tail_lengths_apparent), 'ratio_0':ratios[0], 'ratio_1':ratios[1], 'asymmetry':max(asymmetry,1./asymmetry)}
+	using_contour = {'tail_deg_0':tail_lengths_apparent[0], 'tail_deg_1':tail_lengths_apparent[1], 'size_deg':sum(tail_lengths_apparent), 'tail_kpc_0':float(tail_lengths_physical[0]/u.kpc), 'tail_kpc_1':float(tail_lengths_physical[1]/u.kpc), 'size_kpc':float(sum(tail_lengths_physical)/u.kpc), 'ratio_0':ratios[0], 'ratio_1':ratios[1], 'asymmetry':max(asymmetry,1./asymmetry)}
 	using_contour.update(bending_angles)
 	for key in using_contour.keys():
 		if type(using_contour[key]) is coord.angles.Angle:
@@ -414,9 +416,11 @@ def get_bending(source, peak_count):
 	# Using the 'peak' method
 	bending_angles = get_angles(w, ir, 'peak', peaks)
 	tail_lengths_apparent = get_tail_lengths(w, ir, 'peak', contour_list, peaks)
+	for tail in tail_lengths_apparent:
+			tail_lengths_physical.append(cosmo.angular_diameter_distance(z) * tail.to(u.rad)/u.rad)
 	ratios = peak_edge_ratio(w, ir, peaks, tail_lengths_apparent)
 	asymmetry = ratios[1]/ratios[0]
-	using_peaks = {'tail_deg_0':tail_lengths_apparent[0], 'tail_deg_1':tail_lengths_apparent[1], 'size_deg':sum(tail_lengths_apparent), 'ratio_0':ratios[0], 'ratio_1':ratios[1], 'asymmetry':max(asymmetry,1./asymmetry)}
+	using_peaks = {'tail_deg_0':tail_lengths_apparent[0], 'tail_deg_1':tail_lengths_apparent[1], 'size_deg':sum(tail_lengths_apparent), 'tail_kpc_0':float(tail_lengths_physical[0]/u.kpc), 'tail_kpc_1':float(tail_lengths_physical[1]/u.kpc), 'size_kpc':float(sum(tail_lengths_physical)/u.kpc), 'ratio_0':ratios[0], 'ratio_1':ratios[1], 'asymmetry':max(asymmetry,1./asymmetry)}
 	using_peaks.update(bending_angles)
 	for key in using_peaks.keys():
 		if type(using_peaks[key]) is coord.angles.Angle:
@@ -621,8 +625,8 @@ def to_file(filename, collection):
 	sdss_keys = ['ra', 'dec', 'objID', 'photo_redshift', 'photo_redshift_err', 'spec_redshift', 'spec_redshift_err', 'u', 'u_err', 'g', 'g_err', 'r', 'r_err', 'i', 'i_err', 'z', 'z_err']
 	wise_keys = ['ra', 'dec', 'designation', 'photo_redshift', 'w1mpro', 'w1sigmpro', 'w1snr', 'w2mpro', 'w2sigmpro', 'w2snr', 'w3mpro', 'w3sigmpro', 'w3snr', 'w4mpro', 'w4sigmpro', 'w4snr']
 	whl_keys = ['name', 'ra', 'dec', 'zphot', 'zspec', 'N500', 'N500sp', 'RL*500', 'r500', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
-	#rm_keys = ['name', 'ra', 'dec', 'zlambda', 'zspec', 'S', 'lambda', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
-	#amf_keys = ['AMF_id', 'ra', 'dec', 'z', 'r200', 'richness', 'core_radius', 'concentration', 'likelihood', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks'
+	rm_keys = ['name', 'ra', 'dec', 'zlambda', 'zspec', 'S', 'lambda', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
+	amf_keys = ['AMF_id', 'ra', 'dec', 'z', 'r200', 'richness', 'core_radius', 'concentration', 'likelihood', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks'
 	bending_keys = ['pos_angle_0', 'pos_angle_1', 'opening_angle', 'bisector', 'tail_deg_0', 'tail_deg_1', 'size_deg', 'tail_kpc_0', 'tail_kpc_1', 'size_kpc', 'ratio_1', 'ratio_0', 'asymmetry']
 	
 	all_keys = [rgz_keys, sdss_keys, wise_keys, whl_keys, bending_keys, bending_keys]
