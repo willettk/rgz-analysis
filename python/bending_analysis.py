@@ -26,12 +26,12 @@ bending_control = db['bending_control']
 
 # Get dictionary for finding the path to FITS files and WCS headers
 with open('%s/first_fits.txt' % rgz_path) as f:
-    lines = f.readlines()
+	lines = f.readlines()
 
 pathdict = {}
 for l in lines:
-    spl = l.split(' ')
-    pathdict[spl[1].strip()] = '%s/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (data_path, int(spl[0]), spl[1].strip())
+	spl = l.split(' ')
+	pathdict[spl[1].strip()] = '%s/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (data_path, int(spl[0]), spl[1].strip())
 
 ### Functions ###
 
@@ -48,7 +48,7 @@ def get_data(subject):
 	jsonfile_path = "{0}/rgz/contours/{1}".format(data_path,jsonfile)
 	if os.path.exists(jsonfile_path):
 		with open(jsonfile_path,'r') as jf:
-		    data = json.load(jf)
+			data = json.load(jf)
 	
 	# Otherwise, read from web
 	
@@ -60,16 +60,16 @@ def get_data(subject):
 		
 		tryCount = 0
 		while(True): # In case of error, wait 10 sec and try again; give up after 5 tries
-		    tryCount += 1
-		    try:
-		        compressed = urllib2.urlopen(str(link_s3)).read() #reads contents of url to str
-		        break
-		    except (urllib2.URLError, urllib2.HTTPError) as e:
-		        if tryCount>5:
-		            output('Unable to connect to Amazon Web Services; trying again in 10 min', logging.exception)
-		            raise fn.DataAccessError(message)
-		        logging.exception(e)
-		        time.sleep(10)
+			tryCount += 1
+			try:
+				compressed = urllib2.urlopen(str(link_s3)).read() #reads contents of url to str
+				break
+			except (urllib2.URLError, urllib2.HTTPError) as e:
+				if tryCount>5:
+					output('Unable to connect to Amazon Web Services; trying again in 10 min', logging.exception)
+					raise fn.DataAccessError(message)
+				logging.exception(e)
+				time.sleep(10)
 		
 		tempfile = StringIO.StringIO(compressed) # Temporarily stores contents as file (emptied after unzipping)
 		uncompressed = gzip.GzipFile(fileobj=tempfile, mode='r').read() # Unzips contents to str
@@ -447,13 +447,13 @@ def make_bent_sources():
 				completed.append(int(line))
 	
 	z_range = [0.01, 0.8]
-	double_args = {'$and': [{'ignore_bending':False, 'catalog_id':{'$nin':completed}}, \
+	double_args = {'$and': [{'ignore_bending':False, 'overedge':False, 'catalog_id':{'$nin':completed}}, \
 							{'$or':  [{'radio.number_peaks':2, 'radio.number_components':1}, \
 						 			  {'radio.number_components':2}]}, \
 							{'$or':  [{'SDSS.photo_redshift':{'$gte':z_range[0], '$lt':z_range[1]}}, \
 									  {'SDSS.spec_redshift':{'$gte':z_range[0], '$lt':z_range[1]}}, \
 									  {'AllWISE.photo_redshift':{'$gte':z_range[0], '$lt':z_range[1]}}] }]}
-	triple_args = {'$and': [{'ignore_bending':False, 'catalog_id':{'$nin':completed}}, \
+	triple_args = {'$and': [{'ignore_bending':False, 'overedge':False, 'catalog_id':{'$nin':completed}}, \
 							{'$or':  [{'radio.number_peaks':3, 'radio.number_components':{'$in':[1,2]}}, \
 									  {'radio.number_components':3}]}, \
 							{'$or':  [{'SDSS.photo_redshift':{'$gte':z_range[0], '$lt':z_range[1]}}, \
