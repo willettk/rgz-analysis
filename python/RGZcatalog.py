@@ -203,6 +203,7 @@ def RGZcatalog():
 					entry.update(radio_data)
 					
 					#check if a component is straddling the edge of the image
+					entry.update({'overedge':0})
 					source_bbox = np.array(source['bbox'])
 					for c in data['contours']:
 						bbox = np.array(c[0]['bbox'])
@@ -213,7 +214,7 @@ def RGZcatalog():
 							vertices = np.array(vertices)
 							diff = vertices[0] - vertices[-1]
 							if np.sqrt(diff[0]**2 + diff[1]**2) > 1 and (np.any(vertices[0] <= 4) or np.any(vertices[0] >= 128)):
-								entry.update({'overedge':True})
+								entry.update({'overedge':1})
 								break
 					
 					#use WISE catalog name if available
