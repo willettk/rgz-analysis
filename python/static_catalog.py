@@ -79,7 +79,7 @@ def flat_version(catalog):
                 cids_for_removal.append(c['catalog_id'])
         
         # Select all matching galaxies (in this case, sources with optical and IR counterparts)
-        args = {'catalog_id':{'$nin':cids_for_removal},'consensus.radio_level':{'$gte':consensus_level}}#,'SDSS':{'$exists':True},'AllWISE':{'$exists':True}}
+        args = {'catalog_id':{'$nin':cids_for_removal},'consensus.radio_level':{'$gte':consensus_level}}
         
         # Loop over number of RGZ catalog entries that match the consensus requirements
         for c in catalog.find(args).sort([('catalog_id', 1)]):
@@ -270,7 +270,7 @@ def paired_version(catalog):
                     cids_for_removal.append(c['catalog_id'])
             
             # Select all matching galaxies (in this case, sources with optical and IR counterparts)
-            args = {'catalog_id':{'$nin':cids_for_removal},'consensus.radio_level':{'$gte':consensus_level}}#,'SDSS':{'$exists':True},'AllWISE':{'$exists':True}}
+            args = {'catalog_id':{'$nin':cids_for_removal},'consensus.radio_level':{'$gte':consensus_level}}
 
             # Loop over number of RGZ catalog entries that match the consensus requirements
             for c in catalog.find(args).sort([('catalog_id', 1)]):
