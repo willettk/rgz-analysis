@@ -59,7 +59,7 @@ client = MongoClient('localhost', 27017)
 db = client['radio'] 
 
 # Select which version of the catalog to use
-version = '_dr1'
+version = '_2016-03-30'
 subjects = db['radio_subjects'] # subjects = images
 classifications = db['radio_classifications'] # classifications = classifications of each subject per user
 consensus = db['consensus{}'.format(version)] # consensus = output of this program

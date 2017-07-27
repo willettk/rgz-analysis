@@ -26,16 +26,17 @@ echo "Restoring MongoDB files"
 
 # If there are multiple data sets in this folder, use the most recent
 
-arr=($(find $RGZ_PATH"/mongodb/exports/sanitized_radio"* -type d))
-BACKUP_PATH=${arr[${#arr[@]}-1]}
+#arr=($(find $RGZ_PATH"/mongodb/exports/sanitized_radio"* -type d))
+#BACKUP_PATH=${arr[${#arr[@]}-1]}
+BACKUP_PATH=$RGZ_PATH"/mongodb/exports/sanitized_radio_2016-03-30"
 echo ${#arr[@]}" backups of catalog found"
 echo "Using "$BACKUP_PATH
 
 # Import the raw RGZ data, overwriting any sets previously in Mongo 
 
-mongoimport --db radio --drop --collection radio_subjects $BACKUP_PATH'/radio_subjects.json'
-mongoimport --db radio --drop --collection radio_classifications $BACKUP_PATH'/radio_classifications.json'
-mongoimport --db radio --drop --collection radio_groups $BACKUP_PATH'/radio_groups.json'
+#mongoimport --db radio --drop --collection radio_subjects $BACKUP_PATH'/radio_subjects.json'
+#mongoimport --db radio --drop --collection radio_classifications $BACKUP_PATH'/radio_classifications.json'
+#mongoimport --db radio --drop --collection radio_groups $BACKUP_PATH'/radio_groups.json'
 
 # Activate Python 2.7 via the modules system
 
@@ -50,7 +51,7 @@ source $RGZ_PATH'/veastropy/bin/activate'
 # Run the consensus algorithm in Python
 
 echo "Running consensus algorithm on new subjects"
-python2.7 $RGZ_PATH"/rgz-analysis/python/consensus.py"
+#python2.7 $RGZ_PATH"/rgz-analysis/python/consensus.py"
 
 # Run the cross-matching catalog in Python
 
@@ -59,7 +60,7 @@ python2.7 $RGZ_PATH"/rgz-analysis/python/RGZcatalog.py"
 
 # Create a flat static version of the catalog
 
-#echo "Outputting static catalog"
+echo "Outputting static catalog"
 python2.7 $RGZ_PATH"/rgz-analysis/python/static_catalog.py"
 
 # Export the Mongo files (raw data + consensus + matched catalog) so that we have a hard copy saved to disk
