@@ -451,13 +451,13 @@ def make_bent_sources():
 				completed.append(int(line))
 	
 	z_range = [0.01, 0.8]
-	double_args = {'$and': [{'ignore_bending':False, 'overedge':False, 'catalog_id':{'$nin':completed}}, \
+	double_args = {'$and': [{'ignore_bending':False, 'overedge':0, 'catalog_id':{'$nin':completed}}, \
 							{'$or':  [{'radio.number_peaks':2, 'radio.number_components':1}, \
 						 			  {'radio.number_components':2}]}, \
 							{'$or':  [{'SDSS.photo_redshift':{'$gte':z_range[0], '$lt':z_range[1]}}, \
 									  {'SDSS.spec_redshift':{'$gte':z_range[0], '$lt':z_range[1]}}, \
 									  {'AllWISE.photo_redshift':{'$gte':z_range[0], '$lt':z_range[1]}}] }]}
-	triple_args = {'$and': [{'ignore_bending':False, 'overedge':False, 'catalog_id':{'$nin':completed}}, \
+	triple_args = {'$and': [{'ignore_bending':False, 'overedge':0, 'catalog_id':{'$nin':completed}}, \
 							{'$or':  [{'radio.number_peaks':3, 'radio.number_components':{'$in':[1,2]}}, \
 									  {'radio.number_components':3}]}, \
 							{'$or':  [{'SDSS.photo_redshift':{'$gte':z_range[0], '$lt':z_range[1]}}, \
@@ -607,8 +607,6 @@ def random_control():
 		if entry is not None:
 			output('%i %s' % (ix, source['RGZ']['zooniverse_id']))
 			bending_control.insert(entry)
-	
-	to_file('%s/csv/bending_control_15.csv' % rgz_path, bending_control)
 
 def output(string, fn=logging.info):
 	'''
@@ -621,12 +619,12 @@ def to_file(filename, collection):
 	'''
 	Print the bending collection to a csv file for analysis
 	'''
-	rgz_keys = ['RGZ_id', 'zooniverse_id', 'morphology', 'radio_consensus', 'ir_consensus']
+	rgz_keys = ['RGZ_id', 'zooniverse_id', 'morphology', 'radio_consensus', 'ir_consensus', 'overedge']
 	sdss_keys = ['ra', 'dec', 'objID', 'photo_redshift', 'photo_redshift_err', 'spec_redshift', 'spec_redshift_err', 'u', 'u_err', 'g', 'g_err', 'r', 'r_err', 'i', 'i_err', 'z', 'z_err']
 	wise_keys = ['ra', 'dec', 'designation', 'photo_redshift', 'w1mpro', 'w1sigmpro', 'w1snr', 'w2mpro', 'w2sigmpro', 'w2snr', 'w3mpro', 'w3sigmpro', 'w3snr', 'w4mpro', 'w4sigmpro', 'w4snr']
 	whl_keys = ['name', 'ra', 'dec', 'zphot', 'zspec', 'N500', 'N500sp', 'RL*500', 'r500', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
 	rm_keys = ['name', 'ra', 'dec', 'zlambda', 'zspec', 'S', 'lambda', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
-	amf_keys = ['AMF_id', 'ra', 'dec', 'z', 'r200', 'richness', 'core_radius', 'concentration', 'likelihood', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks'
+	amf_keys = ['AMF_id', 'ra', 'dec', 'z', 'r200', 'richness', 'core_radius', 'concentration', 'likelihood', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
 	bending_keys = ['pos_angle_0', 'pos_angle_1', 'opening_angle', 'bisector', 'tail_deg_0', 'tail_deg_1', 'size_deg', 'tail_kpc_0', 'tail_kpc_1', 'size_kpc', 'ratio_1', 'ratio_0', 'asymmetry']
 	
 	all_keys = [rgz_keys, sdss_keys, wise_keys, whl_keys, bending_keys, bending_keys]
