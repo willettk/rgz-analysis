@@ -19,9 +19,9 @@ consensus_level = 0.0
 # Define a suffix that will be appended to the filename of the new catalog output.
 
 if consensus_level == 0.:
-    suffix = '_full'
+    suffix = '{}_full'.format(version)
 else:
-    suffix = ''
+    suffix = '{}'.format(version)
 
 def load_data():
 

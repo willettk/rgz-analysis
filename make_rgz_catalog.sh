@@ -28,6 +28,7 @@ echo "Restoring MongoDB files"
 
 arr=($(find $RGZ_PATH"/mongodb/exports/sanitized_radio"* -type d))
 BACKUP_PATH=${arr[${#arr[@]}-1]}
+#BACKUP_PATH=$RGZ_PATH"/mongodb/exports/sanitized_radio_2016-08-02"
 echo ${#arr[@]}" backups of catalog found"
 echo "Using "$BACKUP_PATH
 
@@ -59,7 +60,7 @@ python2.7 $RGZ_PATH"/rgz-analysis/python/RGZcatalog.py"
 
 # Create a flat static version of the catalog
 
-#echo "Outputting static catalog"
+echo "Outputting static catalog"
 python2.7 $RGZ_PATH"/rgz-analysis/python/static_catalog.py"
 
 # Export the Mongo files (raw data + consensus + matched catalog) so that we have a hard copy saved to disk

@@ -403,6 +403,7 @@ def get_bending(source, peak_count):
 	# Using the 'contour' method
 	bending_angles = get_angles(w, ir, 'contour', contour_list)
 	tail_lengths_apparent = get_tail_lengths(w, ir, 'contour', contour_list)
+	tail_lengths_physical = []
 	for tail in tail_lengths_apparent:
 			tail_lengths_physical.append(cosmo.angular_diameter_distance(z) * tail.to(u.rad)/u.rad)
 	ratios = peak_edge_ratio(w, ir, peaks, tail_lengths_apparent)
@@ -416,6 +417,7 @@ def get_bending(source, peak_count):
 	# Using the 'peak' method
 	bending_angles = get_angles(w, ir, 'peak', peaks)
 	tail_lengths_apparent = get_tail_lengths(w, ir, 'peak', contour_list, peaks)
+	tail_lengths_physical = []
 	for tail in tail_lengths_apparent:
 			tail_lengths_physical.append(cosmo.angular_diameter_distance(z) * tail.to(u.rad)/u.rad)
 	ratios = peak_edge_ratio(w, ir, peaks, tail_lengths_apparent)
@@ -433,6 +435,11 @@ def get_bending(source, peak_count):
 		entry['SDSS'] = source['SDSS']
 	if 'AllWISE' in source:
 		entry['AllWISE'] = source['AllWISE']
+	
+	best_ra = entry['SDSS']['ra'] if 'SDSS' in entry else entry['AllWISE']['ra']
+	best_dec = entry['SDSS']['dec'] if 'SDSS' in entry else entry['AllWISE']['dec']
+	best = {'ra':best_ra, 'dec':best_dec, 'redshift':z}
+	entry.update({'best':best})
 	
 	return entry
 
@@ -493,7 +500,7 @@ def get_cluster_match(source):
 		c_sep_arc = c_pos.separation(ir)
 		c_sep_mpc = float(cosmo.angular_diameter_distance(cluster_w['zspec'] if 'zspec' in cluster_w else cluster_w['zphot'])/u.Mpc * c_sep_arc.to(u.rad)/u.rad)
 		c_pos_angle = c_pos.position_angle(ir)
-		whl_prop = {'ra':c_pos.ra.deg, 'dec':c_pos.dec.deg, 'separation_deg':c_sep_arc.deg, 'separation_Mpc':c_sep_mpc, 'position_angle':c_pos_angle.wrap_at(2*np.pi*u.rad).deg}
+		whl_prop = {'ra':c_pos.ra.deg, 'dec':c_pos.dec.deg, 'separation_deg':c_sep_arc.deg, 'separation_Mpc':c_sep_mpc, 'position_angle':c_pos_angle.wrap_at(2*np.pi*u.rad).deg, 'r/r500':c_sep_mpc/whl_prop['r500']}
 		for key in ['_id', 'N500', 'N500sp', 'RL*500', 'name', 'r500', 'zphot', 'zspec']:
 			if key in cluster_w:
 				whl_prop[key] = cluster_w[key]
@@ -619,16 +626,17 @@ def to_file(filename, collection):
 	'''
 	Print the bending collection to a csv file for analysis
 	'''
-	rgz_keys = ['RGZ_id', 'zooniverse_id', 'morphology', 'radio_consensus', 'ir_consensus', 'overedge']
-	sdss_keys = ['ra', 'dec', 'objID', 'photo_redshift', 'photo_redshift_err', 'spec_redshift', 'spec_redshift_err', 'u', 'u_err', 'g', 'g_err', 'r', 'r_err', 'i', 'i_err', 'z', 'z_err']
+	rgz_keys = ['RGZ_id', 'zooniverse_id', 'morphology', 'radio_consensus', 'ir_consensus']
+	best_keys = ['ra', 'dec', 'redshift']
+	sdss_keys = ['ra', 'dec', 'objID', 'photo_redshift', 'photo_redshift_err', 'spec_redshift', 'spec_redshift_err', 'u', 'u_err', 'g', 'g_err', 'r', 'r_err', 'i', 'i_err', 'z', 'z_err', 'number_matches']
 	wise_keys = ['ra', 'dec', 'designation', 'photo_redshift', 'w1mpro', 'w1sigmpro', 'w1snr', 'w2mpro', 'w2sigmpro', 'w2snr', 'w3mpro', 'w3sigmpro', 'w3snr', 'w4mpro', 'w4sigmpro', 'w4snr']
-	whl_keys = ['name', 'ra', 'dec', 'zphot', 'zspec', 'N500', 'N500sp', 'RL*500', 'r500', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
+	whl_keys = ['name', 'ra', 'dec', 'zphot', 'zspec', 'N500', 'N500sp', 'RL*500', 'r500', 'separation_deg', 'separation_Mpc', 'r/r500', 'position_angle', 'orientation_contour', 'orientation_peaks']
 	rm_keys = ['name', 'ra', 'dec', 'zlambda', 'zspec', 'S', 'lambda', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
 	amf_keys = ['AMF_id', 'ra', 'dec', 'z', 'r200', 'richness', 'core_radius', 'concentration', 'likelihood', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
 	bending_keys = ['pos_angle_0', 'pos_angle_1', 'opening_angle', 'bisector', 'tail_deg_0', 'tail_deg_1', 'size_deg', 'tail_kpc_0', 'tail_kpc_1', 'size_kpc', 'ratio_1', 'ratio_0', 'asymmetry']
 	
-	all_keys = [rgz_keys, sdss_keys, wise_keys, whl_keys, bending_keys, bending_keys]
-	dict_names = ['RGZ', 'SDSS', 'AllWISE', 'WHL', 'using_contour', 'using_peaks']
+	all_keys = [rgz_keys, best_keys, sdss_keys, wise_keys, whl_keys, bending_keys, bending_keys]
+	dict_names = ['RGZ', 'best', 'SDSS', 'AllWISE', 'WHL', 'using_contour', 'using_peaks']
 	
 	success = 0
 	with open(filename, 'w') as f:
