@@ -209,6 +209,8 @@ def getSDSS(entry):
 				sdss_match[key] = sdss_match[key].item()
 			elif sdss_match[key] == 0:
 				sdss_match[key] = 0
+			elif sdss_match[key] == -9999:
+				sdss_match.pop(key)
 	else:
 		logging.info('No SDSS match found')
 	
