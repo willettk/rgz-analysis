@@ -110,7 +110,7 @@ class Node(object):
         if self.children == []:
             bbox = fn.bboxToDS9(fn.findBox(self.value['arr']), self.imgSize)[0] #bbox of innermost contour
             fluxDensityJyBeam = self.img[ int(bbox[3]):int(bbox[1]+1), int(bbox[2]):int(bbox[0]+1) ].max() #peak flux in bbox, with 1 pixel padding
-            x, y = [i[0]+1 for i in np.where(self.img == fluxDensityJyBeam)] #location in pixels
+            y, x = [i[0]+1 for i in np.where(self.img == fluxDensityJyBeam)] #location in pixels
             
             #make sure it's not a multi-pixel peak
             ignore = False

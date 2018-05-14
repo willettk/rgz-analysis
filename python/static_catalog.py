@@ -83,7 +83,7 @@ def flat_version(catalog):
         
         # Loop over number of RGZ catalog entries that match the consensus requirements
         for c in catalog.find(args).sort([('catalog_id', 1)]):
-
+			
             # Determine component strings
             component_strings = {'peak_fluxes':'', 'peak_flux_errs':'', 'peak_ras':'', 'peak_decs':'', 'fluxes':'', 'flux_errs':'', \
                                  'angular_extents':'', 'solid_angles':'', 'physical_extents':'', 'cross_sections':''}
