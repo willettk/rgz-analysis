@@ -1,4 +1,5 @@
 from pymongo import MongoClient
+import bson
 
 # Make a version of the Radio Galaxy Zoo catalog that's perusable as a flat FITS or CSV table. 
 # This is based on the output of:
@@ -187,7 +188,10 @@ def flat_version(catalog):
                         elif prefix in ['AllWISE', 'SDSS'] and prefix not in c and field == 'number_matches':
                             row.append(0)
                         elif prefix in c and field in c[prefix]:
-                            row.append(c[prefix][field])
+                        	if type(c[prefix][field]) is long or type(c[prefix][field]) is bson.int64.Int64:
+                        		row.append("'"+str(c[prefix][field])+"'")
+                        	else:
+	                            row.append(c[prefix][field])
                         else:
                             row.append(-99)
                     else:
@@ -333,7 +337,10 @@ def paired_version(catalog):
                             elif prefix in ['AllWISE', 'SDSS'] and prefix not in c and field == 'number_matches':
                                 row.append(0)
                             elif prefix in c and field in c[prefix]:
-                                row.append(c[prefix][field])
+                                if type(c[prefix][field]) is long or type(c[prefix][field]) is bson.int64.Int64:
+		                            row.append("'"+str(c[prefix][field])+"'")
+                                else:
+			                        row.append(c[prefix][field])
                             else:
                                 row.append(-99)
                         else:

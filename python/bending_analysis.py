@@ -1,5 +1,5 @@
 import logging, urllib2, time, json, os
-import pymongo
+import pymongo, bson
 import numpy as np
 import StringIO, gzip
 import csv
@@ -667,14 +667,14 @@ def to_file(filename, coll, params={}):
 	'''
 	Print the bending collection to a csv file for analysis
 	'''
-	rgz_keys = ['RGZ_id', 'zooniverse_id', 'morphology', 'radio_consensus', 'ir_consensus', 'size_arcmin', 'size_kpc', 'solid_angle']
+	rgz_keys = ['RGZ_id', 'zooniverse_id', 'first_id', 'morphology', 'radio_consensus', 'ir_consensus', 'size_arcmin', 'size_kpc', 'solid_angle']
 	best_keys = ['ra', 'ra_err', 'dec', 'dec_err', 'redshift']
 	sdss_keys = ['ra', 'dec', 'objID', 'photo_redshift', 'photo_redshift_err', 'spec_redshift', 'spec_redshift_err', 'u', 'u_err', 'g', 'g_err', 'r', 'r_err', 'i', 'i_err', 'z', 'z_err', 'number_matches']
 	wise_keys = ['ra', 'dec', 'designation', 'photo_redshift', 'w1mpro', 'w1sigmpro', 'w1snr', 'w2mpro', 'w2sigmpro', 'w2snr', 'w3mpro', 'w3sigmpro', 'w3snr', 'w4mpro', 'w4sigmpro', 'w4snr']
-	whl_keys = ['name', 'ra', 'dec', 'zphot', 'zspec', 'N500', 'N500sp', 'RL*500', 'M500', 'r500', 'separation_deg', 'separation_Mpc', 'r/r500', 'population', 'position_angle', 'orientation_contour', 'orientation_peaks', 'orientation_folded']
+	whl_keys = ['name', 'ra', 'dec', 'zphot', 'zspec', 'N500', 'N500sp', 'RL*500', 'M500', 'r500', 'separation_deg', 'separation_Mpc', 'r/r500', 'population', 'position_angle', 'orientation_contour', 'orientation_peaks', 'orientation_folded', 'P', 'P500', 'aligned']
 	rm_keys = ['name', 'ra', 'dec', 'zlambda', 'zspec', 'S', 'lambda', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
 	amf_keys = ['AMF_id', 'ra', 'dec', 'z', 'r200', 'richness', 'core_radius', 'concentration', 'likelihood', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
-	bending_keys = ['pos_angle_0', 'pos_angle_1', 'bending_angle', 'bending_corrected', 'bending_err', 'bisector'] #, 'tail_deg_0', 'tail_deg_1', 'size_deg', 'tail_kpc_0', 'tail_kpc_1', 'size_kpc', 'ratio_1', 'ratio_0', 'asymmetry']
+	bending_keys = ['pos_angle_0', 'pos_angle_1', 'bending_angle', 'bending_corrected', 'bending_err', 'bending_excess', 'bisector', 'asymmetry'] #, 'tail_deg_0', 'tail_deg_1', 'size_deg', 'tail_kpc_0', 'tail_kpc_1', 'size_kpc', 'ratio_1', 'ratio_0']
 	
 	all_keys = [rgz_keys, best_keys, sdss_keys, wise_keys, whl_keys, bending_keys, bending_keys]
 	dict_names = ['RGZ', 'best', 'SDSS', 'AllWISE', 'WHL', 'using_contour', 'using_peaks']
@@ -682,22 +682,25 @@ def to_file(filename, coll, params={}):
 	success = 0
 	with open(filename, 'w') as f:
 		
-		header = ''
+		header = 'final_sample'
 		for superkey, key_list in zip(dict_names, all_keys):
 			for key in key_list:
-				header += '%s.%s,' % (str(superkey), str(key))
-		print >> f, header[:-1]
+				header += ',%s.%s' % (str(superkey), str(key))
+		print >> f, header
 		
 		for entry in coll.find(params):
 			try:
-				row = ''
+				row = str(entry['final_sample'])
 				for superkey, key_list in zip(dict_names, all_keys):
 					for key in key_list:
 						if superkey in entry and key in entry[superkey]:
-							row += '%s,' % str(entry[superkey][key])
+							if type(entry[superkey][key]) is long or type(entry[superkey][key]) is bson.int64.Int64:
+								row += ",'%s'" % str(entry[superkey][key])
+							else:
+								row += ',%s' % str(entry[superkey][key])
 						else:
-							row += '-99,'
-				print >> f, row[:-1]
+							row += ',-99'
+				print >> f, row
 				success += 1
 			except BaseException as e:
 				output(e, logging.exception)
@@ -714,7 +717,7 @@ def plot_running(x_param, y_param, coll=bending_15, morph=None, pop=None, bin_by
 	'''
 	
 	assert morph in [None, 'double', 'triple'], "morph must be 'double' or 'triple'"
-	assert pop in [None, 'central', 'intermediate', 'outer', 'separate'], "pop must be 'central', 'intermediate', 'outer', or 'separate'"
+	assert pop in [None, 'central', 'intermediate', 'outer', 'separate', 'non-BCG'], "pop must be 'central', 'intermediate', 'outer', 'separate', or 'non-BCG'"
 	assert align in [None, 'radial', 'tangential'], "align must be 'radial' or 'tangential'"
 	if bin_by is not None:
 		assert type(bin_count) is int and bin_count>0, 'bin_count must be positive int'
@@ -737,6 +740,8 @@ def plot_running(x_param, y_param, coll=bending_15, morph=None, pop=None, bin_by
 	
 	if pop == 'separate':
 		pop_list = ['intermediate', 'outer', 'central']
+	elif pop == 'non-BCG':
+		pop_list = ['intermediate', 'outer']
 	else:
 		pop_list = [pop]
 	
@@ -1476,12 +1481,15 @@ def asym_comp():
 
 	sep = []
 	asym = []
+	p = []
 	for i in bending_15.find(params):
 		sep.append(i['WHL']['r/r500'])
 		asym.append(i['using_contour']['asymmetry'])
+		p.append(i['WHL']['P'])
 
 	sep = np.array(sep)
 	asym = np.array(asym)
+	p = np.array(p)
 
 	sep_i = sep[np.logical_and(sep>0.01, sep<1.5)]
 	sep_o = sep[sep>1.5]
@@ -1490,6 +1498,10 @@ def asym_comp():
 
 	s = stats.spearmanr(sep_i, inter)
 
+	print s, z_score(s.pvalue)
+	
+	s = stats.spearmanr(p[np.logical_and(sep>0.01, sep<1.5)], inter)
+	
 	print s, z_score(s.pvalue)
 
 def excess_comp():
@@ -1536,13 +1548,73 @@ def get_asymmetry(coll=bending_15):
 				outer = i[method]['tail_deg_0']
 			if (diff_0.degree<45 and diff_1.degree>135) or (diff_1.degree<45 and diff_0.degree>135):
 				alignment = 'radial'
-			else:
+			elif (45<diff_0.degree<135) and (45<diff_1.degree<135):
 				alignment = 'tangential'
+			else:
+				alignment = 'other'
 			
 			if method == 'using_contour':
 				bending_15.update({'_id':i['_id']}, {'$set':{method+'.asymmetry':inner/outer, 'WHL.aligned':alignment}})
 			else:
 				bending_15.update({'_id':i['_id']}, {'$set':{method+'.asymmetry':inner/outer}})
+
+def pressure_calculation():
+	'''Calculates the pressure (in keV/cm^3) using Arnaud et al. 2010'''
+	
+	h70 = float(cosmo.H(0) / (70.*u.km/u.Mpc/u.s) )
+	alphaP = 1./0.561 - 5./3.
+	P0 = 8.403*pow(h70,-1.5)
+	c500, gamma, alpha, beta = 1.177, 0.3081, 1.0510, 5.4905
+	
+	h = lambda z: float(cosmo.H(z) / cosmo.H(0))
+	P500 = lambda z, M500: 1.65e-3 * pow(h(z),8./3.) * pow(M500*h70/3.,2./3.) * pow(h70,2.)
+	pp = lambda x: P0 * pow(c500*x,-1*gamma) * pow(1+pow(c500*x,alpha),(gamma-beta)/alpha)
+	alphaP_prime = lambda x: 0.10 - (alphaP+0.10) * pow(2*x,3) / (1+pow(2*x,3))
+	P = lambda x, z, M500: P500(z,M500) * pp(x) * pow(M500*h70/3.,alphaP+alphaP_prime(x))
+	
+	for source in bending_15.find():
+		x = source['WHL']['r/r500']
+		z = source['WHL']['zbest']
+		M500 = source['WHL']['M500']
+		bending_15.update({'_id':source['_id']}, {'$set':{'WHL.P500':P500(z,M500), 'WHL.P':P(x,z,M500)}})
+
+def get_fits(params, outd):
+	import shutil
+	
+	if os.path.exists(outd):
+		count = len(os.listdir(outd))
+		cont = raw_input('%s exists and contains %i files; continue? (y/n) ' % (outd,count))
+		if cont.lower() == 'n':
+			return
+	else:
+		print 'Initializing', outd
+		os.makedirs(outd)
+	
+	with open('%s/first_fits.txt' % rgz_path) as f:
+		lines = f.readlines()
+	
+	pathdict = {}
+	for l in lines:
+		spl = l.split(' ')
+		pathdict[spl[1].strip()] = '%s/rgz/raw_images/RGZ-full.%i/FIRST-IMGS/%s.fits' % (data_path, int(spl[0]), spl[1].strip())
+	
+	for source in bending_15.find(params).sort('WHL.r/r500', -1).limit(55):
+		print source['WHL']['r/r500']
+		zid = source['RGZ']['zooniverse_id']
+		fid = catalog.find_one({'zooniverse_id':zid})['first_id']
+		fits_loc = pathdict[fid]
+		shutil.copy(fits_loc, outd+fid+'.fits')
+
+def flag_dups(coll=bending_15, params={}):
+	
+	coll.update({}, {'$set': {'RGZ.duplicate_flag':0}}, multi=True)
+	
+	params['RGZ.duplicate_sources'] = {'$exists':True}
+	for source in coll.find(params):
+		dups = source['RGZ']['duplicate_sources']
+		cid = source['RGZ']['RGZ_id']
+		flag = int(cid != min(dups['exact_duplicate']))
+		coll.update({'_id':source['_id']}, {'$set':{'RGZ.duplicate_flag':flag}})
 
 if __name__ == '__main__':
 	
