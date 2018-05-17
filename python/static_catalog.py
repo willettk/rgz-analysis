@@ -40,7 +40,7 @@ def flat_version(catalog):
     # Write the MongoDB catalog to a CSV file, with the fields described here:
     # http://radiogalaxyzoo.pbworks.com/w/page/108921379/DR1%20testing
 
-    filename = '%s/csv/static_rgz_flat%s.csv' % (rgz_path,'_bending')
+    filename = '%s/csv/static_rgz_flat%s.csv' % (rgz_path,suffix)
 
     with open(filename,'w') as f:
 
