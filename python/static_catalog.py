@@ -1,4 +1,5 @@
 from pymongo import MongoClient
+import bson
 
 # Make a version of the Radio Galaxy Zoo catalog that's perusable as a flat FITS or CSV table. 
 # This is based on the output of:
@@ -39,7 +40,7 @@ def flat_version(catalog):
     # Write the MongoDB catalog to a CSV file, with the fields described here:
     # http://radiogalaxyzoo.pbworks.com/w/page/108921379/DR1%20testing
 
-    filename = '%s/csv/static_rgz_flat%s.csv' % (rgz_path,suffix)
+    filename = '%s/csv/static_rgz_flat%s.csv' % (rgz_path,'_bending')
 
     with open(filename,'w') as f:
 
@@ -187,7 +188,10 @@ def flat_version(catalog):
                         elif prefix in ['AllWISE', 'SDSS'] and prefix not in c and field == 'number_matches':
                             row.append(0)
                         elif prefix in c and field in c[prefix]:
-                            row.append(c[prefix][field])
+                        	if type(c[prefix][field]) is long or type(c[prefix][field]) is bson.int64.Int64:
+                        		row.append("'"+str(c[prefix][field])+"'")
+                        	else:
+	                            row.append(c[prefix][field])
                         else:
                             row.append(-99)
                     else:
@@ -333,7 +337,10 @@ def paired_version(catalog):
                             elif prefix in ['AllWISE', 'SDSS'] and prefix not in c and field == 'number_matches':
                                 row.append(0)
                             elif prefix in c and field in c[prefix]:
-                                row.append(c[prefix][field])
+                                if type(c[prefix][field]) is long or type(c[prefix][field]) is bson.int64.Int64:
+		                            row.append("'"+str(c[prefix][field])+"'")
+                                else:
+			                        row.append(c[prefix][field])
                             else:
                                 row.append(-99)
                         else:
