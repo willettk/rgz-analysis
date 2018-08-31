@@ -1352,7 +1352,7 @@ if __name__ == "__main__":
             #   on the gold standard subjects. If weights = 0 or weights = 1, each user's vote
             #   is counted equally in the consensus. If weights > 1, then their impact is
             #   increased by replicating the classifications. Must be a nonnegative integer.
-            weights = 5
+            weights = 0
             assert (type(weights) == int) and weights >= 0, 'Weight must be a nonnegative integer'
             scheme = 'scaling'
             assert scheme in ['threshold', 'scaling'], 'Weighting scheme must be threshold or sliding, not {}'.format(scheme)

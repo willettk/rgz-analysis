@@ -3,15 +3,17 @@ import pymongo, bson
 import numpy as np
 import StringIO, gzip
 import csv
+import pandas as pd
 from astropy.io import fits
 from astropy import wcs, coordinates as coord, units as u
 from astropy.cosmology import Planck13 as cosmo
-from scipy.optimize import brentq, curve_fit
+from scipy.optimize import brentq, curve_fit, leastsq
 from scipy.interpolate import interp1d
 from scipy.integrate import simps
 from scipy import stats
 from skgof import ad_test
 from sklearn.metrics import r2_score
+from processing import SDSS_select
 
 from consensus import rgz_path, data_path, db, version
 from processing import *
@@ -24,8 +26,10 @@ import itertools
 from sklearn.decomposition import PCA
 from corner import corner
 import matplotlib.pyplot as plt
-from matplotlib import rc
+import matplotlib
 plt.ion()
+matplotlib.rc('text', usetex=True)
+matplotlib.rcParams.update({'font.size': 12})
 
 # Connect to Mongo database
 version = '_bending'
@@ -40,15 +44,12 @@ version = ''
 bent_sources = db['bent_sources{}'.format(version)]
 bending_15 = db['bending_15{}'.format(version)]
 bending_control = db['bending_control{}'.format(version)]
+sdss_sample = db['sdss_sample']
+xmatch = db['sdss_whl_xmatch']
+distant_sources = db['distant_sources']
 
 # Final sample cuts
-total_cuts = {'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'RGZ.radio_consensus':{'$gte':0.65}, 'using_peaks.bending_corrected':{'$lte':135.}}
-params = total_cuts.copy()
-params['WHL.population'] = 'outer'
-bend = []
-for i in bending_15.find(params):
-	bend.append(i['using_peaks']['bending_corrected'])
-median_bend = np.median(bend)
+total_cuts = {'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'RGZ.radio_consensus':{'$gte':0.65}, 'using_peaks.bending_corrected':{'$lte':135.}, 'best':{'$exists':True}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}
 
 # Get dictionary for finding the path to FITS files and WCS headers
 with open('%s/first_fits.txt' % rgz_path) as f:
@@ -131,7 +132,7 @@ def get_contours(w, ir_pos, peak_pos, data, peak_count):
 	source_tree.insert(cpo.Node(w, value=value_at_inf))
 	source_tree.children = contour_trees
 	
-	# Remove the central source if it's a triple
+	# Remove the BCG source if it's a triple
 	if peak_count == 3:
 		source_tree.remove_triple_center(ir_pos, peak_pos)
 	
@@ -305,14 +306,16 @@ def peak_edge_ratio(w, ir, peaks, tails):
 
 def get_z(source):
 	'''
-	Returns the best redshift value and uncertainty for the source
+	Returns the best redshift value and uncertainty for the source (only if SDSS)
 	'''
 	if 'SDSS' in source and 'spec_redshift' in source['SDSS']:
 		return source['SDSS']['spec_redshift'], source['SDSS']['spec_redshift_err']
 	elif 'SDSS' in source and 'photo_redshift' in source['SDSS']:
 		return source['SDSS']['photo_redshift'], source['SDSS']['photo_redshift_err']
-	elif 'AllWISE' in source and 'photo_redshift' in source['AllWISE']:
-		return source['AllWISE']['photo_redshift'], 0
+	else:
+		return 0, 0
+#	elif 'AllWISE' in source and 'photo_redshift' in source['AllWISE']:
+#		return source['AllWISE']['photo_redshift'], 0
 
 def get_whl(ir, z, z_err, transverse, dz):
 	'''
@@ -529,13 +532,13 @@ def get_cluster_match(source):
 		c_sep_mpc = float(cosmo.angular_diameter_distance(cluster_w['zspec'] if 'zspec' in cluster_w else cluster_w['zphot'])/u.Mpc * c_sep_arc.to(u.rad)/u.rad)
 		c_pos_angle = c_pos.position_angle(ir)
 		if c_sep_mpc/cluster_w['r500'] < 0.01:
-			pop = 'central'
+			pop = 'BCG'
 		elif c_sep_mpc/cluster_w['r500'] >= 1.5:
 			pop = 'outer'
 		else:
-			pop = 'intermediate'
-		whl_prop = {'ra':c_pos.ra.deg, 'dec':c_pos.dec.deg, 'separation_deg':c_sep_arc.deg, 'separation_Mpc':c_sep_mpc, 'position_angle':c_pos_angle.wrap_at(2*np.pi*u.rad).deg, 'r/r500':c_sep_mpc/cluster_w['r500'], 'population':pop, 'M500':np.exp(1.08*np.log(cluster_w['RL*500'])-1.37), 'zbest':cluster_w['zspec'] if 'zspec' in cluster_w else cluster_w['zphot']}
-		for key in ['_id', 'N500', 'N500sp', 'RL*500', 'name', 'r500', 'zphot', 'zspec']:
+			pop = 'inner'
+		whl_prop = {'ra':c_pos.ra.deg, 'dec':c_pos.dec.deg, 'separation_deg':c_sep_arc.deg, 'separation_Mpc':c_sep_mpc, 'position_angle':c_pos_angle.wrap_at(2*np.pi*u.rad).deg, 'r/r500':c_sep_mpc/cluster_w['r500'], 'population':pop, 'zbest':cluster_w['zspec'] if 'zspec' in cluster_w else cluster_w['zphot']}
+		for key in ['_id', 'N500', 'N500sp', 'RL*500', 'name', 'r500', 'zphot', 'zspec', 'M500']:
 			if key in cluster_w:
 				whl_prop[key] = cluster_w[key]
 	
@@ -667,17 +670,17 @@ def to_file(filename, coll, params={}):
 	'''
 	Print the bending collection to a csv file for analysis
 	'''
-	rgz_keys = ['RGZ_id', 'zooniverse_id', 'first_id', 'morphology', 'radio_consensus', 'ir_consensus', 'size_arcmin', 'size_kpc', 'solid_angle']
-	best_keys = ['ra', 'ra_err', 'dec', 'dec_err', 'redshift']
-	sdss_keys = ['ra', 'dec', 'objID', 'photo_redshift', 'photo_redshift_err', 'spec_redshift', 'spec_redshift_err', 'u', 'u_err', 'g', 'g_err', 'r', 'r_err', 'i', 'i_err', 'z', 'z_err', 'number_matches']
+	rgz_keys = ['RGZ_id', 'RGZ_name', 'zooniverse_id', 'first_id', 'morphology', 'radio_consensus', 'ir_consensus', 'size_arcmin', 'size_kpc', 'solid_angle', 'overedge']
+	best_keys = ['ra', 'ra_err', 'dec', 'dec_err', 'redshift', 'redshift_err']
+	sdss_keys = ['ra', 'dec', 'objID', 'photo_redshift', 'photo_redshift_err', 'spec_redshift', 'spec_redshift_err', 'u', 'u_err', 'g', 'g_err', 'r', 'r_err', 'i', 'i_err', 'z', 'z_err', 'morphological_class', 'spectral_class', 'number_matches']
 	wise_keys = ['ra', 'dec', 'designation', 'photo_redshift', 'w1mpro', 'w1sigmpro', 'w1snr', 'w2mpro', 'w2sigmpro', 'w2snr', 'w3mpro', 'w3sigmpro', 'w3snr', 'w4mpro', 'w4sigmpro', 'w4snr']
-	whl_keys = ['name', 'ra', 'dec', 'zphot', 'zspec', 'N500', 'N500sp', 'RL*500', 'M500', 'r500', 'separation_deg', 'separation_Mpc', 'r/r500', 'population', 'position_angle', 'orientation_contour', 'orientation_peaks', 'orientation_folded', 'P', 'P500', 'aligned']
+	whl_keys = ['name', 'ra', 'dec', 'zphot', 'zspec', 'N500', 'N500sp', 'RL*500', 'M500', 'r500', 'separation_deg', 'separation_Mpc', 'r/r500', 'population', 'position_angle', 'orientation_contour', 'orientation_peaks', 'orientation_folded', 'P', 'P500', 'grad_P', 'alignment']
 	rm_keys = ['name', 'ra', 'dec', 'zlambda', 'zspec', 'S', 'lambda', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
 	amf_keys = ['AMF_id', 'ra', 'dec', 'z', 'r200', 'richness', 'core_radius', 'concentration', 'likelihood', 'separation_deg', 'separation_Mpc', 'position_angle', 'orientation_contour', 'orientation_peaks']
 	bending_keys = ['pos_angle_0', 'pos_angle_1', 'bending_angle', 'bending_corrected', 'bending_err', 'bending_excess', 'bisector', 'asymmetry'] #, 'tail_deg_0', 'tail_deg_1', 'size_deg', 'tail_kpc_0', 'tail_kpc_1', 'size_kpc', 'ratio_1', 'ratio_0']
 	
-	all_keys = [rgz_keys, best_keys, sdss_keys, wise_keys, whl_keys, bending_keys, bending_keys]
-	dict_names = ['RGZ', 'best', 'SDSS', 'AllWISE', 'WHL', 'using_contour', 'using_peaks']
+	all_keys = [rgz_keys, best_keys, sdss_keys, whl_keys, bending_keys, bending_keys]
+	dict_names = ['RGZ', 'best', 'SDSS', 'WHL', 'using_contour', 'using_peaks']
 	
 	success = 0
 	with open(filename, 'w') as f:
@@ -707,17 +710,22 @@ def to_file(filename, coll, params={}):
 		
 		output('%i/%i successfully printed to %s' % (success, coll.find(params).count(), filename))
 
-def plot_running(x_param, y_param, coll=bending_15, morph=None, pop=None, bin_by=None, bin_count=0, logx=False, logy=False, bent_cut=0, align=None):
+def plot_running(x_param, y_param, coll=bending_15, morph=None, pop=None, bin_by=None, bin_count=0, logx=False, logy=False, square=False, bent_cut=0, align=None, combined=False, title=True):
 	'''
 	Plot the running 1st, 2nd, and 3rd quartiles averaged over window data points
 	x_param, y_param, and (optional) bin_by need to be 'category.key' to search for coll[category][key]
 	morph can be 'double' or 'triple' to select only that morphology
-	pop can be 'central', 'affected', or 'outer' to select only that population
+	pop can be 'BCG', 'non-BCG', 'inner', or 'outer' to select only that population
+	  When selecting 'non-BCG', combined=True will combine the 'inner' and 'outer' sources before smoothing
+	align can be 'radial' or 'tangential' to select only that alignment
 	The axes can be plotted on a log scale by specifying logx and logy to True or False
+	  Also select square=True when plotting log-log plots
+	Data can be binned with bin_by and bin_count
+	bent_cut applies a minimum corrected bending angle
 	'''
 	
 	assert morph in [None, 'double', 'triple'], "morph must be 'double' or 'triple'"
-	assert pop in [None, 'central', 'intermediate', 'outer', 'separate', 'non-BCG'], "pop must be 'central', 'intermediate', 'outer', 'separate', or 'non-BCG'"
+	assert pop in [None, 'BCG', 'inner', 'outer', 'separate', 'non-BCG'], "pop must be 'BCG', 'inner', 'outer', 'separate', or 'non-BCG'"
 	assert align in [None, 'radial', 'tangential'], "align must be 'radial' or 'tangential'"
 	if bin_by is not None:
 		assert type(bin_count) is int and bin_count>0, 'bin_count must be positive int'
@@ -736,12 +744,15 @@ def plot_running(x_param, y_param, coll=bending_15, morph=None, pop=None, bin_by
 		params['RGZ.morphology'] = morph
 	
 	if align is not None:
-		params['WHL.aligned'] = align
+		params['WHL.alignment'] = align
 	
 	if pop == 'separate':
-		pop_list = ['intermediate', 'outer', 'central']
+		pop_list = ['inner', 'outer', 'BCG']
 	elif pop == 'non-BCG':
-		pop_list = ['intermediate', 'outer']
+		if combined:
+			pop_list = [{'$ne':'BCG'}]
+		else:
+			pop_list = ['inner', 'outer']
 	else:
 		pop_list = [pop]
 	
@@ -770,7 +781,7 @@ def plot_running(x_param, y_param, coll=bending_15, morph=None, pop=None, bin_by
 				params['WHL.population'] = pop2
 			for i in range(len(samples)-1):
 				params[bin_by] = {'$gte':samples[i], '$lt':samples[i+1]}
-				window_size, run_x_50, run_y_50 = get_trends(params, x_param, y_param, coll, True)
+				window_size, run_x_50, run_y_50 = get_trends(params, x_param, y_param, coll, True, pop!='BCG')
 				windows.add(window_size)
 				if needs_labels:
 					ax.plot(run_x_50, run_y_50, label=plot_params[bin_by]['fmt'] % (samples[i], samples[i+1]), color='C%i'%i)
@@ -778,46 +789,52 @@ def plot_running(x_param, y_param, coll=bending_15, morph=None, pop=None, bin_by
 				else:
 					ax.plot(run_x_50, run_y_50, color='C%i'%i)
 			needs_labels = False
+		ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 		
 	else:
 		for pop2 in pop_list:
 			if pop2 is not None:
 				params['WHL.population'] = pop2
-			window_size, run_x_50, run_y_25, run_y_50, run_y_75 = get_trends(params, x_param, y_param, coll, False)
+			window_size, run_x_50, run_y_25, run_y_50, run_y_75 = get_trends(params, x_param, y_param, coll, False, pop!='BCG')
 			windows.add(window_size)
+			if logx:
+				run_x_50 = np.log10(run_x_50)
+			if logy:
+				run_y_25, run_y_50, run_y_75 = np.log10(run_y_25), np.log10(run_y_50), np.log10(run_y_75)
 			if needs_labels:
-				ax.plot(run_x_50, run_y_75, label='75%', color='C0')
-				ax.plot(run_x_50, run_y_50, label='50%', color='C1')
-				ax.plot(run_x_50, run_y_25, label='25%', color='C2')
-				ax.set_position([box.x0, box.y0, box.width * 0.94, box.height])
+				ax.plot(run_x_50, run_y_50, label='50\%', color='C0')
+				ax.fill_between(run_x_50, run_y_25, run_y_75, color='C0', alpha=.5)
 				needs_labels = False
 			else:
-				ax.plot(run_x_50, run_y_75, color='C0')
-				ax.plot(run_x_50, run_y_50, color='C1')
-				ax.plot(run_x_50, run_y_25, color='C2')
+				ax.plot(run_x_50, run_y_50, color='C0')
+				ax.fill_between(run_x_50, run_y_25, run_y_75, color='C0', alpha=.5)
 	
 	# Make the plot pretty
-	ax.set_xlabel(x_param)
-	ax.set_ylabel(y_param)
+	ax.set_xlabel(get_label(x_param, logx))
+	ax.set_ylabel(get_label(y_param, logy))
 	windows_txt = str(min(windows))
 	if len(windows) > 1:
 		windows_txt += str(-1*max(windows))
-	ax.set_title('%s %s%ssources (window size: %s)' % (morph.title() if type(morph) is str else 'All', align+' ' if type(align) is str else '', pop+' ' if type(pop) is str and pop!='separate' else '', windows_txt))
-	ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-	if logx:
-		ax.set_xscale('log')
-	if logy:
-		ax.set_yscale('log')
+	titletxt = '%s%s%ssources (window size: %s)' % (morph+' ' if type(morph) is str else '', align+' ' if type(align) is str else '', pop+' ' if type(pop) is str and pop!='separate' else '', windows_txt)
+	if title:
+		ax.set_title('All '+titletxt if titletxt[0:7]=='sources' else titletxt[0].upper()+titletxt[1:])
+	#ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+	if square:
+		ax.set_aspect('equal', adjustable='box')
 	if y_param == 'using_peaks.bending_corrected':
 		params['WHL.population'] = 'outer'
 		bend = []
 		for i in coll.find(params):
 			bend.append(i['using_peaks']['bending_corrected'])
-		ax.axhline(np.median(bend), ls='dotted', c='k')
+		if logy:
+			ax.axhline(np.log10(np.median(bend)), ls=':', c='k')
+		else:
+			ax.axhline(np.median(bend), ls=':', c='k')
 	elif y_param == 'using_peaks.bending_excess':
-		ax.axhline(0, ls='dotted', c='k')
+		ax.axhline(0, ls=':', c='k')
+	plt.tight_layout()
 
-def get_trends(params, x_param, y_param, coll, binned):
+def get_trends(params, x_param, y_param, coll, binned, combine_bcg=True):
 	x_param_list = x_param.split('.')
 	y_param_list = y_param.split('.')
 	x, y = [], []
@@ -829,7 +846,7 @@ def get_trends(params, x_param, y_param, coll, binned):
 	y = np.array(y)
 	window_size = min(len(x)/10, 100)
 	
-	if 'WHL.population' in params and params['WHL.population'] == 'central':
+	if 'WHL.population' in params and params['WHL.population'] == 'BCG' and combine_bcg:
 		run_x_50 = [0.01, 0.011]
 		run_y_25 = 2*[np.percentile(y, 25)]
 		run_y_50 = 2*[np.percentile(y, 50)]
@@ -845,13 +862,40 @@ def get_trends(params, x_param, y_param, coll, binned):
 	else:
 		return window_size, run_x_50, run_y_25, run_y_50, run_y_75
 
+def get_label(param, log=False):
+	if param == 'WHL.r/r500':
+		label = 'Separation ($r_{500}$)'
+	elif param == 'WHL.M500':
+		label = 'Cluster mass ($10^{14}~$M$_\odot$)'
+	elif param == 'WHL.P':
+		label = 'ICM pressure (keV cm$^{-3}$)'
+	elif 'bending_angle' in param:
+		label = 'Bending angle (deg)'
+	elif 'bending_corrected' in param:
+		label = 'Corrected bending angle (deg)'
+	elif 'bending_excess' in param:
+		label = 'Excess bending angle (deg)'
+	elif 'asymmetry' in param:
+		label = 'Asymmetry'
+	elif param == 'RGZ.size_arcmin':
+		label = 'Size (armin)'
+	elif param == 'RGZ.size_kpc':
+		label = 'Size (kpc)'
+	elif param == 'WHL.grad_P':
+		label = 'Pressure gradient (keV cm$^{-3}$ kpc$^{-1}$)'
+	else:
+		label = param.replace('_', '\_')
+	if log:
+		label = '$\log_{10}$ (' + label.replace('(', '[').replace(')', ']') + ')'
+	return label
+
 def get_params(param_list, coll=bending_15, morph=None, pop=None):
 	'''
 	Returns an array of data containing the values of the specified paramters for all sources in the sample
 	'''
 	
 	assert morph in [None, 'double', 'triple'], "morph must be 'double' or 'triple'"
-	assert pop in [None, 'central', 'intermediate', 'outer'], "pop must be 'central', 'intermediate', or 'outer'"
+	assert pop in [None, 'BCG', 'inner', 'outer'], "pop must be 'BCG', 'inner', or 'outer'"
 	
 	params = total_cuts.copy()
 	if morph is not None:
@@ -867,9 +911,9 @@ def get_params(param_list, coll=bending_15, morph=None, pop=None):
 				datum = 2
 			elif datum=='triple':
 				datum = 3
-			elif datum=='central':
+			elif datum=='BCG':
 				datum = 0
-			elif datum=='intermediate':
+			elif datum=='inner':
 				datum = 1
 			elif datum=='outer':
 				datum = 2
@@ -879,7 +923,7 @@ def get_params(param_list, coll=bending_15, morph=None, pop=None):
 def custom_exp(x, a, b):
 	return a*np.exp(b*x)
 
-def bending_correct(coll=bending_15, window_size=100, plot=False, update=False, methods=None):
+def bending_correct(coll=bending_15, window_size=100, plot=False, update=False, methods=None, comp_err=False):
 	'''
 	Apply a pre-determined correction for the angular size dependence to the bending angle
 	'''
@@ -898,16 +942,20 @@ def bending_correct(coll=bending_15, window_size=100, plot=False, update=False, 
 			
 			# Collect data from outer region
 			sizes, angles, separations = [], [], []
-			params = {'RGZ.size_arcmin':total_cuts['RGZ.size_arcmin'], 'RGZ.overedge':total_cuts['RGZ.overedge'], 'RGZ.radio_consensus':total_cuts['RGZ.radio_consensus'], method+'.bending_angle':total_cuts['using_peaks.bending_corrected'], 'RGZ.morphology':morph, 'WHL.population':'outer'}
+			params = total_cuts.copy()
+			del params['using_peaks.bending_corrected']
+			params['RGZ.morphology'] = morph
+			params[method+'.bending_angle'] = total_cuts['using_peaks.bending_corrected']
+			params['WHL.population'] = 'outer'
 			for gal in bending_15.find(params).sort('RGZ.size_arcmin', 1):
 				sizes.append(gal['RGZ']['size_arcmin'])
 				angles.append(gal[method]['bending_angle'])
 				separations.append(gal['WHL']['r/r500'])
-			
+
 			sizes = np.array(sizes)
 			angles = np.array(angles)
 			separations = np.array(separations)
-			
+	
 			# Find running trend
 			sizes_running = np.array([np.median(sizes[ix:ix+window_size]) for ix in np.arange(len(sizes)-window_size+1)])
 			angles_running = np.array([np.median(angles[ix:ix+window_size]) for ix in np.arange(len(angles)-window_size+1)])
@@ -915,6 +963,7 @@ def bending_correct(coll=bending_15, window_size=100, plot=False, update=False, 
 			# Find best fit
 			med_size = np.median(sizes)
 			popt, pcov = curve_fit(custom_exp, sizes_running-med_size, angles_running)
+			perr = np.sqrt(np.diagonal(pcov))
 			angles_best = custom_exp(sizes-med_size, *popt)
 			angles_best_running = np.array([np.median(angles_best[ix:ix+window_size]) for ix in np.arange(len(angles_best)-window_size+1)])
 			
@@ -923,53 +972,74 @@ def bending_correct(coll=bending_15, window_size=100, plot=False, update=False, 
 				if morph == 'double':
 					d_x = sizes
 					d_popt = popt
+					d_err = perr
 					d_x0 = med_size
 				else:
 					t_x = sizes
 					t_popt = popt
+					t_err = perr
 					t_x0 = med_size
 			
 			# Plot fits
 			if plot:
 				fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios':[3,1]})
-				ax1.plot(sizes_running, angles_running, label='Median fit')
-				ax1.plot(sizes_running, angles_best_running, label='%.1f*e^(%+.1f*(size-%.2f))\nR^2 = %.3f' % (popt[0], popt[1], med_size, r2_score(angles_running, angles_best_running)))
+				ax1.plot(sizes_running, angles_running, label='Running median')
+				ax1.plot(sizes_running, angles_best_running, ls='--', label='$%.1fe^{%+.1f(x-%.2f)}$\n$R^2 = %.3f$' % (popt[0], popt[1], med_size, r2_score(angles_running, angles_best_running)))
 				ax1.legend(loc='upper right')
-				ax1.set_ylabel(method+'.bending_angle')
-				ax1.set_title('Best fit %s sources' % morph)
+				ax1.set_ylabel('Bending angle (deg)')#('$\\mathrm{%s.bending_angle}$' % method).replace('_', '\_'))
+				#ax1.set_title('Best fit %s sources' % morph)
 				ax2.plot(sizes_running, angles_running-angles_best_running, label='residual')
 				ax2.axhline(0, color='k', lw=1)
-				ax2.set_xlabel('RGZ.size_arcmin')
-				ax2.set_ylabel('residual')
+				ax2.set_xlabel('Size (arcmin)')
+				ax2.set_ylabel('Residual')
+				fig.tight_layout()
 				plt.subplots_adjust(hspace=0.05)
-			
+	
 			# Insert to Mongo
 			if update:
-				del params['WHL.population']
 				for gal in coll.find():
 					best_angle = custom_exp(gal['RGZ']['size_arcmin']-med_size, *popt)
 					corr_angle = popt[0] * gal[method]['bending_angle'] / best_angle
 					coll.update({'_id':gal['_id']}, {'$set': {method+'.bending_corrected':corr_angle}})
+				get_bending_excess()
 	
 	# Plot comparison of fits
 	if plot:
 		x = np.sort(np.hstack([d_x, t_x]))
 		y0 = custom_exp(x-d_x0, *d_popt)
+		y0_pp = custom_exp(x-d_x0, d_popt[0]+d_err[0], d_popt[1]+d_err[1])
+		y0_pm = custom_exp(x-d_x0, d_popt[0]+d_err[0], d_popt[1]-d_err[1])
+		y0_mp = custom_exp(x-d_x0, d_popt[0]-d_err[0], d_popt[1]+d_err[1])
+		y0_mm = custom_exp(x-d_x0, d_popt[0]-d_err[0], d_popt[1]-d_err[1])
+		y0_max = np.max([y0_pm, y0_pp], axis=0)
+		y0_min = np.min([y0_mp, y0_mm], axis=0)
 		y1 = custom_exp(x-t_x0, *t_popt)
+		y1_pp = custom_exp(x-t_x0, t_popt[0]+t_err[0], t_popt[1]+t_err[1])
+		y1_pm = custom_exp(x-t_x0, t_popt[0]+t_err[0], t_popt[1]-t_err[1])
+		y1_mp = custom_exp(x-t_x0, t_popt[0]-t_err[0], t_popt[1]+t_err[1])
+		y1_mm = custom_exp(x-t_x0, t_popt[0]-t_err[0], t_popt[1]-t_err[1])
+		y1_max = np.max([y1_pm, y1_pp], axis=0)
+		y1_min = np.min([y1_mp, y1_mm], axis=0)
+		
 		fig, ax = plt.subplots(1)
-		ax.plot(x, y0, label='Best fit doubles')
-		ax.plot(x, y1, label='Best fit triples')
-		ax.plot(1, 10, c='w', label='R^2 = %.3f' % r2_score(y0, y1))
+		if comp_err:
+			ax.fill_between(x, y0_min, y0_max, alpha=.8, label='Best fit doubles')
+			ax.fill_between(x, y1_min, y1_max, alpha=.8,  hatch='x', label='Best fit triples')
+		else:
+			ax.plot(x, y0, label='Best fit doubles')
+			ax.plot(x, y1, ls='--', label='Best fit triples')
+		ax.plot(1, 10, c='w', label='$R^2 = %.3f$' % r2_score(y0, y1))
 		ax.legend(loc='upper right')
-		ax.set_xlabel('RGZ.size_arcmin')
-		ax.set_ylabel('using_peaks.bending_angle')
-		ax.set_title('Best fit comparison')
+		ax.set_xlabel('Size (arcmin)')
+		ax.set_ylabel('Bending angle (deg)')
+		#ax.set_title('Best fit comparison')
+		fig.tight_layout()
 
 def pca_analysis(param_space, coll=bending_15, morph=None, pop=None):
 	
 	assert param_space in ['bending', 'WHL']
 	assert morph in [None, 'double', 'triple'], "morph must be 'double' or 'triple'"
-	assert pop in [None, 'central', 'intermediate', 'outer', 'non-BCG'], "pop must be 'central', 'intermediate', 'outer', or 'non-BCG'"
+	assert pop in [None, 'BCG', 'inner', 'outer', 'non-BCG'], "pop must be 'BCG', 'inner', 'outer', or 'non-BCG'"
 	
 	if param_space == 'bending':
 		param_list = np.array([['using_peaks', 'bending_angle'], ['RGZ', 'size_arcmin'], ['RGZ', 'size_kpc'], ['WHL', 'r/r500'], ['WHL', 'M500'], ['WHL', 'orientation_folded'], ['best', 'redshift']])
@@ -980,7 +1050,7 @@ def pca_analysis(param_space, coll=bending_15, morph=None, pop=None):
 	
 	# Get data
 	if pop == 'non-BCG':
-		data1 = get_params(param_list, coll=coll, morph=morph, pop='intermediate')
+		data1 = get_params(param_list, coll=coll, morph=morph, pop='inner')
 		data2 = get_params(param_list, coll=coll, morph=morph, pop='outer')
 		data = np.hstack([data1, data2.T[data2[3]<=10].T])
 	else:
@@ -1049,11 +1119,20 @@ def make_corner_plot():
 	plt.tight_layout()
 
 def sample_numbers():
-	print 'Consensus cut (double, triple):', bent_sources.find({'RGZ.morphology':'double', 'RGZ.radio_consensus':{'$gte':.65}}).count(), bent_sources.find({'RGZ.morphology':'triple', 'RGZ.radio_consensus':{'$gte':.65}}).count()
-	print 'Redshifts (SDSS, AllWISE):', bent_sources.find({'RGZ.radio_consensus':{'$gte':.65}, '$or':[{'SDSS.spec_redshift':{'$exists':True}}, {'SDSS.photo_redshift':{'$exists':True}}]}).count(), bent_sources.find({'RGZ.radio_consensus':{'$gte':.65}, 'SDSS.spec_redshift':{'$exists':False}, 'SDSS.photo_redshift':{'$exists':False}}).count()
-	print 'Size/bending cut (double, triple):', bent_sources.find({'RGZ.morphology':'double', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_angle':{'$lte':135.}}).count(), bent_sources.find({'RGZ.morphology':'triple', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_angle':{'$lte':135.}}).count()
-	print 'Matched (double, triple):', bending_15.find({'RGZ.morphology':'double', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_angle':{'$lte':135.}}).count(), bending_15.find({'RGZ.morphology':'triple', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_angle':{'$lte':135.}}).count()
-	print 'Final (double, triple):', bending_15.find({'RGZ.morphology':'double', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_corrected':{'$lte':135.}}).count(), bending_15.find({'RGZ.morphology':'triple', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_corrected':{'$lte':135.}}).count()
+	
+	param_list = [{'RGZ.morphology':'double', 'best.redshift':{'$exists':True}}, \
+		{'RGZ.morphology':'double', 'best.redshift':{'$exists':True}}, \
+		{'RGZ.morphology':'double', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_angle':{'$lte':135.}, 'best.redshift':{'$exists':True}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}, \
+		{'RGZ.morphology':'double', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_corrected':{'$lte':135.}, 'best.redshift':{'$exists':True}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}, \
+		{'RGZ.morphology':'double', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_corrected':{'$lte':135.}, 'best.redshift':{'$exists':True}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}]
+	coll_list = [bent_sources, bending_15, bending_15, bent_sources, bending_15]
+	label_list = ['No cuts', 'Matched', 'Initial cuts', 'Final (all)', 'Final (matched)']
+	
+	for params, coll, label in zip(param_list, coll_list, label_list):
+		double = coll.find(params).count()
+		params['RGZ.morphology'] = 'triple'
+		triple = coll.find(params).count()
+		print label, '(double, triple, total):', double, triple, double+triple
 
 def contamination():
 	z = []
@@ -1066,142 +1145,120 @@ def contamination():
 			dz.append(float(row[1]))
 		z = np.array(z)
 		dz = np.array(dz)
-	
+
 	dz_norm = dz/(1+z)
 	mask = np.abs(dz_norm)<0.04
 	comp = 0.982 # Completeness fraction using 0.04 cut
 	cont = 0.215 # Contamination fraction using 0.04 cut
-	
+
 	f, ax = plt.subplots(1)
-	rc('text', usetex=True)
 	n, bins, patches = ax.hist(dz_norm[np.abs(dz_norm)<=.1], 30)
-	ax.axvline(0.04, c='r', label=r'$\Delta z$ threshold')
-	ax.axvline(-0.04, c='r')
-	ax.axhline(np.median(n[(np.abs(bins)>0.04)[:-1]]), c='k', label='Background')
+	ax.axvline(0.04, c='r', lw=2, label=r'$\Delta z$ threshold')
+	ax.axvline(-0.04, c='r', lw=2)
+	ax.axhline(np.median(n[(np.abs(bins)>0.04)[:-1]]), c='k', lw=2, ls=':', label='Background')
 	ax.plot(0, 0, c='w', label='Completeness: %.3f\nContamination: %.3f' % (comp, cont))
 	ax.legend()
 	ax.set_xlim(-0.1, 0.1)
-	ax.set_xlabel(r'$\Delta z / (1+z)$')
+	ax.set_xlabel('$\Delta z / (1+z)$')
 	ax.set_ylabel('Count')
-	plt.title('Full RGZ-WHL cross-match')
-	rc('text', usetex=False)
-	
-	sep, n, bins = r500_hist(20)
+	#plt.title('Full RGZ-WH15 cross-match')
+	plt.tight_layout()
+
+	sep, n, bins = r500_hist(bending_15, total_cuts, 20)
 	mean_cont = cont * sum(n) / (np.pi*np.square(bins[-1])) # Number of contaminating sources per square r500
 	bin_area = np.pi * np.array( [np.square(bins[0])] + [np.square(bins[i+1])-np.square(bins[i]) for i in np.arange(len(bins)-1)] )
 	cont_per_bin = mean_cont * bin_area
 	fractional_cont = cont_per_bin / n
-	fc = interp1d(bins, fractional_cont, kind='linear')
-	for i in 100*np.logspace(-4, 0, 20):
-		xx = brentq(lambda x: fc(x)-i/100., bins[0], bins[-1])
-		print '%.1f%% at x=%.2f' % (i,xx)
-	
+	fc = interp1d(bins, fractional_cont, kind='slinear')
+	print '%.3f%% at x=%.2f' % (fc(1.5), 1.5)
+	#for i in np.logspace(-1, 2, 20):
+	#	xx = brentq(lambda x: fc(x)-i/100., bins[0], bins[-1])
+	#	print '%.1f%% at x=%.2f' % (i,xx)
+
 	f, ax = plt.subplots(1)
 	density = n/bin_area
-	ax.scatter(bins, density, label='Measured sources')
-	a, b = np.polyfit(np.log10(bins[1:-3]), np.log10(density[1:-3]), 1)
-	ax.plot(bins, pow(10, a*np.log10(bins)+b), c='k', label='Best fit, 0.01<r/r500<10')
+	err = np.sqrt(n)/bin_area
+	ax.errorbar(bins, density, yerr=err, fmt='o', ms=4, label='Source density')
+	logx = np.log10(bins[1:-3])
+	logy = np.log10(density[1:-3])
+	logyerr = err[1:-3] / density[1:-3]
+	fitfunc = lambda p, x: p[0]*x + p[1]
+	errfunc = lambda p, x, y, err: (y - fitfunc(p, x)) / err
+	out = leastsq(errfunc, [-1,1], args=(logx, logy, logyerr), full_output=1)
+	index, amp = out[0]
+	index_err = np.sqrt(out[1][1][1])
+	amp_err = np.sqrt(out[1][0][0])*amp
+	ax.plot(bins, pow(10, index*np.log10(bins)+amp), c='k', label='$\sim(r/r_{500})^{%.2f\pm%.2f}$'%(index,index_err))
 	ax.set_xscale('log')
 	ax.set_yscale('log')
-	ax.legend()
-	ax.set_xlabel('Separation (r/r500)')
+	ax.legend(bbox_to_anchor=(1, 1))
+	ax.set_xlabel('Separation ($r_{500}$)')
 	ax.set_ylabel('Count / area of annulus')
-	ax.set_title('Count density vs separation')
-	ax.set_xlim([0.0075, 85])
-	ax.set_ylim([0.00016, 4e6])
-	
-	f, (ax1, ax2) = plt.subplots(2, sharex=True)
-	ax1.plot(bins, n, label='Measured sources')
-	ax1.plot(bins, cont_per_bin, label='Contaminating sources')
-	ax1.legend()
-	ax1.set_xscale('log')
-	ax1.set_yscale('log')#, subsy=[2,3,4,5,6,7,8,9,20,30,40,50,60,70,80,90])
-	#ax1.set_yticks(10.**np.arange(-4,4))
-	ax1.set_ylim(ymin=0.01)
-	ax1.set_ylabel('Count')
-	ax1.set_title('Contamination')
-	ax2.plot(bins, fractional_cont)
-	ax2.axhline(1, ls='dotted', c='k')
-	ax2.set_yscale('log', subsy=[2,3,4,5,6,7,8,9,20,30,40,50,60,70,80,90])
-	ax2.set_yticks(10.**np.arange(-7,3))
-	ax2.set_xlabel('WHL.r/r500')
-	ax2.set_ylabel('Fractional contamination')
+	#ax.set_title('Count density vs. separation')
+	ax.set_aspect('equal', adjustable='box')
 	plt.tight_layout()
 
-def r500_hist(bin_count=20):
-	params = total_cuts.copy()
-	del params['using_peaks.bending_corrected']
+	f, (ax1, ax2) = plt.subplots(2, sharex=True)
+	ax1.plot(np.log10(bins), np.log10(n), label='Observed')
+	ax1.plot(np.log10(bins), np.log10(cont_per_bin), ls='--', label='Contamination')
+	ax1.legend(loc='lower right')
+	ax1.set_ylim(-2.24, 3.24)
+	ax1.set_yticks(np.arange(-2,4))
+	ax1.set_ylabel('$\log_{10}$ (Count)')
+	#ax1.set_title('Contamination')
+	ax2.plot(np.log10(bins), np.log10(fractional_cont), c='C2', label='Contamination\nfraction')
+	ax2.legend(loc='lower right')
+	ax2.axhline(0, ls=':', c='k')
+	ax2.set_xlabel(get_label('WHL.r/r500', True))
+	ax2.set_ylabel('$\log_{10}$ (Fraction)')
+	plt.tight_layout()
+
+def r500_hist(coll, params, bin_count=20):
+	fig, ax = plt.subplots(1)
 	sep = []
-	for i in bending_15.find(params):
+	for i in coll.find(params):
 		sep.append(i['WHL']['r/r500'])
-	
 	sep = np.array(sep)
-	min_sep = min(np.log(sep))
+	min_sep = min(np.log10(sep))
 	sep = np.clip(sep, .01, None) # Combine everything less than 0.01 into one bin
-	n, bins, patches = plt.hist(np.log(sep), bins=bin_count)
+	n, bins, patches = ax.hist(np.log10(sep), bins=bin_count)
 	bins0 = bins[0]
 	bins[0] = min_sep
-	n, bins, patches = plt.hist(sep, bins=np.exp(bins))
-	plt.xscale('log')
-	bins[0] = np.exp(bins0)
+	n, bins, patches = ax.hist(sep, bins=pow(10,bins))
+	ax.set_xscale('log')
+	bins[0] = pow(10,bins0)
 	return sep, n, (bins[:-1]+bins[1:])/2.
 
 def orientation(bent_cutoff=None, folded=True, r_min=0.01, r_max=10):
+	if bent_cutoff is None:
+		bent_cutoff = get_bent_cut()
+	
+	print 'Bending excess cutoff: %.2f' % bent_cutoff
+	
 	sep = []
 	bend = []
 	ori = []
 	for i in bending_15.find(total_cuts):
 		sep.append(i['WHL']['r/r500'])
-		bend.append(i['using_peaks']['bending_corrected'])
+		bend.append(i['using_peaks']['bending_excess'])
 		if folded:
 			ori.append(i['WHL']['orientation_folded'])
 		else:
 			ori.append(i['WHL']['orientation_peaks'])
-	
+
 	sep = np.array(sep)
 	bend = np.array(bend)
 	ori = np.array(ori)
-	
-	near = np.logical_and(0.01<sep, sep<1.5)
-	far = np.logical_and(1.5<sep, sep<10)
-	seps = np.vstack([near, far])
-	print sum(near), 'near sources,', sum(far), 'far sources'
-	
-	if bent_cutoff is None:
-		bent_cutoff = pow(10, np.mean(np.log10(bend)) + np.std(np.log10(bend)))
+
+	inner = np.logical_and(0.01<sep, sep<1.5)
+	outer = np.logical_and(1.5<sep, sep<10)
+	seps = np.vstack([inner, outer])
+	print sum(inner), 'inner sources,', sum(outer), 'outer sources'
+
 	straight = bend<bent_cutoff
 	bent = bend>=bent_cutoff
 	bends = np.vstack([bent, straight])
 	print sum(straight), 'straight sources,', sum(bent), 'bent sources'
-	
-#	f, ax = plt.subplots(2, 2, sharex='col', sharey='row')
-#	plt.suptitle('Orientation counts by subsample')
-#	for ix in range(2):
-#		for jx in range(2):
-#			mask = np.logical_and(bends[ix], seps[jx])
-#			data = ori[mask]
-#			ad = ad_test(data, stats.uniform(0,90))
-#			print ad.pvalue, len(data)
-#			ax[ix][jx].hist(data, bins=min(20, len(data)/10), label='p=%.3f'%ad.pvalue)
-#			ax[ix][jx].legend(loc='upper center')
-#	
-#	ax[0][0].set_ylabel('Bending > %.0f deg' % bent_cutoff)
-#	ax[1][0].set_ylabel('Bending < %.0f deg' % bent_cutoff)
-#	ax[1][0].set_xlabel('0.01 < r/r500 < 1.5')
-#	ax[1][1].set_xlabel('1.5 < r/r500 < 10.0')
-#	plt.tight_layout()
-#	plt.subplots_adjust(top=.92)
-#	
-#	f, ax = plt.subplots(1)
-#	ax.set_title('Orientation counts')
-#	data = ori[bent]
-#	ad = ad_test(data, stats.uniform(0,90))
-#	print ad.pvalue, len(data)
-#	ax.hist(data, bins=min(20, len(data)/10), label='p=%.3f'%ad.pvalue)
-#	ax.legend(loc='upper center')
-#	ax.set_ylabel('Bending > %.0f deg' % bent_cutoff)
-#	ax.set_xlabel('All separations')
-#	plt.tight_layout()
 	
 	if folded:
 		max_ori = 90.
@@ -1209,26 +1266,52 @@ def orientation(bent_cutoff=None, folded=True, r_min=0.01, r_max=10):
 		max_ori = 180.
 	
 	f, ax = plt.subplots(1)
-	ax.set_title('Orientation distribution (%.2f<r/r500<%.2f; bending>=%.0f deg)' % (r_min, r_max, bent_cutoff))
-	data = ori[np.logical_and(bent, np.logical_and(sep>r_min, sep<r_max))]
+	#ax.set_title('Orientation distribution ($%.2f<r/r_{500}<%.2f$; $\Delta\\theta<%.0f$ deg)' % (r_min, r_max, excess_cutoff))
+	data = ori[np.logical_and(straight, np.logical_and(sep>r_min, sep<r_max))]
 	ad = ad_test(data, stats.uniform(0,max_ori))
 	print ad.pvalue, z_score(ad.pvalue), len(data)
-	ax.hist(data, bins=6, label='n=%i; p=%.3f'%(len(data),ad.pvalue) )
+	ax.hist(data, bins=6, fill=False, hatch='//', label='$n=%i;~p=%.3f$'%(len(data), ad.pvalue) )
+	ax.set_ylim(0, 358)
+	ax.legend(loc='upper center')
+	ax.set_ylabel('Count')
+	ax.set_xlabel('Orientation angle (deg)')
+	plt.tight_layout()
+
+	f, ax = plt.subplots(1)
+	#ax.set_title('Orientation distribution ($%.2f<r/r_{500}<%.2f$; $\Delta\\theta>%.0f$ deg)' % (r_min, r_max, excess_cutoff))
+	data = ori[np.logical_and(bent, np.logical_and(sep>r_min, sep<r_max))]
+	if folded:
+		ad = ad_test(data, stats.uniform(0,max_ori))
+		print ad.pvalue, z_score(ad.pvalue), len(data)
+	else:
+		towards = data[data<90]
+		away = data[data>90]
+		sig = stats.anderson_ksamp([towards, max_ori-away]).significance_level
+		print 'Symmetric: p=%.4f' % sig
+	
+	n, bins, _ = ax.hist(data, bins=6, fill=False, hatch='//', label='$n=%i;~p=%.3f$'%(len(data), ad.pvalue if folded else sig) )
+	ax.set_ylim(0, 75)
 	ax.legend(loc='upper center')
 	ax.set_ylabel('Count')
 	ax.set_xlabel('Orientation angle (deg)')
 	plt.tight_layout()
 	
-	f, ax = plt.subplots(1)
-	ax.set_title('Orientation distribution (%.2f<r/r500<%.2f; bending<%.0f deg)' % (r_min, r_max, bent_cutoff))
-	data = ori[np.logical_and(straight, np.logical_and(sep>r_min, sep<r_max))]
-	ad = ad_test(data, stats.uniform(0,max_ori))
-	print ad.pvalue, z_score(ad.pvalue), len(data)
-	ax.hist(data, bins=6, label='n=%i; p=%.3f'%(len(data),ad.pvalue) )
-	ax.legend(loc='upper center')
-	ax.set_ylabel('Count')
-	ax.set_xlabel('Orientation angle (deg)')
-	plt.tight_layout()
+	unfolded, sep = [], []
+	params = total_cuts.copy()
+	params['using_peaks.bending_excess'] = {'$gte': bent_cutoff}
+	params['WHL.r/r500'] = {'$gte': r_min, '$lte': r_max}
+	for source in bending_15.find(params):
+		unfolded.append(source['using_peaks']['bisector'] - source['WHL']['position_angle'])
+		sep.append(source['WHL']['r/r500'])
+
+	sep = np.array(sep)
+	unfolded = np.array(unfolded)
+	tangential = np.sin(unfolded*np.pi/180)
+	radial = np.cos(unfolded*np.pi/180)
+	beta = 1 - np.var(tangential) / np.var(radial)
+	print 'beta', beta
+
+	return None
 	
 	y, yerr = [], []	
 	for i in np.arange(int(max_ori/2.)):
@@ -1243,7 +1326,6 @@ def orientation(bent_cutoff=None, folded=True, r_min=0.01, r_max=10):
 	ax.set_xlabel('Orientation cut')
 	ax.set_ylabel('Count')
 	ax.set_title('Excess of inward-moving sources')
-	plt.tight_layout()
 	
 	mask = np.logical_and(bent, np.logical_and(sep>0.01, sep<15))
 	n = sum(mask)
@@ -1264,9 +1346,73 @@ def orientation(bent_cutoff=None, folded=True, r_min=0.01, r_max=10):
 	ax.errorbar(x, diff, err)
 	ax.axhline(0, c='k', ls='dotted')
 	ax.set_xscale('log')
-	ax.set_xlabel('WHL.r/r500')
+	ax.set_xlabel('Separation ($r_{500}$)')
 	ax.set_ylabel('Count')
 	ax.set_title('Excess of radially-moving sources')
+
+def orientation_test():
+	excess_cutoff = get_bent_cut()
+	r_min, r_max = 0.01, 10
+
+	sep, bend, folded, unfolded = [], [], [], []
+	for i in bending_15.find(total_cuts):
+		sep.append(i['WHL']['r/r500'])
+		bend.append(i['using_peaks']['bending_excess'])
+		folded.append(i['WHL']['orientation_folded'])
+		unfolded.append(i['WHL']['orientation_peaks'])
+
+	sep = np.array(sep)
+	bend = np.array(bend)
+	folded = np.array(folded)[np.logical_and(bend>excess_cutoff, np.logical_and(sep>r_min, sep<r_max))]
+	unfolded = np.array(unfolded)[np.logical_and(bend>excess_cutoff, np.logical_and(sep>r_min, sep<r_max))]
+
+	n_f, bins_f, _ = plt.hist(folded, bins=6, alpha=.8, normed=True, fill=False, edgecolor='r', label='Folded')
+	plt.figure()
+	n_u, bins_u, _ = plt.hist(unfolded, bins=12, alpha=.8, normed=True, fill=False, hatch='//', label='Unfolded')
+
+	# model 1: count goes to 0 at 180 deg
+	class quad(stats.rv_continuous):
+		def _argcheck(self, a, b, c):
+			return np.isfinite(a) and np.isfinite(b) and np.isfinite(c)
+		def _pdf(self, x, a, b, c):
+			x0 = 180.
+			norm = a*x0**3/3. + b*x0**2/2. + c*x0
+			if type(x) is float:
+				return max(a*x**2 + b*x + c, 0) / norm
+			elif type(x) is np.ndarray:
+				return np.max([a*x**2 + b*x + c, np.zeros(len(x))], axis=0) / norm
+			else:
+				raise TypeError('Got %s instead' % str(type(x)))
+
+	a, b, c = n_f[0], n_f[-1]/2., 0
+	popt = np.polyfit([0,90,180], [a,b,c], 2)
+	case1 = quad(a=0, b=180, shapes='a, b, c')(*popt)
+	ad1 = ad_test(unfolded, case1)
+	print 'Model 1: p=%.2g (%.2f sigma)' % (ad1.pvalue, z_score(ad1.pvalue))
+
+	# model 2: count plateaus at 90 deg
+	class piecewise_lin(stats.rv_continuous):
+		def _pdf(self, x, a, b, c):
+			norm = 45.*a + 135.*c
+			m = (c-a) / 90.
+			if type(x) is float:
+				return (c + m*min([x-90, 0])) / norm
+			elif type(x) is np.ndarray:
+				return (c + m*np.min([x-90, np.zeros(len(x))], axis=0)) / norm
+			else:
+				raise TypeError('Got %s instead' % str(type(x)))
+
+	a, b, c = n_f[0]-n_f[-1]/2., n_f[-1]/2., n_f[-1]/2.
+	case2 = piecewise_lin(a=0, b=180, shapes='a, b, c')(a, b, c)
+	ad2 = ad_test(unfolded, case2)
+	print 'Model 1: p=%.2g (%.2f sigma)' % (ad2.pvalue, z_score(ad2.pvalue))
+	
+	x = np.arange(181)
+	plt.plot(x, case1.pdf(x), c='b', label='Model 1')
+	plt.plot(x, case2.pdf(x), c='g', ls=':', label='Model 2')
+	plt.legend()
+	plt.ylabel('Normalized count')
+	plt.xlabel('Orientation angle (deg)')
 
 def size_dependence():
 	params0, params1 = total_cuts.copy(), total_cuts.copy()
@@ -1376,7 +1522,7 @@ def rmsd(params, x_param, y_param, plot=True, coll=bending_15):
 	y1 = np.array(y1)
 	window_size = min(len(x)/10, 100)
 	
-	if 'WHL.population' in params and params['WHL.population'] == 'central':
+	if 'WHL.population' in params and params['WHL.population'] == 'BCG':
 		run_x = [0.01, 0.011]
 		run_y0 = 2*[np.percentile(y0, 50)]
 		run_y1 = 2*[np.percentile(y1, 50)]
@@ -1389,26 +1535,128 @@ def rmsd(params, x_param, y_param, plot=True, coll=bending_15):
 	
 	if plot:
 		fig, (ax1, ax2) = plt.subplots(2, sharex=True)
-		ax1.plot(run_x, run_y0, label=y0_param_list[0])
-		ax1.plot(run_x, run_y1, label=y1_param_list[0])
+		ax1.plot(run_x, run_y0, label='Peak method')
+		ax1.plot(run_x, run_y1, label='Contour method')
 		ax1.legend(loc='best')
-		ax1.set_ylabel(y_param)
-		ax1.set_title('%s comparison' % y_param)
+		ax1.set_ylabel(get_label(y_param))
+		#ax1.set_title('%s comparison' % y_param)
 		ax2.plot(run_x, run_rmsd)
-		ax2.set_xlabel(x_param)
-		ax2.set_ylabel('rms difference')
-		plt.subplots_adjust(hspace=0.05)
+		ax2.set_xlabel(get_label(x_param))
+		ax2.set_ylabel('RMS difference')
+		fig.tight_layout()
 		
 		fig, ax = plt.subplots(1)
-		ax.plot(run_x, run_y0, label='using_peaks.%s' % y_param)
-		a, b = np.polyfit(run_x[run_x<1.05], run_rmsd[run_x<1.05], 1)
-		ax.plot(run_x, a*run_x+b, label='rms difference linear fit')
+		ax.plot(run_x, run_y0, label='Bending angle (peak method)')
+		#a, b = np.polyfit(run_x[run_x<1.05], run_rmsd[run_x<1.05], 1)
+		#ax.plot(run_x, a*run_x+b, label='rms difference linear fit')
+		ax.plot(run_x, run_rmsd, label='RMS difference', ls='--')
 		ax.legend(loc='best')
-		ax.set_xlabel(x_param)
-		ax.set_ylabel('degrees')
-		ax.set_title('Bending error comparison')
-
+		ax.set_xlabel(get_label(x_param))
+		ax.set_ylabel('Angle (deg)')
+		#ax.set_title('Bending error comparison')
+		fig.tight_layout()
+	
 	return window_size, run_x, run_y0, run_y1, run_rmsd
+
+def rmsd_debug():
+	params = total_cuts.copy()
+	params['using_peaks.bending_angle'] = params['using_peaks.bending_corrected']
+	del params['using_peaks.bending_corrected']
+	
+	x_param = 'RGZ.size_arcmin'
+	y_param = 'bending_angle'
+	x_param_list = x_param.split('.')
+	y0_param_list = ['using_peaks', y_param]
+	y1_param_list = ['using_contour', y_param]
+	x, y0, y1, zid = [], [], [], []
+	for i in bending_15.find(params).sort(x_param, 1):
+		x.append(i[x_param_list[0]][x_param_list[1]])
+		y0.append(i[y0_param_list[0]][y0_param_list[1]])
+		y1.append(i[y1_param_list[0]][y1_param_list[1]])
+		zid.append(i['RGZ']['zooniverse_id'])
+	
+	x = np.array(x)
+	y0 = np.array(y0)
+	y1 = np.array(y1)
+	window_size = min(len(x)/10, 100)
+	print 'Original sample:', len(x)
+	
+	run_x = np.array([np.percentile(x[ix:ix+window_size], 50) for ix in np.arange(len(x)-window_size+1)])
+	run_y0 = np.array([np.percentile(y0[ix:ix+window_size], 50) for ix in np.arange(len(x)-window_size+1)])
+	run_y1 = np.array([np.percentile(y1[ix:ix+window_size], 50) for ix in np.arange(len(x)-window_size+1)])
+	run_rmsd = np.array([np.sqrt(sum((y0[ix:ix+window_size]-y1[ix:ix+window_size])**2)/window_size) for ix in np.arange(len(x)-window_size+1)])
+	
+	fig, ax = plt.subplots(1)
+	plt.scatter(x, y0, s=1, label='using peaks')
+	plt.scatter(x, y1, s=1, label='using contour')
+	plt.plot(run_x, run_rmsd, c='k', label='rmsd')
+	plt.xlabel(get_label(x_param))
+	plt.ylabel(get_label('%s.%s' % tuple(y0_param_list)))
+	
+	'''outlier = np.logical_and(np.logical_and(x>1.17, x<1.19), np.logical_and(y1>105, y1<109))
+	x = x[np.logical_not(outlier)]
+	y1 = y1[np.logical_not(outlier)]
+	print np.where(outlier, zid, False)[outlier][0]
+	
+	run_x = np.array([np.percentile(x[ix:ix+window_size], 50) for ix in np.arange(len(x)-window_size+1)])
+	run_y0 = np.array([np.percentile(y0[ix:ix+window_size], 50) for ix in np.arange(len(x)-window_size+1)])
+	run_y1 = np.array([np.percentile(y1[ix:ix+window_size], 50) for ix in np.arange(len(x)-window_size+1)])
+	run_rmsd = np.array([np.sqrt(sum((y0[ix:ix+window_size]-y1[ix:ix+window_size])**2)/window_size) for ix in np.arange(len(x)-window_size+1)])
+	plt.plot(run_x, run_rmsd, c='g', label='outlier\nremoved')
+	
+	ell = matplotlib.patches.Ellipse(xy=(1.18,107), width=0.06, height=13, fill=False, color='r', label='outlier')
+	ax.add_artist(ell)'''
+	
+	logdy = np.log10(np.abs(y0-y1))
+	mask = logdy < 3*np.std(logdy)
+	outliers = np.logical_not(mask)
+	plt.scatter(x[outliers], y0[outliers], c='g', label='outliers', s=1)
+	plt.scatter(x[outliers], y1[outliers], c='g', s=1)
+	x = x[mask]
+	y0 = y0[mask]
+	y1 = y1[mask]
+	print 'Outliers:', sum(outliers)
+	
+	run_x = np.array([np.percentile(x[ix:ix+window_size], 50) for ix in np.arange(len(x)-window_size+1)])
+	run_y0 = np.array([np.percentile(y0[ix:ix+window_size], 50) for ix in np.arange(len(x)-window_size+1)])
+	run_y1 = np.array([np.percentile(y1[ix:ix+window_size], 50) for ix in np.arange(len(x)-window_size+1)])
+	run_rmsd = np.array([np.sqrt(sum((y0[ix:ix+window_size]-y1[ix:ix+window_size])**2)/window_size) for ix in np.arange(len(x)-window_size+1)])
+	plt.plot(run_x, run_rmsd, c='g', label='$<3\sigma$')
+	
+	plt.legend()
+
+def is_outlier(points, thresh=3.5):
+    """
+    Returns a boolean array with True if points are outliers and False 
+    otherwise.
+
+    Parameters:
+    -----------
+        points : An numobservations by numdimensions array of observations
+        thresh : The modified z-score to use as a threshold. Observations with
+            a modified z-score (based on the median absolute deviation) greater
+            than this value will be classified as outliers.
+
+    Returns:
+    --------
+        mask : A numobservations-length boolean array.
+
+    References:
+    ----------
+        Boris Iglewicz and David Hoaglin (1993), "Volume 16: How to Detect and
+        Handle Outliers", The ASQC Basic References in Quality Control:
+        Statistical Techniques, Edward F. Mykytka, Ph.D., Editor. 
+    """
+    if len(points.shape) == 1:
+        points = points[:,None]
+    median = np.median(points, axis=0)
+    diff = np.sum((points - median)**2, axis=-1)
+    diff = np.sqrt(diff)
+    med_abs_deviation = np.median(diff)
+	
+    modified_z_score = 0.6745 * diff / med_abs_deviation
+	
+    return modified_z_score > thresh
 
 def z_score(p_vals, tail='two-sided'):
 	assert tail in ['one-sided', 'two-sided'], 'tail must be one-sided or two-sided'
@@ -1417,41 +1665,69 @@ def z_score(p_vals, tail='two-sided'):
 	elif tail == 'two-sided':
 		return stats.norm.ppf(1-p_vals/2.)
 
-def mass_comp():
+def mass_comp(region):
 	
 	params = total_cuts.copy()
-	params['WHL.population'] = 'intermediate'
-	
+	params['WHL.population'] = region
+
 	mass = []
 	bend = []
 	for i in bending_15.find(params):
 		mass.append(i['WHL']['M500'])
 		bend.append(i['using_peaks']['bending_excess'])
-	
+
 	mass = np.array(mass)
 	bend = np.array(bend)
+	
+	rho = stats.spearmanr(mass, bend)
+	print 'p = ', rho.pvalue
+	print z_score(rho.pvalue), 'sigma'
+	
+	w, run_mass, run_bend = get_trends(params, 'WHL.M500', 'using_peaks.bending_excess', bending_15, True, False)
+	popt = np.polyfit(run_mass, run_bend, 1)
+	lower, upper = 5, 20
+	print 'Rise of %.2f deg between %i and %i x 10^14 M_sun' % (popt[0]*(upper-lower), lower, upper)
+	
+	return None
 	
 	high = mass>12
 	low = mass<12
 	print sum(high), 'high mass sources,', sum(low), 'low mass sources'
 	
+	print 'bending difference:', np.median(bend[high])-np.median(bend[low])
+	
 	ad = stats.anderson_ksamp([bend[high], bend[low]])
 	print 'p =', ad.significance_level
 	print z_score(ad.significance_level), 'sigma'
 	
-	plt.hist(bend[high], normed=True, alpha=.8, bins=10*np.arange(15), label='M500 > 15*10^14 M_sun')
-	plt.hist(bend[low], normed=True, alpha=.8, bins=10*np.arange(15), label='M500 < 10*10^14 M_sun')
-	plt.plot(0, 0, color='w', label='p=%f'%ad.significance_level)
+	plt.hist(bend[high], normed=True, alpha=.8, bins=11*(np.arange(13)-1), label='$M_{500} > 1.2\\times 10^{15}~M_\\odot}$')
+	plt.hist(bend[low], normed=True, alpha=.8, bins=11*(np.arange(13)-1), label='$M_{500} < 1.2\\times 10^{15}~M_\\odot}$')
+	plt.plot(0, 0, color='w', label='$p=%f$'%ad.significance_level)
 	plt.legend()
-	plt.xlabel('using_peaks.bending_excess')
+	plt.xlabel('Excess bending angle (deg)')
 	plt.ylabel('Normalized count')
-	plt.title('Excesss bending distribution by mass')
+
+def mass_pop_comp():
+
+	bent_cut = get_bent_cut()
+	
+	bent = []
+	straight = []
+	for i in bending_15.find(total_cuts):
+		if i['using_peaks']['bending_excess']>bent_cut:
+			bent.append(i['WHL']['M500'])
+		else:
+			straight.append(i['WHL']['M500'])
+	
+	ad = stats.anderson_ksamp([bent, straight])
+	print 'p =', ad.significance_level
+	print z_score(ad.significance_level), 'sigma'
 
 def bcg_comp():
 	
 	sep = []
 	bend = []
-	for i in bending_15.find(total_cuts):
+	for i in bending_15.find(total_cuts.copy()):
 		sep.append(i['WHL']['r/r500'])
 		bend.append(i['using_peaks']['bending_excess'])
 	
@@ -1466,48 +1742,58 @@ def bcg_comp():
 	print 'p =', ad.significance_level
 	print z_score(ad.significance_level), 'sigma'
 	
-	plt.hist(bend[bcg], normed=True, alpha=.8, bins=10*np.arange(15), label='r/r500 < 0.01')
-	plt.hist(bend[outer], normed=True, alpha=.8, bins=10*np.arange(15), label='1.5 < r/r500 < 10')
+	plt.hist(bend[bcg], normed=True, alpha=.8, bins=10*np.arange(15), label='$r/r_{500} < 0.01$')
+	plt.hist(bend[outer], normed=True, alpha=.8, bins=10*np.arange(15), label='$1.5 < r/r_{500} < 10$')
 	plt.plot(0, 0, color='w', label='p=%.5f'%ad.significance_level)
 	plt.legend()
-	plt.xlabel('using_peaks.bending_excess')
+	plt.xlabel('Excess bending angle (deg)')
 	plt.ylabel('Normalized count')
-	plt.title('Excess bending distribution by separation')
 
-def asym_comp():
+def asym_comp(align='radial', update_cut=None):
+
+	if update_cut is not None:
+		get_asymmetry(cut)
 
 	params = total_cuts.copy()
-	params['WHL.aligned'] = 'radial'
+	params['WHL.alignment'] = align
+	params['WHL.population'] = 'inner'
+	print 'Alignment:', align
 
 	sep = []
 	asym = []
 	p = []
+	grad_p = []
 	for i in bending_15.find(params):
 		sep.append(i['WHL']['r/r500'])
 		asym.append(i['using_contour']['asymmetry'])
 		p.append(i['WHL']['P'])
+		grad_p.append(i['WHL']['grad_P'])
 
 	sep = np.array(sep)
 	asym = np.array(asym)
 	p = np.array(p)
+	grad_p = np.array(grad_p)
 
-	sep_i = sep[np.logical_and(sep>0.01, sep<1.5)]
-	sep_o = sep[sep>1.5]
-	inter = asym[np.logical_and(sep>0.01, sep<1.5)]
-	outer = asym[sep>1.5]
-
-	s = stats.spearmanr(sep_i, inter)
-
-	print s, z_score(s.pvalue)
+	print 'n:', len(sep)
 	
-	s = stats.spearmanr(p[np.logical_and(sep>0.01, sep<1.5)], inter)
+	popt, pcov = curve_fit(lambda x, a, b: a*x+b, sep, asym)
+	perr = np.sqrt(np.diag(pcov))
+	print 'slope:', popt[0], '+-', perr[0]
+
+	s = stats.spearmanr(sep, asym)
+	print 'r/r500:', s.pvalue, z_score(s.pvalue)
+
+	s = stats.spearmanr(p, asym)
+	#s = stats.spearmanr(p[p>5e-4)], asym[p>5e-4)])
+	print 'P:', s.pvalue, z_score(s.pvalue)
 	
-	print s, z_score(s.pvalue)
+	s = stats.spearmanr(grad_p, asym)
+	print 'grad_P:', s.pvalue, z_score(s.pvalue)
 
 def excess_comp():
 
 	params = total_cuts.copy()
-	params['WHL.population'] = 'intermediate'
+	params['WHL.population'] = 'inner'
 
 	sep = []
 	bend = []
@@ -1522,43 +1808,98 @@ def excess_comp():
 
 	print s, z_score(s.pvalue)
 
-def excess(bending):
-	diff = bending**2 - median_bend**2
+def bend_corr_comp():
+
+	params = total_cuts.copy()
+	params['WHL.population'] = 'outer'
+	
+	morph = []
+	bend = []
+	size = []
+	for source in bending_15.find(params):
+		morph.append(2 if source['RGZ']['morphology']=='double' else 3)
+		bend.append(source['using_peaks']['bending_angle'])
+		size.append(source['RGZ']['size_arcmin'])
+	
+	morph = np.array(morph)
+	bend = np.array(bend)
+	size = np.array(size)
+	
+	ad = stats.anderson_ksamp([bend[morph==2], bend[morph==3]])
+	print 'p =', ad.significance_level
+	print z_score(ad.significance_level), 'sigma'
+	
+	plt.hist(bend[morph==2], normed=True, alpha=0.8, label='double', bins=20)
+	plt.hist(bend[morph==3], normed=True, alpha=0.8, label='triple', bins=20)
+	plt.xlabel(get_label('using_peaks.bending_angle'))
+	plt.ylabel('Normalized count')
+	plt.legend(loc='upper right')
+	
+	min_size = max(min(size[morph==2]), min(size[morph==3]))
+	max_size = min(max(size[morph==2]), max(size[morph==3]))
+	x = np.random.uniform(min_size, max_size, 1000)
+	f1 = lambda x: 9.7*np.exp(-1.5*(x-0.54))
+	f2 = lambda x: 7.6*np.exp(-1.3*(x-0.77))
+
+def excess(bending, baseline):
+	diff = bending**2 - baseline**2
 	return np.sign(diff) * np.sqrt(np.abs(diff))
 
-def get_bending_excess(coll=bending_15):
-	for i in coll.find():
-		bend = i['using_peaks']['bending_corrected']
-		bending_15.update({'_id':i['_id']}, {'$set':{'using_peaks.bending_excess':excess(bend)}})
+def get_median_bend(params=total_cuts.copy()):
+	params['WHL.population'] = 'outer'
+	bend = []
+	for i in bending_15.find(params):
+		bend.append(i['using_peaks']['bending_corrected'])
+	return np.median(bend)
 
-def get_asymmetry(coll=bending_15):
+def get_bending_excess(params=total_cuts.copy()):
+	median_bend = get_median_bend(params)
+	for i in bending_15.find(params):
+		bend = i['using_peaks']['bending_corrected']
+		bending_15.update({'_id':i['_id']}, {'$set':{'using_peaks.bending_excess':excess(bend, median_bend)}})
+	
+	for i in bent_sources.find(params):
+		bend = i['using_peaks']['bending_corrected']
+		bent_sources.update({'_id':i['_id']}, {'$set':{'using_peaks.bending_excess':excess(bend, median_bend)}})
+
+def get_asymmetry(cut, coll=bending_15, params=total_cuts.copy()):
 	for method in ['using_peaks', 'using_contour']:
 		print method
-		for i in coll.find():
-			angle_c = coord.Angle(i['WHL']['position_angle']*u.deg)
-			angle_0 = coord.Angle(i[method]['pos_angle_0']*u.deg)
-			angle_1 = coord.Angle(i[method]['pos_angle_1']*u.deg)
-			diff_0 = min( (angle_c-angle_0).wrap_at('360d'), (angle_0-angle_c).wrap_at('360d') )
-			diff_1 = min( (angle_c-angle_1).wrap_at('360d'), (angle_1-angle_c).wrap_at('360d') )
-			if diff_0 < diff_1:
-				inner = i[method]['tail_deg_0']
-				outer = i[method]['tail_deg_1']
-			else:
-				inner = i[method]['tail_deg_1']
-				outer = i[method]['tail_deg_0']
-			if (diff_0.degree<45 and diff_1.degree>135) or (diff_1.degree<45 and diff_0.degree>135):
-				alignment = 'radial'
-			elif (45<diff_0.degree<135) and (45<diff_1.degree<135):
-				alignment = 'tangential'
-			else:
-				alignment = 'other'
+		if 'WHL' in coll.find_one(params):
+			for i in coll.find(params):
+				angle_c = coord.Angle(i['WHL']['position_angle']*u.deg)
+				angle_0 = coord.Angle(i[method]['pos_angle_0']*u.deg)
+				angle_1 = coord.Angle(i[method]['pos_angle_1']*u.deg)
+				diff_0 = min( (angle_c-angle_0).wrap_at('360d'), (angle_0-angle_c).wrap_at('360d') )
+				diff_1 = min( (angle_c-angle_1).wrap_at('360d'), (angle_1-angle_c).wrap_at('360d') )
+				if diff_0 < diff_1:
+					inner = i[method]['tail_deg_0']
+					outer = i[method]['tail_deg_1']
+				else:
+					inner = i[method]['tail_deg_1']
+					outer = i[method]['tail_deg_0']
+				if (diff_0.degree<cut and diff_1.degree>180-cut) or (diff_1.degree<cut and diff_0.degree>180-cut):
+					alignment = 'radial'
+				elif cut<diff_0.degree and diff_0.degree<180-cut and cut<diff_1.degree and diff_1.degree<180-cut:
+					alignment = 'tangential'
+				else:
+					alignment = 'other'
 			
-			if method == 'using_contour':
-				bending_15.update({'_id':i['_id']}, {'$set':{method+'.asymmetry':inner/outer, 'WHL.aligned':alignment}})
-			else:
-				bending_15.update({'_id':i['_id']}, {'$set':{method+'.asymmetry':inner/outer}})
+				if method == 'using_contour':
+					coll.update({'_id':i['_id']}, {'$set':{method+'.asymmetry':inner/outer, 'WHL.alignment':alignment}})
+				else:
+					coll.update({'_id':i['_id']}, {'$set':{method+'.asymmetry':inner/outer}})
+		else:
+			for i in coll.find(params):
+				if np.random.randint(0,2):
+					inner = i[method]['tail_deg_0']
+					outer = i[method]['tail_deg_1']
+				else:
+					inner = i[method]['tail_deg_1']
+					outer = i[method]['tail_deg_0']
+				coll.update({'_id':i['_id']}, {'$set':{method+'.asymmetry':inner/outer}})
 
-def pressure_calculation():
+def pressure_calc():
 	'''Calculates the pressure (in keV/cm^3) using Arnaud et al. 2010'''
 	
 	h70 = float(cosmo.H(0) / (70.*u.km/u.Mpc/u.s) )
@@ -1576,7 +1917,18 @@ def pressure_calculation():
 		x = source['WHL']['r/r500']
 		z = source['WHL']['zbest']
 		M500 = source['WHL']['M500']
-		bending_15.update({'_id':source['_id']}, {'$set':{'WHL.P500':P500(z,M500), 'WHL.P':P(x,z,M500)}})
+
+		theta0 = np.abs(source['using_peaks']['pos_angle_0'] - source['WHL']['position_angle'])
+		theta1 = np.abs(source['using_peaks']['pos_angle_1'] - source['WHL']['position_angle'])
+		if theta0>90:
+			theta0 = 180 - theta0
+		if theta1>90:
+			theta1 = 180 - theta1
+		dx0 = source['using_contour']['tail_kpc_0'] * np.cos(theta0) / 1000. / source['WHL']['r500']
+		dx1 = source['using_contour']['tail_kpc_1'] * np.cos(theta1) / 1000. / source['WHL']['r500']
+		dP = np.abs( (P(np.abs(x+dx0),z,M500) - P(np.abs(x+dx1),z,M500)) / (dx0 - dx1) )
+		
+		bending_15.update({'_id':source['_id']}, {'$set':{'WHL.P500':P500(z,M500), 'WHL.P':P(x,z,M500), 'WHL.grad_P':dP}})
 
 def get_fits(params, outd):
 	import shutil
@@ -1605,16 +1957,822 @@ def get_fits(params, outd):
 		fits_loc = pathdict[fid]
 		shutil.copy(fits_loc, outd+fid+'.fits')
 
-def flag_dups(coll=bending_15, params={}):
+def make_sdss_sample():
 	
-	coll.update({}, {'$set': {'RGZ.duplicate_flag':0}}, multi=True)
+	if not sdss_sample.count():
+		sdss_sample.create_index('bestObjID', unique=True)
+	else:
+		print '%i entries already in catalog' % sdss_sample.count()
 	
-	params['RGZ.duplicate_sources'] = {'$exists':True}
-	for source in coll.find(params):
-		dups = source['RGZ']['duplicate_sources']
-		cid = source['RGZ']['RGZ_id']
-		flag = int(cid != min(dups['exact_duplicate']))
-		coll.update({'_id':source['_id']}, {'$set':{'RGZ.duplicate_flag':flag}})
+	params = total_cuts.copy()
+	params['best.ra'] = {'$gt':100, '$lt':275}
+
+	zs, ras, decs = [], [], []
+	for source in bending_15.find(params):
+		zs.append(source['best']['redshift'])
+		ras.append(source['best']['ra'])
+		decs.append(source['best']['dec'])
+
+	zs = np.array(zs)
+	ras = np.array(ras)
+	decs = np.array(decs)
+
+	for x in [zs, ras, decs]:
+		x.sort()
+
+	zs_cdf = np.arange(len(zs))/float(len(zs)-1)
+	zs_cdf_inv = interp1d(zs_cdf, zs)
+
+	ras_cdf = np.arange(len(ras))/float(len(ras)-1)
+	ras_cdf_inv = interp1d(ras_cdf, ras)
+
+	decs_cdf = np.arange(len(decs))/float(len(decs)-1)
+	decs_cdf_inv = interp1d(decs_cdf, decs)
+
+	for i in range(20000):
+
+		probs = np.random.uniform(0,1,3)
+		z = zs_cdf_inv(probs[0])
+		ra = ras_cdf_inv(probs[1])
+		dec = decs_cdf_inv(probs[2])
+
+		query = '''select top 1 s.bestObjID, s.ra, s.dec, s.z, s.zErr,
+			   		g.cModelMag_u, g.cModelMag_g, g.cModelMag_r, g.cModelMag_i, g.cModelMag_z
+			   from SpecObj as s
+			       join GalaxyTag as g on s.bestObjID=g.objID
+			   where s.class="GALAXY" and s.zWarning=0 and (s.z between %f and %f) and (s.ra between %f and %f) and 
+				(s.dec between %f and %f)''' % (0.99*z, 1.01*z, 0.99*ra, 1.01*ra, 0.99*dec, 1.01*dec)
+		df = SDSS_select(query)
+		if len(df):
+			entry = {}
+			for key in df:
+				entry[key] = df[key][0]
+			try:
+				sdss_sample.insert(entry)
+			except pymongo.errors.DuplicateKeyError as e:
+				print e
+				pass
+
+		print '%i/%i' % (sdss_sample.count(), i+1)
+
+def sdss_patch():
+	for s in sdss_sample.find({'cModelMag_u':{'$exists':False}}).batch_size(50):
+		query = '''select cModelMag_u, cModelMag_g, cModelMag_r, cModelMag_i, cModelMag_z
+				   from GalaxyTag as g
+				   where objID=%s''' % s['bestObjID']
+		df = SDSS_select(query)
+		update = {}
+		try:
+			for key in df:
+				update[key] = df[key][0]
+			sdss_sample.update({'_id':s['_id']}, {'$set':update})
+		except IndexError:
+			pass
+	
+	for s in sdss_sample.find():
+		xmatch.update({'SDSS._id':s['_id']}, {'$set':{'SDSS':s}})
+
+def plot_sdss_sample():
+
+	params = total_cuts.copy()
+	params['best.ra'] = {'$gt':100, '$lt':275}
+	params['SDSS.i'] = {'$exists':True}
+
+	zs, ras, decs, mags = [], [], [], []
+	for source in bending_15.find(params):
+		zs.append(source['best']['redshift'])
+		ras.append(source['best']['ra'])
+		decs.append(source['best']['dec'])
+		mags.append(source['SDSS']['i'])
+
+	z_r, ra_r, dec_r, mag_r = [], [], [], []
+	for source in sdss_sample.find({'cModelMag_i':{'$exists':True}}):
+		z_r.append(source['z'])
+		ra_r.append(source['ra'])
+		dec_r.append(source['dec'])
+		mag_r.append(source['cModelMag_i'])
+
+	fig, ax = plt.subplots(1)
+	ax.hist(zs, bins=15, alpha=.8, normed=True, label='Bending sample')
+	ax.hist(z_r, bins=15, alpha=.8, normed=True, label='SDSS sample')
+	ax.legend()
+	ax.set_xlabel('z')
+	ax.set_ylabel('Normalized count')
+	ax.set_title('Redshift distribution (northern region)')
+	
+	fig, ax = plt.subplots(1)
+	ax.hist(mags, bins=15, alpha=.8, normed=True, label='Bending sample')
+	ax.hist(mag_r, bins=15, alpha=.8, normed=True, label='SDSS sample')
+	ax.legend()
+	ax.set_xlabel('i-band (mag)')
+	ax.set_ylabel('Normalized count')
+	ax.set_title('i-band magnitude distribution (northern region)')
+
+	fig, ax = plt.subplots(1)
+	ax.scatter(ras, decs, s=1, alpha=.8, label='Bending sample')
+	ax.scatter(ra_r, dec_r, s=1, alpha=.8, label='SDSS sample')
+	ax.legend()
+	ax.set_xlabel('RA (deg)')
+	ax.set_ylabel('Dec (deg)')
+	ax.set_title('Skymap of sources (northern region)')
+
+def sdss_xmatch():
+
+	count = 0
+	for source in sdss_sample.find().batch_size(50):
+		count += 1
+		ir = coord.SkyCoord(source['ra'], source['dec'], unit=(u.deg,u.deg), frame='icrs')
+		cluster_w = get_whl(ir, source['z'], source['zErr'], 15, 0.04*(1+source['z']))
+		if cluster_w is not None:
+			whl_prop = {}
+			c_pos = coord.SkyCoord(cluster_w['RAdeg'], cluster_w['DEdeg'], unit=(u.deg,u.deg), frame='icrs')
+			c_sep_arc = c_pos.separation(ir)
+			zbest = cluster_w['zspec'] if 'zspec' in cluster_w else cluster_w['zphot']
+			c_sep_mpc = float(cosmo.angular_diameter_distance(zbest)/u.Mpc * c_sep_arc.to(u.rad)/u.rad)
+			c_pos_angle = c_pos.position_angle(ir)
+			r = c_sep_mpc/cluster_w['r500']
+			if r < 0.01:
+				pop = 'BCG'
+			elif r >= 1.5:
+				pop = 'outer'
+			else:
+				pop = 'inner'
+			whl_prop = {'ra':c_pos.ra.deg, 'dec':c_pos.dec.deg, 'separation_deg':c_sep_arc.deg, 'separation_Mpc':c_sep_mpc, 'r/r500':r, 'population':pop, 'zbest':zbest}
+			for key in ['_id', 'N500', 'N500sp', 'RL*500', 'name', 'r500', 'zphot', 'zspec', 'M500']:
+				if key in cluster_w:
+					whl_prop[key] = cluster_w[key]
+			entry = {'SDSS':source, 'WHL':whl_prop}
+			print '%i/%i' % (xmatch.count(), count)
+			xmatch.insert(entry)
+
+def sdss_density():
+	params = total_cuts.copy()
+	#params['SDSS.spec_redshift'] = {'$exists':True}
+	
+	f1, (ax1, ax2) = plt.subplots(1, 2, sharey=True, subplot_kw=dict(adjustable='datalim', aspect='equal'))
+	ax = f1.add_subplot(111, frameon=False)
+	ax.tick_params(labelcolor='none', top='off', bottom='off', left='off', right='off')
+	f2, ax0 = plt.subplots(1)
+
+	sep, n, bins = r500_hist(bending_15, params, 20)
+	bin_area = np.pi * np.array( [np.square(bins[0])] + [np.square(bins[i+1])-np.square(bins[i]) for i in np.arange(len(bins)-1)] )
+	density = n/bin_area
+	err = np.sqrt(n)/bin_area
+	ax1.errorbar(np.log10(bins), np.log10(density), yerr=np.vstack((np.log10(density+err) - np.log10(density), np.log10(density) - np.log10(density-err))), fmt='o', ms=4, label='RGZ')
+	logx = np.log10(bins[1:-3])
+	logy = np.log10(density[1:-3])
+	logyerr = err[1:-3] / density[1:-3]
+	if sum(np.isnan(logyerr)):
+		logx = logx[np.logical_not(np.isnan(logyerr))]
+		logy = logy[np.logical_not(np.isnan(logyerr))]
+		logyerr = logyerr[np.logical_not(np.isnan(logyerr))]
+	
+	fitfunc = lambda p, x: p[0]*x + p[1]
+	errfunc = lambda p, x, y, err: (y - fitfunc(p, x)) / err
+	out = leastsq(errfunc, [-1,1], args=(logx, logy, logyerr), full_output=1)
+	index, amp = out[0]
+	index_err = np.sqrt(out[1][1][1])
+	amp_err = np.sqrt(out[1][0][0])*amp
+	ax1.plot(np.log10(bins), index*np.log10(bins)+amp, c='k', label='$\\alpha = $\n$  %.2f\pm%.2f$'%(index,index_err))
+	err_max = np.maximum( (index+index_err)*np.log10(bins)+(amp+amp_err), (index-index_err)*np.log10(bins)+(amp+amp_err) )
+	err_min = np.minimum( (index+index_err)*np.log10(bins)+(amp-amp_err), (index-index_err)*np.log10(bins)+(amp-amp_err) )
+	#ax1.fill_between(np.log10(bins), err_min, err_max, color='k', lw=0, alpha=.5, label='$\\alpha = $\n$ %.2f\pm%.2f$'%(index,index_err))
+	ax1.legend(loc='upper right')
+	
+	ax0.errorbar(np.log10(bins), np.log10(density), yerr=np.vstack((np.log10(density+err) - np.log10(density), np.log10(density) - np.log10(density-err))), fmt='o', ms=4, label='RGZ')
+	ax0.plot(np.log10(bins), index*np.log10(bins)+amp, c='k', label='$\\alpha = $\n$  %.2f\pm%.2f$'%(index,index_err))
+	
+	r_bcgs = n[0]
+	r_cluster = sum(n[bins<10])
+	r_bcg_ratio = 1.*r_bcgs/r_cluster
+	r_bcg_err = r_bcg_ratio * (1./np.sqrt(r_bcgs) + 1./np.sqrt(r_cluster))
+	print 'RGZ BCGs: %i/%i (%.1f pm %.1f)%%' % (r_bcgs, r_cluster, 100*r_bcg_ratio, 100*r_bcg_err)
+	r_within_r500 = sum(n[bins<1][1:])
+	r_cluster_no_bcgs = sum(n[bins<10][1:])
+	r_within_ratio = 1.*r_within_r500/r_cluster_no_bcgs
+	r_within_err = r_within_ratio * (1./np.sqrt(r_within_r500) + 1./np.sqrt(r_cluster_no_bcgs))
+	print 'RGZ r500: %i/%i (%.1f pm %.1f)%%' % (r_within_r500, r_cluster_no_bcgs, 100*r_within_ratio, 100*r_within_err)
+
+	sep, n, bins = r500_hist(xmatch, {}, 20)
+	bin_area = np.pi * np.array( [np.square(bins[0])] + [np.square(bins[i+1])-np.square(bins[i]) for i in np.arange(len(bins)-1)] )
+	density = n/bin_area
+	err = np.sqrt(n)/bin_area
+	ax2.errorbar(np.log10(bins), np.log10(density), yerr=np.vstack((np.log10(density+err) - np.log10(density), np.log10(density) - np.log10(density-err))), fmt='o', ms=4, label='SDSS')
+	logx = np.log10(bins[1:-3])
+	logy = np.log10(density[1:-3])
+	logyerr = err[1:-3] / density[1:-3]
+	out = leastsq(errfunc, [-1,1], args=(logx, logy, logyerr), full_output=1)
+	index, amp = out[0]
+	index_err = np.sqrt(out[1][1][1])
+	amp_err = np.sqrt(out[1][0][0])*amp
+	ax2.plot(np.log10(bins), index*np.log10(bins)+amp, c='k', label='$\\alpha = $\n$  %.2f\pm%.2f$'%(index,index_err))
+	err_max = np.maximum( (index+index_err)*np.log10(bins)+(amp+amp_err), (index-index_err)*np.log10(bins)+(amp+amp_err) )
+	err_min = np.minimum( (index+index_err)*np.log10(bins)+(amp-amp_err), (index-index_err)*np.log10(bins)+(amp-amp_err) )
+	#ax2.fill_between(np.log10(bins), err_min, err_max, color='k', lw=0, alpha=.5, label='$\\alpha = $\n$ %.2f\pm%.2f$'%(index,index_err))
+	ax2.legend(loc='upper right')
+	
+	ax0.errorbar(np.log10(bins), np.log10(density), yerr=np.vstack((np.log10(density+err) - np.log10(density), np.log10(density) - np.log10(density-err))), fmt='o', ms=4, label='SDSS')
+	ax0.plot(np.log10(bins), index*np.log10(bins)+amp, c='k', ls='--', label='$\\alpha = $\n$  %.2f\pm%.2f$'%(index,index_err))
+	ax0.legend(loc='upper right')
+	
+	s_bcgs = n[0]
+	s_cluster = sum(n[bins<10])
+	s_bcg_ratio = 1.*s_bcgs/s_cluster
+	s_bcg_err = s_bcg_ratio * (1./np.sqrt(s_bcgs) + 1./np.sqrt(s_cluster))
+	print 'SDSS BCGs: %i/%i (%.1f pm %.1f)%%' % (s_bcgs, s_cluster, 100*s_bcg_ratio, 100*s_bcg_err)
+	s_within_r500 = sum(n[bins<1][1:])
+	s_cluster_no_bcgs = sum(n[bins<10][1:])
+	s_within_ratio = 1.*s_within_r500/s_cluster_no_bcgs
+	s_within_err = s_within_ratio * (1./np.sqrt(s_within_r500) + 1./np.sqrt(s_cluster_no_bcgs))
+	print 'SDSS r500: %i/%i (%.1f pm %.1f)%%' % (s_within_r500, s_cluster_no_bcgs, 100*s_within_ratio, 100*s_within_err)
+	
+	ax.set_xlabel(get_label('WHL.r/r500', True))
+	ax1.set_ylabel('$\\log_{10}$ (Surface density of galaxies [$r_{500}^{-2}$])')
+	#ax.set_title('Surface density vs. separation')
+	f1.tight_layout()
+	
+	ax0.set_xlabel(get_label('WHL.r/r500', True))
+	ax0.set_ylabel('$\\log_{10}$ (Surface density of galaxies [$r_{500}^{-2}$])')
+	#ax0.set_title('Surface density vs. separation')
+	f2.tight_layout()
+	
+	r_s_bcgs = r_bcg_ratio / s_bcg_ratio
+	r_s_bcgs_err = r_s_bcgs * (r_bcg_err/r_bcg_ratio + s_bcg_err/s_bcg_ratio)
+	r_s_within = r_within_ratio / s_within_ratio
+	r_s_within_err = r_s_within * (r_within_err/r_within_ratio + s_within_err/s_within_ratio)
+	print 'BCG excess: %.3f pm %.3f\nr500 excess: %.3f pm %.3f' % (r_s_bcgs, r_s_bcgs_err, r_s_within, r_s_within_err)
+
+def fractional_bent():
+	
+	params = total_cuts.copy()
+	params['best.redshift']['$lte'] = 0.6
+
+	sep, bend = [], []	
+	for source in bending_15.find(total_cuts.copy()):
+		sep.append(source['WHL']['r/r500'])
+		bend.append(source['using_peaks']['bending_excess'])
+
+	sep_field, bend_field = [], []
+	for source in bent_sources.find(total_cuts.copy()):
+		if bending_15.find_one({'RGZ.RGZ_id':source['RGZ']['RGZ_id']}) is None:
+			sep_field.append(99)
+			bend_field.append(source['using_peaks']['bending_excess'])
+
+	sep = np.array(sep+sep_field)
+	bend = np.array(bend+bend_field)
+
+	straight = bend<0
+	marginal = np.logical_and(0<bend, bend<5)
+	bent = bend>5
+	inner = sep<1.5#np.logical_and(sep>0.01, sep<1.5)
+	cluster = sep<10
+	
+	#bins = histedges_equalN(bend[np.logical_and(bent,cluster)], 10)
+
+	fig, ax = plt.subplots(1)
+	n_all, bins, _ = ax.hist(np.log10(bend[bent]), bins=15, label='All sources')
+	n_all = np.insert(n_all, 0, [sum(straight), sum(marginal)])
+	n_inner, _, _ = ax.hist(np.log10(bend[np.logical_and(bent,inner)]), bins=bins, label='Sources within 1.5 r500')
+	n_inner = np.insert(n_inner, 0, [sum(np.logical_and(straight,inner)), sum(np.logical_and(marginal,inner))])
+	ax.set_xlabel('log(Bending excess [deg])')
+	ax.set_ylabel('Count')
+	#ax.set_title('Distributions of bending excess')
+	ax.legend()
+	plt.tight_layout()
+
+	fig, ax = plt.subplots(1)
+	lin_bins = np.insert(pow(10,(bins[:-1]+bins[1:])/2.), 0, [0, np.median(bend[marginal])])
+	n_inner = np.array([ sum(bend[inner]>i) for i in lin_bins ], dtype=float)
+	n_all = np.array([ sum(bend>i) for i in lin_bins ], dtype=float)
+	ratio = n_inner/n_all
+	err = ratio * np.sqrt(1/n_inner + 1/n_all)
+	plt.errorbar(lin_bins, ratio, yerr=err)
+	ax.set_xlabel('Excess bending angle (deg)')
+	ax.set_ylabel('Fraction within $1.5~r/r_{500}$')
+	#ax.set_title('Fraction of sources in BCG/inner regions of clusters')
+	plt.tight_layout()
+
+def histedges_equalN(x, nbin):
+	npt = len(x)
+	return np.interp(np.linspace(0, npt, nbin + 1), np.arange(npt), np.sort(x))
+
+def import_env_csv1():
+	params = total_cuts.copy()
+	count = 0
+	env = {}
+	dirname = '/home/garon/Documents/RGZdata/bending/'
+	for filename in ['distantstraight_env.csv', 'distantbent_env.csv']:
+		with open(dirname+filename, 'r') as f:
+			r = csv.reader(f)
+			r.next()
+			for objID, ra, dec, z, n_objID, n_ra, n_dec, n_z, z_type, cModelMag_r, fracDeV_r, dist in r:
+				ra, dec, z = float(ra), float(dec), float(z)
+				params['best.ra'] = {'$gte':ra-1e-3, '$lte':ra+1e-3}
+				params['best.dec'] = {'$gte':dec-1e-3, '$lte':dec+1e-3}
+				params['best.redshift'] = {'$gte':z-1e-3, '$lte':z+1e-3}
+				source = bending_15.find_one(params)
+				if source is not None:
+					objID = source['SDSS']['objID']
+					if objID not in env:
+						env[objID] = {'objID':objID, 'ra':ra, 'dec':dec, 'z':z, 'bending_excess':source['using_peaks']['bending_excess'], 'neighbors':{}, 'r/r500':source['WHL']['r/r500']}
+					if np.abs(z-float(n_z))/(1+z) <= 0.04:
+						ADD = float(cosmo.angular_diameter_distance(z)/u.Mpc)
+						env[objID]['neighbors'][n_objID] = {'ra':float(n_ra), 'dec':float(n_dec), 'z':float(n_z), 'z_type':z_type, 'cModelMag_r':float(cModelMag_r), 'fracDeV_r':float(fracDeV_r), 'dist_deg':float(dist), 'dist_Mpc':float(dist)*np.pi/180*ADD}
+					if len(env)>count:
+						count += 1
+						print count
+	
+	db.drop_collection('distant_sources')
+	distant_sources.create_index('objID', unique=True)
+	for key in env:
+		distant_sources.insert(env[key])
+
+def import_env_csv2():
+	count = 0
+	env = {}
+	dirname = '/home/garon/Documents/RGZdata/bending/'
+	for filename in ['more_source_envPhotoz.csv']:
+		with open(dirname+filename, 'r') as f:
+			r = csv.reader(f)
+			r.next()
+			for objID, ra, dec, z, bending, r500, n_objID, n_ra, n_dec, n_z, z_type, cModelMag_r, fracDeV_r, dist in r:
+				ra, dec, z, bending, r500 = float(ra), float(dec), float(z), float(bending), float(r500)
+				if objID not in env:
+					env[objID] = {'objID':objID, 'ra':ra, 'dec':dec, 'z':z, 'bending_excess':bending, 'r/r500':r500, 'neighbors':{}}
+				if objID != n_objID and np.abs(z-float(n_z))/(1+z) <= 0.04:
+					ADD = float(cosmo.angular_diameter_distance(z)/u.Mpc)
+					env[objID]['neighbors'][n_objID] = {'ra':float(n_ra), 'dec':float(n_dec), 'z':float(n_z), 'z_type':z_type, 'cModelMag_r':float(cModelMag_r), 'fracDeV_r':float(fracDeV_r), 'dist_deg':float(dist), 'dist_Mpc':float(dist)*np.pi/180*ADD}
+				if len(env)>count:
+					count += 1
+					print count
+	
+	#db.drop_collection('distant_sources')
+	#distant_sources.create_index('objID', unique=True)
+	for key in env:
+		distant_sources.insert(env[key])
+
+def import_env():
+	import_env_csv1()
+	import_env_csv2()
+	for source in distant_sources.find({'r/r500':{'$exists':False}}):
+		s2 = bending_15.find_one({'SDSS.objID':source['objID']})
+		distant_sources.update({'_id':source['_id']}, {'$set':{'r/r500':s2['WHL']['r/r500']}})
+
+def find_more_sources():
+	bent_cut = get_bent_cut()
+	with open('more_sources.csv', 'w') as f:
+		print >> f, 'objID,ra,dec,z,bending,r/r500'
+		count = distant_sources.find({'bending_excess':{'$gt':bent_cut}}).count()
+		for source in bending_15.find(total_cuts):
+			if source['using_peaks']['bending_excess']>30 and source['WHL']['r/r500']>6 and not distant_sources.find({'objID':source['SDSS']['objID']}).count():
+				print >> f, '%s,%s,%s,%s,%s,%s' % (source['SDSS']['objID'], source['best']['ra'], source['best']['dec'], source['best']['redshift'], source['using_peaks']['bending_excess'], source['WHL']['r/r500'])
+				count += 1
+				if count>=150:
+					break
+	print count, 'bent'
+	
+	with open('more_sources.csv', 'a') as f:
+		count = distant_sources.find({'bending_excess':{'$lt':bent_cut}}).count()
+		for source in bending_15.find(total_cuts):
+			if source['using_peaks']['bending_excess']<10 and 6<source['WHL']['r/r500']<15 and not distant_sources.find({'objID':source['SDSS']['objID']}).count():
+				print >> f, '%s,%s,%s,%s,%s,%s' % (source['SDSS']['objID'], source['best']['ra'], source['best']['dec'], source['best']['redshift'], source['using_peaks']['bending_excess'], source['WHL']['r/r500'])
+				count += 1
+				if count>=150:
+					break
+	print count, 'straight'
+
+def distant_env(bin_count=8, inner_cut=0.05, outer_cut=0.35):
+	bent_cut = get_bent_cut()
+	dist_bent, dist_straight, sep = [], [], []
+	for source in distant_sources.find():
+		if source['bending_excess']>bent_cut:
+			for neighbor in source['neighbors']:
+				dist_bent.append(source['neighbors'][neighbor]['dist_Mpc'])
+		else:
+			for neighbor in source['neighbors']:
+				dist_straight.append(source['neighbors'][neighbor]['dist_Mpc'])
+		sep.append(source['r/r500'])
+	
+	dist_bent = np.array(dist_bent)
+	dist_bent = dist_bent[dist_bent>inner_cut]
+	dist_straight = np.array(dist_straight)
+	dist_straight = dist_straight[dist_straight>inner_cut]
+	for dist in [dist_bent, dist_straight]:
+		dist.sort()
+
+	n_bent = distant_sources.find({'bending_excess':{'$gt':bent_cut}}).count()
+	n_straight = distant_sources.find({'bending_excess':{'$lt':bent_cut}}).count()
+	density_bent = stats.rankdata(dist_bent) / (np.pi*dist_bent**2) / n_bent
+	density_straight = stats.rankdata(dist_straight) / (np.pi*dist_straight**2) / n_straight
+
+	plt.figure()
+	plt.plot(dist_bent, density_bent, label='Bent sources')
+	plt.plot(dist_straight, density_straight, ls='--', label='Straight sources')
+	plt.legend()
+	plt.xlabel('Projected distance from radio galaxy (Mpc)')
+	plt.ylabel('Companion density (Mpc$^{-2}$)')
+	plt.tight_layout()
+	
+	inner, outer = 2., 3.
+	mask = np.logical_and(inner<dist_bent, dist_bent<outer)
+	bg_count_bent = sum(mask)
+	bg_bent = bg_count_bent / np.pi / (outer**2-inner**2)# / n_bent
+	mask = np.logical_and(2<dist_straight, dist_straight<3)
+	bg_count_straight = sum(mask)
+	bg_straight = bg_count_straight / np.pi / (outer**2-inner**2)# / n_straight
+
+	plt.figure()
+	per_bin_bent, bins, _ = plt.hist(dist_bent, bins=np.linspace(inner_cut, 2, bin_count+1))
+	bin_bg_bent = bg_bent*np.pi*(bins[1:]**2-bins[:-1]**2)
+	frac_bent = per_bin_bent / bin_bg_bent
+	frac_err_bent = frac_bent * (1./np.sqrt(per_bin_bent) + 1./np.sqrt(bg_bent))
+	per_bin_straight, _, _ = plt.hist(dist_straight, bins=bins)
+	bin_bg_straight = bg_straight*np.pi*(bins[1:]**2-bins[:-1]**2)
+	frac_straight = per_bin_straight / bin_bg_straight
+	frac_err_straight = frac_straight * (1./np.sqrt(per_bin_straight) + 1./np.sqrt(bg_straight))
+	
+	plt.figure()
+	plt.errorbar(bins[1:], frac_bent, frac_err_bent, label='High bending sources')
+	plt.errorbar(bins[1:]-0.01, frac_straight, frac_err_straight, ls='--', label='Low bending sources')
+	plt.legend(loc='upper right')
+	plt.xlabel('Projected distance from radio galaxy (Mpc)')
+	plt.ylabel('Normalized surface density')
+	plt.tight_layout()
+	
+	# 2D statistics
+	area = np.pi * (outer_cut**2-inner_cut**2)
+	
+	cum_bent = sum(dist_bent<outer_cut)
+	cum_excess_bent = cum_bent - bg_bent*area
+	err_bent = np.sqrt(cum_bent+bg_bent*area**2)
+	frac_bent = (cum_excess_bent/area) / bg_bent
+	frac_excess_bent = frac_bent - 1.
+	frac_err_bent = frac_bent * (err_bent/cum_excess_bent + 1./np.sqrt(bg_count_bent))
+	
+	cum_straight = sum(dist_straight<outer_cut)
+	cum_excess_straight = cum_straight - bg_straight*area
+	err_straight = np.sqrt(cum_straight+bg_straight*area**2)
+	frac_straight = (cum_excess_straight/area) / bg_straight
+	frac_excess_straight = frac_straight - 1.
+	frac_err_straight = frac_straight * (err_straight/cum_excess_straight + 1./np.sqrt(bg_count_straight))
+	
+	print 'Surface density between %i to %i kpc' % (int(inner_cut*1000), int(outer_cut*1000))
+	print 'Bent: %.3f +- %.3f (%.2f sigma)' % (frac_bent, frac_err_bent, frac_bent / frac_err_bent)
+	print 'Straight: %.3f +- %.3f (%.2f sigma)' % (frac_straight, frac_err_straight, frac_straight / frac_err_straight)
+	print 'Difference: %.3f +- %.3f (%.2f sigma)' % (frac_bent-frac_straight, np.sqrt(frac_err_bent**2 + frac_err_straight**2), (frac_bent-frac_straight) / np.sqrt(frac_err_bent**2 + frac_err_straight**2))
+	
+	# 3D statistics
+	vol_sph = 4./3. * np.pi * (outer_cut**3-inner_cut**3)
+	vol_cyl = np.pi * outer * (outer_cut**2-inner_cut**2)
+	vol_bg = np.pi * outer * (outer**2-inner**2)
+
+	bg_bent_vol = bg_count_bent / vol_bg
+	cum_bent = sum(dist_bent<outer_cut)
+	cum_excess_bent = cum_bent - bg_bent_vol*vol_cyl
+	err_bent = np.sqrt(cum_bent + bg_bent_vol*vol_cyl**2)
+	frac_bent = (cum_excess_bent/vol_sph) / bg_bent_vol
+	frac_excess_bent = frac_bent - 1.
+	frac_err_bent = frac_bent * (err_bent/cum_excess_bent + 1./np.sqrt(bg_count_bent))
+
+	bg_straight_vol = bg_count_straight / vol_bg
+	cum_straight = sum(dist_straight<outer_cut)
+	cum_excess_straight = cum_straight - bg_straight_vol*vol_cyl
+	err_straight = np.sqrt(cum_straight + bg_straight_vol*vol_cyl**2)
+	frac_straight = (cum_excess_straight/vol_sph) / bg_straight_vol
+	frac_excess_straight = frac_straight - 1.
+	frac_err_straight = frac_straight * (err_straight/cum_excess_straight + 1./np.sqrt(bg_count_straight))
+
+	print '\nVolume density between %i to %i kpc' % (int(inner_cut*1000), int(outer_cut*1000))
+	print 'Bent: %.3f +- %.3f (%.2f sigma)' % (frac_bent, frac_err_bent, frac_bent / frac_err_bent)
+	print 'Straight: %.3f +- %.3f (%.2f sigma)' % (frac_straight, frac_err_straight, frac_straight / frac_err_straight)
+	print 'Difference: %.3f +- %.3f (%.2f sigma)' % (frac_bent-frac_straight, np.sqrt(frac_err_bent**2 + frac_err_straight**2), (frac_bent-frac_straight) / np.sqrt(frac_err_bent**2 + frac_err_straight**2))
+	
+	med_sep = np.median(sep)
+	rho_bg = 500. / med_sep**2
+	print '%.1f, %.1f rho_crit around high and low bending, respectively' % (frac_bent*rho_bg, frac_straight*rho_bg)
+	
+	return None
+	
+	step = inner_cut
+	x = np.arange(step, 1, step)+step
+	cum_excess_bent, cum_excess_straight = [], []
+	frac_excess_bent, frac_excess_straight = [], []
+	err_bent, err_straight = [], []
+	frac_err_bent, frac_err_straight = [], []
+	for i in x:
+		cum_bent = sum(dist_bent<i)
+		cum_excess_bent.append(cum_bent - bg_bent*np.pi*i**2)
+		err_bent.append(np.sqrt(cum_bent+bg_bent*(np.pi*i**2)**2))
+		frac_bent = cum_bent/(bg_bent*np.pi*i**2)
+		frac_excess_bent.append(frac_bent - 1.)
+		frac_err_bent.append(frac_bent * (1./np.sqrt(cum_bent) + 1./np.sqrt(bg_bent)))
+		cum_straight = sum(dist_straight<i)
+		cum_excess_straight.append(cum_straight - bg_straight*np.pi*i**2)
+		err_straight.append(np.sqrt(cum_straight+bg_straight*(np.pi*i**2)**2))
+		frac_straight = cum_straight/(bg_straight*np.pi*i**2)
+		frac_excess_straight.append(frac_straight - 1.)
+		frac_err_straight.append(frac_straight * (1./np.sqrt(cum_straight) + 1./np.sqrt(bg_straight)))
+
+	# normalize
+	cum_excess_bent_norm = np.array(cum_excess_bent)/n_bent
+	err_bent_norm = cum_excess_bent_norm * (np.array(err_bent)/np.array(cum_excess_bent) + 1./np.sqrt(n_bent))
+	cum_excess_straight_norm = np.array(cum_excess_straight)/n_straight
+	err_straight_norm = cum_excess_straight_norm * (np.array(err_straight)/np.array(cum_excess_straight) + 1./np.sqrt(n_straight))
+
+	# cumulative excess plot
+	plt.figure()
+	plt.errorbar(x, cum_excess_bent_norm, yerr=err_bent_norm, label='Bent sources')
+	plt.errorbar(x+0.15*step, cum_excess_straight_norm, yerr=err_straight_norm, ls='--', label='Straight sources')
+	#plt.axhline(0, ls=':', c='k')
+	plt.legend(loc='upper left')
+	plt.xlabel('Radius around radio galaxy (Mpc)')
+	plt.ylabel('Cumulative excess density (Mpc$^{-2}$)')
+	plt.tight_layout()
+	
+	# fractional excess plot
+	plt.figure()
+	plt.errorbar(x, frac_excess_bent, yerr=frac_err_bent, label='Bent sources')
+	plt.errorbar(x+0.15*step, frac_excess_straight, yerr=frac_err_straight, ls='--', label='Straight sources')
+	#plt.axhline(0, ls=':', c='k')
+	plt.legend(loc='upper right')
+	plt.xlabel('Radius around radio galaxy (Mpc)')
+	plt.ylabel('Fractional excess density')
+	plt.tight_layout()
+	
+	return None
+	
+	def sig(i, j):
+		frac_b = cum_bent / bg_bent
+		frac_s = cum_straight / bg_straight
+		dfrac_b = frac_b * (1/np.sqrt(cum_bent) + 1/np.sqrt(bg_bent)) / np.sqrt(1.*i/n_bent)
+		dfrac_s = frac_s * (1/np.sqrt(cum_straight) + 1/np.sqrt(bg_straight)) / np.sqrt(1.*j/n_straight)
+		return (frac_b - frac_s) / max(dfrac_b, dfrac_s)
+
+	# statistical excess plot
+	plt.figure()
+	plt.plot(x, cum_excess_bent_norm/err_bent_norm, label='Bent sources')
+	plt.plot(x+0.15*step, cum_excess_straight_norm/err_straight_norm, ls='--', label='Straight sources')
+	plt.legend(loc='upper right')
+	plt.xlabel('Radius around RG (Mpc)')
+	plt.ylabel('Standard deviations above background')
+	plt.tight_layout()
+
+	# statistical difference plot
+	plt.figure()
+	plt.plot(x, (cum_excess_bent_norm-cum_excess_straight_norm)/np.max([err_bent_norm,err_straight_norm], 0))
+	plt.xlabel('Radius around RG (Mpc)')
+	plt.ylabel('Standard deviations difference')
+	plt.tight_layout()
+
+	# distribution of bending vs density
+	bent_companions, straight_companions = [], []
+	for source in distant_sources.find():
+		count = 0
+		for neighbor in source['neighbors']:
+			if 0.05 < source['neighbors'][neighbor]['dist_Mpc'] < 0.25:
+				count += 1
+		if source['bending_excess']>bent_cut:
+			bent_companions.append(count)
+		else:
+			straight_companions.append(count)
+
+	plt.figure()
+	plt.hist(bent_companions, bins=range(13), alpha=.8, normed=True, label='Bent sources')
+	plt.hist(straight_companions, bins=range(13), alpha=.8, normed=True, label='Straight sources')
+	plt.scatter(6, .1, c='w', alpha=0, label='$p=%.3f$'%stats.anderson_ksamp([bent_companions, straight_companions]).significance_level)
+	plt.xlabel('Number of companions between 50 and 250 kpc')
+	plt.ylabel('Normalized count')
+	plt.legend()
+	plt.tight_layout()
+	
+	# bending vs density
+	bending, neighbors = [], []
+	for source in distant_sources.find():
+		bending.append(source['bending_excess'])
+		count = 0
+		for neighbor in source['neighbors']:
+			if 0.05 < source['neighbors'][neighbor]['dist_Mpc'] < 0.25:
+				count += 1
+		neighbors.append(count)
+
+	bending = np.array(bending)
+	neighbors = np.array(neighbors)
+	order = bending.argsort()
+	bg = (bg_bent+bg_straight)/(n_bent+n_straight)*np.pi*(0.25**2-0.05**2)
+
+	plt.figure()
+	n, bins, patches = plt.hist(bending)
+	plt.figure()
+	cut = 1.5
+	plt.hist(bending[neighbors/bg>cut], bins=bins, alpha=.8, normed=True, label='Density $>%.1f\\times$background\n$n=%i$'%(cut,sum(neighbors/bg>cut)))
+	plt.hist(bending[neighbors/bg<cut], bins=bins, alpha=.8, normed=True, label='Density $<%.1f\\times$background\n$n=%i$'%(cut,sum(neighbors/bg<cut)))
+	plt.xlabel('Excess bending angle (deg)')
+	plt.ylabel('Normalized count')
+	plt.legend()
+	plt.tight_layout()
+
+def cluster_spotting(compress=False):
+	n_bent = np.array([22, 53, 81, 101, 112, 121, 113, 162, 146, 207, 208, 210, 244, 228, 270, 275, 317, 271, 330, 328, 301, 326, 354, 378, 394, 414, 419, 435, 444, 529])
+	n_straight = np.array([35, 51, 61, 94, 100, 114, 117, 154, 136, 169, 167, 216, 188, 234, 241, 255, 267, 282, 304, 309, 357, 335, 335, 366, 368, 411, 433, 484, 463, 516]) * 90./96. # normalized
+	base_step_size = 0.1 # Mpc
+	base_step_count = 30
+	if compress:
+		step_size = 2.*base_step_size
+		step_count = base_step_count/2.
+		n_bent = n_bent[::2] + n_bent[1::2]
+		n_straight = n_straight[::2] + n_straight[1::2]
+	else:
+		step_size = base_step_size
+		step_count = base_step_count
+	
+	bg_bent = 254
+	bg_straight = 241
+	sep = step_size*(np.arange(step_count)+1)
+	excess_bent = n_bent - bg_bent * np.pi * (sep**2-(sep-step_size)**2)
+	excess_straight = n_straight - bg_straight * np.pi * (sep**2-(sep-step_size)**2)
+	cum_excess_bent = np.cumsum(excess_bent/90.)
+	cum_excess_straight = np.cumsum(excess_straight/90.)
+	err_bent = np.sqrt(n_bent + bg_bent)
+	err_straight = np.sqrt(n_straight + bg_straight)
+	cum_err_bent = np.sqrt(np.cumsum(err_bent/90.))
+	cum_err_straight = np.sqrt(np.cumsum(err_straight/90.))
+	print 'Bent excess within 2 Mpc: %.2f\pm%.2f\nStraight excess within 2 Mpc: %.2f\pm%.2f' % (cum_excess_bent[sep==2], cum_err_bent[sep==2], cum_excess_straight[sep==2], cum_err_straight[sep==2])
+	
+	diff = cum_excess_bent[sep==2] - cum_excess_straight[sep==2]
+	diff_err = np.sqrt(cum_err_bent[sep==2] + cum_err_straight[sep==2])
+	sig_level = cum_excess_bent[sep==2] - cum_excess_straight[sep==2]
+	print 'Difference within 2 Mpc: %.2f\pm%.2f' % (diff, diff_err)
+	
+	fig, ax = plt.subplots(1)
+	ax.errorbar(sep, cum_excess_bent, yerr=cum_err_bent, label='Bent sources')
+	ax.errorbar(sep+0.2*base_step_size, cum_excess_straight, yerr=cum_err_straight, ls='--', label='Straight sources')
+	ax.legend(loc='upper left')
+	ax.set_xlabel('Distance from radio source (Mpc)')
+	ax.set_ylabel('Cumulative excess per radio source')
+	ax.set_title('Companions per Mpc$^2$ around non-cluster radio sources')
+
+def bending_limit():
+	h = 1. # jet width in kpc
+	p_min = np.mean([0.9, 0.6, 1.4, 1.7, 0.4, 0.6, 1.4])*0.0062415 # minimum synchrotron pressure in keV cm^-3
+	for source in bending_15.find():
+		size = source['RGZ']['size_kpc']
+		p_ram = source['WHL']['P']
+		theta = np.arcsin(0.5 * size/h * p_ram/p_min)
+		bending_15.update({'_id':source['_id']}, {'$set':{'WHL.bending_max':theta*180./np.pi if not np.isnan(theta) else 90.}})
+
+def get_bent_cut():
+	bend = []
+	for i in bending_15.find(total_cuts):
+		bend.append(i['using_peaks']['bending_excess'])
+
+	bend = np.array(bend)
+	sigma = 0.682689492137
+	return np.percentile(bend, 100*(1+sigma)/2)
+
+def remove_AllWISE(drop=False):
+	count = bending_15.count({'SDSS':{'$exists':True}})
+	if drop:
+		print bending_15.update({}, {'$unset':{'best':None}}, multi=True)
+	for source in bending_15.find({'best':{'$exists':False}}).batch_size(500):
+		z, z_err = get_z(source)
+		if z:
+			sql = 'select raerr, decerr from photoprimary where objid=%i' % source['SDSS']['objID']
+			df = SDSS_select(sql)
+			ra_err = df['raerr'][0]
+			dec_err = df['decerr'][0]
+			best = {'redshift':z, 'redshift_err':z_err, 'ra':source['SDSS']['ra'], 'ra_err':ra_err, 'dec':source['SDSS']['dec'], 'dec_err':dec_err}
+			bending_15.update({'_id':source['_id']}, {'$set':{'best':best}})
+			print '%i/%i' % (bending_15.find({'best':{'$exists':True}}).count(), count)
+
+def sep_hist():
+	params = total_cuts.copy()
+	params['using_peaks.bending_angle'] = params['using_peaks.bending_corrected']
+	del params['using_peaks.bending_corrected']
+
+	sep = []
+	for source in bending_15.find(total_cuts):
+		sep.append(source['WHL']['r/r500'])
+
+	sep = np.array(sep)
+	n, bins, _ = plt.hist(np.log10(sep), bins=20, fill=False, hatch='//')
+
+	area = np.pi * (pow(10, bins)[1:]**2 - pow(10, bins)[:-1]**2)
+	outer = np.percentile(sep, 95)
+	density = sum(sep<outer)/(np.pi*outer**2)
+	x = (pow(10, bins)[1:]+pow(10, bins)[:-1])/2.
+	y = density*area
+	popt = np.polyfit(x, y, 2)
+	newx = np.logspace(np.log10(min(sep)), np.log10(outer), 100)
+	plt.plot(np.log10(newx), popt[0]*newx**2 + popt[1]*newx + popt[2], label='Assuming uniform \ndistribution on the sky', c='b', ls=':')
+	plt.ylim(ymax=1300)
+	
+	#plt.figure()
+	#plt.hist(sep, bins=pow(10,bins), fill=False, hatch='//')
+	#plt.xscale('log')
+	plt.xlabel(get_label('WHL.r/r500', True))
+	plt.ylabel('Count')
+	plt.legend(loc='upper left')
+	plt.tight_layout()
+
+def density_ratio(x1, x2):
+	c500, gamma, alpha, beta = 1.177, 0.3081, 1.0510, 5.4905
+	rho1 = (c500*x1)**gamma * (1 + (c500*x1)**alpha)**(1.*(beta-gamma)/alpha)
+	rho2 = (c500*x2)**gamma * (1 + (c500*x2)**alpha)**(1.*(beta-gamma)/alpha)
+	return rho2 / rho1
+
+def v500():
+	# orbital velocity at r500
+	c = np.sqrt(1.327e25) # km^1.5 s^-1
+	m500, r500 = [], []
+	for source in bending_15.find(total_cuts):
+		m500.append(source['WHL']['M500'])
+		r500.append(source['WHL']['r500'])
+	
+	m500 = np.array(m500)
+	r500 = np.array(r500)
+	v = c * np.sqrt(m500/r500/3.086e19) # km s^-1
+	return np.median(v)
+
+def scatter():
+	bending, mass, sep, pop = [], [], [], []
+	for source in bending_15.find(total_cuts):
+		bending.append(source['using_peaks']['bending_corrected'])
+		mass.append(source['WHL']['M500'])
+		sep.append(source['WHL']['r/r500'])
+		pop.append(source['WHL']['population'])
+	
+	bending = np.array(bending)
+	mass = np.array(mass)
+	sep = np.array(sep)
+	pop = np.array(pop)
+	
+	plt.scatter(mass[pop=='outer'], bending[pop=='outer'], s=1, label='outer region')
+	plt.scatter(mass[pop=='BCG'], bending[pop=='BCG'], s=1, label='BCGs')
+	plt.scatter(mass[pop=='inner'], bending[pop=='inner'], s=1, label='inner region')
+	plt.axhline(np.median(bending), ls=':', c='k')
+	plt.legend()
+	plt.xlabel(get_label('WHL.M500'))
+	plt.ylabel(get_label('using_peaks.bending_corrected'))
+	plt.tight_layout()
+
+def print_supplement(filename):
+	cids = []
+	with open(filename[:-4] + '_table1' + filename[-4:], 'w') as f1:
+		with open(filename[:-4] + '_sample1' + filename[-4:], 'w') as g1:
+			for source in bending_15.find(total_cuts).sort('RGZ.RGZ_name', 1):
+				cids.append(source['RGZ']['RGZ_id'])
+				morph = 2 if source['RGZ']['morphology'] == 'double' else 3
+				ztype = 0 if 'spec_redshift' in source['SDSS'] else 1
+				w_ztype = 0 if 'zspec' in source['WHL'] else 1
+				align = 0 if source['WHL']['alignment'] == 'radial' else (1 if source['WHL']['alignment'] == 'tangential' else 2)
+				datastr = '%s,%s,%i,%.3f,%.5f,%.5f,%.4f,%.4f,%i,%.1f,%.1f,%.1f,%.2f,%s,%.5f,%.5f,%.4f,%i,%.2f,%.2f,%.2f,%.2f,%.1f,%i' % (source['RGZ']['RGZ_name'][3:], source['RGZ']['zooniverse_id'], morph, source['RGZ']['size_arcmin'], source['best']['ra'], source['best']['dec'], source['best']['redshift'], source['best']['redshift_err'], ztype, source['using_peaks']['bending_angle'], source['using_peaks']['bending_corrected'], source['using_peaks']['bending_excess'], source['using_contour']['asymmetry'], source['WHL']['name'], source['WHL']['ra'], source['WHL']['dec'], source['WHL']['zbest'], w_ztype, source['WHL']['r/r500'], source['WHL']['r500'], source['WHL']['M500'], np.log10(source['WHL']['P']), source['WHL']['orientation_peaks'], align)
+				print >> f1, datastr
+				print >> g1, datastr.replace(',', ' & ') + ' \\\\'
+	
+	with open(filename[:-4] + '_table2' + filename[-4:], 'w') as f2:
+		with open(filename[:-4] + '_sample2' + filename[-4:], 'w') as g2:
+			params = total_cuts.copy()
+			params['RGZ.RGZ_id'] = {'$nin':cids}
+			for source in bent_sources.find(params).sort('RGZ.RGZ_name', 1):
+				morph = 2 if source['RGZ']['morphology'] == 'double' else 3
+				ztype = 0 if 'spec_redshift' in source['SDSS'] else 1
+				datastr = '%s,%s,%i,%.3f,%.5f,%.5f,%.4f,%.4f,%i,%.1f,%.1f,%.1f,%.2f' % (source['RGZ']['RGZ_name'][3:], source['RGZ']['zooniverse_id'], morph, source['RGZ']['size_arcmin'], source['best']['ra'], source['best']['dec'], source['best']['redshift'], source['best']['redshift_err'], ztype, source['using_peaks']['bending_angle'], source['using_peaks']['bending_corrected'], source['using_peaks']['bending_excess'], source['using_contour']['asymmetry'])
+				print >> f2, datastr
+				print >> g2, datastr.replace(',', ' & ') + ' \\\\'
+
+def vienna(data_in=False, data_out=False):
+	infile = '/home/garon/Downloads/vienna.csv'
+	outfile = '/home/garon/Downloads/vienna_matches.csv'
+	
+	if data_in:
+		id, ra, dec, z = [], [], [], []
+		with open(infile, 'r') as f:
+			r = csv.reader(f)
+			r.next()
+			for row in r:
+				id.append(row[0])
+				ra.append(row[1])
+				dec.append(row[2])
+				z.append(row[3])
+		id = np.array(id, dtype=int)
+		ra = np.array(ra, dtype=float)
+		dec = np.array(dec, dtype=float)
+		z = np.array(z, dtype=float)
+	
+	if data_out:
+		with open(outfile, 'w') as f:
+			print >> f, 'source#,radeg,decdeg,z,sep_mpc,sep_r500'
+			for i in range(len(id)):
+				loc = coord.SkyCoord(ra[i], dec[i], unit=(u.deg,u.deg))
+				w = get_whl(loc, z[i], 0, 15, 0.04*(1+z[i]))
+				if w is not None:
+					loc2 = coord.SkyCoord(w['RAdeg'], w['DEdeg'], unit=(u.deg,u.deg))
+					sep_deg = loc2.separation(loc)
+					sep_mpc = float(cosmo.angular_diameter_distance(w['zspec'] if 'zspec' in w else w['zphot'])/u.Mpc * sep_deg.to(u.rad)/u.rad)
+					sep_r500 = sep_mpc / w['r500']
+				else:
+					sep_mpc, sep_r500 = 99., 99.
+				print >> f, '%i,%f,%f,%f,%f,%f' % (id[i], ra[i], dec[i], z[i], sep_mpc, sep_r500)
 
 if __name__ == '__main__':
 	
