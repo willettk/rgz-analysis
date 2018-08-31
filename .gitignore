@@ -50,6 +50,12 @@ old/
 python/pyIBCC
 expert/expert100_comparison.csv
 expert/expert_random_zooniverse_ids.txt
+user_weights*
+bending/
+csv/
+json/
+plots/
+subject_in_progress.txt
 
 # TeX
 
