@@ -115,9 +115,9 @@ def SDSS_select(sql):
 
 def getSDSS(entry):
 	'''
-	get optical magnitude data from Galaxy table in SDSS
-	if a positional match exists, also get photo redshift and uncertainty from Photoz table, spectral lines from GalSpecLine table, and
-	spectral class and spec redshift and uncertainty from SpecPhoto table
+	get optical magnitude data from PhotoPrimary table in SDSS
+	if a positional match exists, get spectral class and zsp and uncertainty from SpecObj table
+	if match is extended, get zph and uncertainty from Photoz table and spectral lines from GalSpecLine table
 	'''
 	
 	ir_pos = coord.SkyCoord(entry['consensus']['ir_ra'], entry['consensus']['ir_dec'], unit=(u.deg,u.deg), frame='icrs')
@@ -127,7 +127,7 @@ def getSDSS(entry):
 						   when 6 then 'S'
 						   else 'U' end as class
 			   from PhotoPrimary
-			   where (ra between %f-3./3600 and %f+3./3600) and (dec between %f-3./3600 and %f+3./3600)''' \
+			   where (ra between %f-6./3600 and %f+6./3600) and (dec between %f-6./3600 and %f+6./3600)''' \
 			   % (ir_pos.ra.deg, ir_pos.ra.deg, ir_pos.dec.deg, ir_pos.dec.deg)
 	df = SDSS_select(query)
 	if len(df):

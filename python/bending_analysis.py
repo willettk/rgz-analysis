@@ -27,9 +27,10 @@ from sklearn.decomposition import PCA
 from corner import corner
 import matplotlib.pyplot as plt
 import matplotlib
+from matplotlib.ticker import FormatStrFormatter
 plt.ion()
 matplotlib.rc('text', usetex=True)
-matplotlib.rcParams.update({'font.size': 12})
+matplotlib.rcParams.update({'font.size': 14})
 
 # Connect to Mongo database
 version = '_bending'
@@ -49,7 +50,7 @@ xmatch = db['sdss_whl_xmatch']
 distant_sources = db['distant_sources']
 
 # Final sample cuts
-total_cuts = {'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'RGZ.radio_consensus':{'$gte':0.65}, 'using_peaks.bending_corrected':{'$lte':135.}, 'best':{'$exists':True}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}
+total_cuts = {'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'RGZ.radio_consensus':{'$gte':0.65}, 'using_peaks.bending_corrected':{'$lte':135.}, 'best.redshift':{'$gte':0.02, '$lte':0.8}, 'RGZ.duplicate':0}
 
 # Get dictionary for finding the path to FITS files and WCS headers
 with open('%s/first_fits.txt' % rgz_path) as f:
@@ -936,10 +937,10 @@ def bending_correct(coll=bending_15, window_size=100, plot=False, update=False, 
 	# Repeat for both morphologies and angle-measuring methods separately
 	for morph in ['double', 'triple']:
 		for method in methods:
-			
+		
 			# Print progress
 			print morph, method
-			
+		
 			# Collect data from outer region
 			sizes, angles, separations = [], [], []
 			params = total_cuts.copy()
@@ -951,31 +952,33 @@ def bending_correct(coll=bending_15, window_size=100, plot=False, update=False, 
 				sizes.append(gal['RGZ']['size_arcmin'])
 				angles.append(gal[method]['bending_angle'])
 				separations.append(gal['WHL']['r/r500'])
-
+		
 			sizes = np.array(sizes)
 			angles = np.array(angles)
 			separations = np.array(separations)
-	
+		
 			# Find running trend
 			sizes_running = np.array([np.median(sizes[ix:ix+window_size]) for ix in np.arange(len(sizes)-window_size+1)])
 			angles_running = np.array([np.median(angles[ix:ix+window_size]) for ix in np.arange(len(angles)-window_size+1)])
-			
+		
 			# Find best fit
 			med_size = np.median(sizes)
 			popt, pcov = curve_fit(custom_exp, sizes_running-med_size, angles_running)
 			perr = np.sqrt(np.diagonal(pcov))
 			angles_best = custom_exp(sizes-med_size, *popt)
 			angles_best_running = np.array([np.median(angles_best[ix:ix+window_size]) for ix in np.arange(len(angles_best)-window_size+1)])
-			
+		
 			# Save fits for comparison
 			if method == 'using_peaks':
 				if morph == 'double':
-					d_x = sizes
+					d_x = sizes_running
+					d_y = angles_running
 					d_popt = popt
 					d_err = perr
 					d_x0 = med_size
 				else:
-					t_x = sizes
+					t_x = sizes_running
+					t_y = angles_running
 					t_popt = popt
 					t_err = perr
 					t_x0 = med_size
@@ -992,6 +995,8 @@ def bending_correct(coll=bending_15, window_size=100, plot=False, update=False, 
 				ax2.axhline(0, color='k', lw=1)
 				ax2.set_xlabel('Size (arcmin)')
 				ax2.set_ylabel('Residual')
+				ax1.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+				ax2.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
 				fig.tight_layout()
 				plt.subplots_adjust(hspace=0.05)
 	
@@ -1005,34 +1010,16 @@ def bending_correct(coll=bending_15, window_size=100, plot=False, update=False, 
 	
 	# Plot comparison of fits
 	if plot:
-		x = np.sort(np.hstack([d_x, t_x]))
-		y0 = custom_exp(x-d_x0, *d_popt)
-		y0_pp = custom_exp(x-d_x0, d_popt[0]+d_err[0], d_popt[1]+d_err[1])
-		y0_pm = custom_exp(x-d_x0, d_popt[0]+d_err[0], d_popt[1]-d_err[1])
-		y0_mp = custom_exp(x-d_x0, d_popt[0]-d_err[0], d_popt[1]+d_err[1])
-		y0_mm = custom_exp(x-d_x0, d_popt[0]-d_err[0], d_popt[1]-d_err[1])
-		y0_max = np.max([y0_pm, y0_pp], axis=0)
-		y0_min = np.min([y0_mp, y0_mm], axis=0)
-		y1 = custom_exp(x-t_x0, *t_popt)
-		y1_pp = custom_exp(x-t_x0, t_popt[0]+t_err[0], t_popt[1]+t_err[1])
-		y1_pm = custom_exp(x-t_x0, t_popt[0]+t_err[0], t_popt[1]-t_err[1])
-		y1_mp = custom_exp(x-t_x0, t_popt[0]-t_err[0], t_popt[1]+t_err[1])
-		y1_mm = custom_exp(x-t_x0, t_popt[0]-t_err[0], t_popt[1]-t_err[1])
-		y1_max = np.max([y1_pm, y1_pp], axis=0)
-		y1_min = np.min([y1_mp, y1_mm], axis=0)
-		
 		fig, ax = plt.subplots(1)
-		if comp_err:
-			ax.fill_between(x, y0_min, y0_max, alpha=.8, label='Best fit doubles')
-			ax.fill_between(x, y1_min, y1_max, alpha=.8,  hatch='x', label='Best fit triples')
-		else:
-			ax.plot(x, y0, label='Best fit doubles')
-			ax.plot(x, y1, ls='--', label='Best fit triples')
-		ax.plot(1, 10, c='w', label='$R^2 = %.3f$' % r2_score(y0, y1))
+		ax.plot(d_x, d_y, label='Double sources')
+		d_rms = np.sqrt(sum((d_y-custom_exp(d_x-d_x0, *d_popt))**2)/len(d_x))
+		ax.fill_between(d_x, custom_exp(d_x-d_x0, *d_popt)+d_rms, custom_exp(d_x-d_x0, *d_popt)-d_rms, color='C0', alpha=.6)#, label='Best fit doubles')
+		ax.plot(t_x, t_y, ls='--', label='Triple sources')
+		t_rms = np.sqrt(sum((t_y-custom_exp(t_x-t_x0, *t_popt))**2)/len(t_x))
+		ax.fill_between(t_x, custom_exp(t_x-t_x0, *t_popt)+t_rms, custom_exp(t_x-t_x0, *t_popt)-t_rms, color='C1', alpha=.6)#, label='Best fit triples')
 		ax.legend(loc='upper right')
 		ax.set_xlabel('Size (arcmin)')
 		ax.set_ylabel('Bending angle (deg)')
-		#ax.set_title('Best fit comparison')
 		fig.tight_layout()
 
 def pca_analysis(param_space, coll=bending_15, morph=None, pop=None):
@@ -1120,11 +1107,11 @@ def make_corner_plot():
 
 def sample_numbers():
 	
-	param_list = [{'RGZ.morphology':'double', 'best.redshift':{'$exists':True}}, \
-		{'RGZ.morphology':'double', 'best.redshift':{'$exists':True}}, \
-		{'RGZ.morphology':'double', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_angle':{'$lte':135.}, 'best.redshift':{'$exists':True}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}, \
-		{'RGZ.morphology':'double', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_corrected':{'$lte':135.}, 'best.redshift':{'$exists':True}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}, \
-		{'RGZ.morphology':'double', 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_corrected':{'$lte':135.}, 'best.redshift':{'$exists':True}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}]
+	param_list = [{'RGZ.morphology':'double', 'RGZ.duplicate':0, 'best.redshift':{'$exists':True}}, \
+		{'RGZ.morphology':'double', 'RGZ.duplicate':0, 'best.redshift':{'$exists':True}}, \
+		{'RGZ.morphology':'double', 'RGZ.duplicate':0, 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_angle':{'$lte':135.}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}, \
+		{'RGZ.morphology':'double', 'RGZ.duplicate':0, 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_corrected':{'$lte':135.}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}, \
+		{'RGZ.morphology':'double', 'RGZ.duplicate':0, 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_corrected':{'$lte':135.}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}]
 	coll_list = [bent_sources, bending_15, bending_15, bent_sources, bending_15]
 	label_list = ['No cuts', 'Matched', 'Initial cuts', 'Final (all)', 'Final (matched)']
 	
@@ -1156,7 +1143,7 @@ def contamination():
 	ax.axvline(0.04, c='r', lw=2, label=r'$\Delta z$ threshold')
 	ax.axvline(-0.04, c='r', lw=2)
 	ax.axhline(np.median(n[(np.abs(bins)>0.04)[:-1]]), c='k', lw=2, ls=':', label='Background')
-	ax.plot(0, 0, c='w', label='Completeness: %.3f\nContamination: %.3f' % (comp, cont))
+	#ax.plot(0, 0, c='w', label='Completeness: %.3f\nContamination: %.3f' % (comp, cont))
 	ax.legend()
 	ax.set_xlim(-0.1, 0.1)
 	ax.set_xlabel('$\Delta z / (1+z)$')
@@ -1175,7 +1162,7 @@ def contamination():
 	#	xx = brentq(lambda x: fc(x)-i/100., bins[0], bins[-1])
 	#	print '%.1f%% at x=%.2f' % (i,xx)
 
-	f, ax = plt.subplots(1)
+	'''f, ax = plt.subplots(1)
 	density = n/bin_area
 	err = np.sqrt(n)/bin_area
 	ax.errorbar(bins, density, yerr=err, fmt='o', ms=4, label='Source density')
@@ -1196,7 +1183,7 @@ def contamination():
 	ax.set_ylabel('Count / area of annulus')
 	#ax.set_title('Count density vs. separation')
 	ax.set_aspect('equal', adjustable='box')
-	plt.tight_layout()
+	plt.tight_layout()'''
 
 	f, (ax1, ax2) = plt.subplots(2, sharex=True)
 	ax1.plot(np.log10(bins), np.log10(n), label='Observed')
@@ -1408,8 +1395,8 @@ def orientation_test():
 	print 'Model 1: p=%.2g (%.2f sigma)' % (ad2.pvalue, z_score(ad2.pvalue))
 	
 	x = np.arange(181)
-	plt.plot(x, case1.pdf(x), c='b', label='Model 1')
-	plt.plot(x, case2.pdf(x), c='g', ls=':', label='Model 2')
+	plt.plot(x, case1.pdf(x), c='C0', label='Model 1')
+	plt.plot(x, case2.pdf(x), c='C1', ls=':', label='Model 2')
 	plt.legend()
 	plt.ylabel('Normalized count')
 	plt.xlabel('Orientation angle (deg)')
@@ -1507,7 +1494,7 @@ def get_errs(get_errs=False):
 	#plt.plot(size, y, label='%.0fx%+.0f\nR^2=%.3f' % (m, b, r2_score(area_50,y)))
 	#plt.legend()
 
-def rmsd(params, x_param, y_param, plot=True, coll=bending_15):
+def rmsd(params=total_cuts.copy(), x_param='RGZ.size_arcmin', y_param='bending_angle', plot=True, coll=bending_15):
 	x_param_list = x_param.split('.')
 	y0_param_list = ['using_peaks', y_param]
 	y1_param_list = ['using_contour', y_param]
@@ -2227,7 +2214,12 @@ def fractional_bent():
 	inner = sep<1.5#np.logical_and(sep>0.01, sep<1.5)
 	cluster = sep<10
 	
-	#bins = histedges_equalN(bend[np.logical_and(bent,cluster)], 10)
+	num, denom = sum(sep<1.5), len(sep)
+	print 'All: %.2f +- %.2f' % (1.*num/denom, 1.*num/denom * (1./np.sqrt(num) + 1./np.sqrt(denom)))
+	num, denom = sum(np.logical_and(sep<1.5, bend>get_bent_cut())), sum(bend>get_bent_cut())
+	print 'Highly bent: %.2f +- %.2f' % (1.*num/denom, 1.*num/denom * (1./np.sqrt(num) + 1./np.sqrt(denom)))
+	num, denom = sum(np.logical_and(sep<1.5, bend>50)), sum(bend>50)
+	print 'Max: %.2f +- %.2f' % (1.*num/denom, 1.*num/denom * (1./np.sqrt(num) + 1./np.sqrt(denom)))
 
 	fig, ax = plt.subplots(1)
 	n_all, bins, _ = ax.hist(np.log10(bend[bent]), bins=15, label='All sources')
@@ -2248,7 +2240,7 @@ def fractional_bent():
 	err = ratio * np.sqrt(1/n_inner + 1/n_all)
 	plt.errorbar(lin_bins, ratio, yerr=err)
 	ax.set_xlabel('Excess bending angle (deg)')
-	ax.set_ylabel('Fraction within $1.5~r/r_{500}$')
+	ax.set_ylabel('Fraction within $1.5~r_{500}$')
 	#ax.set_title('Fraction of sources in BCG/inner regions of clusters')
 	plt.tight_layout()
 
@@ -2344,13 +2336,16 @@ def find_more_sources():
 def distant_env(bin_count=8, inner_cut=0.05, outer_cut=0.35):
 	bent_cut = get_bent_cut()
 	dist_bent, dist_straight, sep = [], [], []
+	z_bent, z_straight = [], []
 	for source in distant_sources.find():
 		if source['bending_excess']>bent_cut:
 			for neighbor in source['neighbors']:
 				dist_bent.append(source['neighbors'][neighbor]['dist_Mpc'])
+			z_bent.append(source['z'])
 		else:
 			for neighbor in source['neighbors']:
 				dist_straight.append(source['neighbors'][neighbor]['dist_Mpc'])
+			z_straight.append(source['z'])
 		sep.append(source['r/r500'])
 	
 	dist_bent = np.array(dist_bent)
@@ -2654,6 +2649,7 @@ def sep_hist():
 		sep.append(source['WHL']['r/r500'])
 
 	sep = np.array(sep)
+	plt.figure()
 	n, bins, _ = plt.hist(np.log10(sep), bins=20, fill=False, hatch='//')
 
 	area = np.pi * (pow(10, bins)[1:]**2 - pow(10, bins)[:-1]**2)
@@ -2715,19 +2711,51 @@ def scatter():
 	plt.ylabel(get_label('using_peaks.bending_corrected'))
 	plt.tight_layout()
 
-def print_supplement(filename):
+def get_phot_matches():
+	z_r, z_w, cid = [], [], []
+	for source in bending_15.find(total_cuts):
+		z_r.append(source['best']['redshift'])
+		z_w.append(source['WHL']['zbest'])
+		cid.append(source['RGZ']['RGZ_id'])
+	z_r = np.array(z_r)
+	z_w = np.array(z_w)
+	cid = np.array(cid)
+	bad_cid = list(cid[np.abs(z_w - z_r) > .04*(1+z_r)])
+	return bad_cid
+
+def flag_dups(coll=bending_15):
+	coll.update({}, {'$set':{'RGZ.duplicate':0}}, multi=True)
+	cid, name = [], []
+	for source in coll.find(total_cuts):
+		name.append(source['RGZ']['RGZ_name'])
+	for n in set(name):
+		name.remove(n)
+	for source in coll.find({'RGZ.RGZ_name':{'$in':name}}):
+		cid.append(source['RGZ']['RGZ_id'])
+	for source in coll.find({'RGZ.RGZ_id':{'$in':cid}}):
+		if source['RGZ']['RGZ_name'] in name:
+			coll.update({'RGZ.RGZ_id':source['RGZ']['RGZ_id']}, {'$set':{'RGZ.duplicate':1}})
+			name.remove(source['RGZ']['RGZ_name'])
+
+def print_supplement(filename='/home/garon/Documents/RGZdata/bending/data_supplement.csv'):
+	bad_cid = get_phot_matches()
 	cids = []
 	with open(filename[:-4] + '_table1' + filename[-4:], 'w') as f1:
 		with open(filename[:-4] + '_sample1' + filename[-4:], 'w') as g1:
 			for source in bending_15.find(total_cuts).sort('RGZ.RGZ_name', 1):
 				cids.append(source['RGZ']['RGZ_id'])
 				morph = 2 if source['RGZ']['morphology'] == 'double' else 3
-				ztype = 0 if 'spec_redshift' in source['SDSS'] else 1
-				w_ztype = 0 if 'zspec' in source['WHL'] else 1
-				align = 0 if source['WHL']['alignment'] == 'radial' else (1 if source['WHL']['alignment'] == 'tangential' else 2)
-				datastr = '%s,%s,%i,%.3f,%.5f,%.5f,%.4f,%.4f,%i,%.1f,%.1f,%.1f,%.2f,%s,%.5f,%.5f,%.4f,%i,%.2f,%.2f,%.2f,%.2f,%.1f,%i' % (source['RGZ']['RGZ_name'][3:], source['RGZ']['zooniverse_id'], morph, source['RGZ']['size_arcmin'], source['best']['ra'], source['best']['dec'], source['best']['redshift'], source['best']['redshift_err'], ztype, source['using_peaks']['bending_angle'], source['using_peaks']['bending_corrected'], source['using_peaks']['bending_excess'], source['using_contour']['asymmetry'], source['WHL']['name'], source['WHL']['ra'], source['WHL']['dec'], source['WHL']['zbest'], w_ztype, source['WHL']['r/r500'], source['WHL']['r500'], source['WHL']['M500'], np.log10(source['WHL']['P']), source['WHL']['orientation_peaks'], align)
+				ztype = 's' if 'spec_redshift' in source['SDSS'] else 'p'
+				align = 'r' if source['WHL']['alignment'] == 'radial' else ('t' if source['WHL']['alignment'] == 'tangential' else 'o')
+				if source['RGZ']['RGZ_id'] in bad_cid:
+					w_z = source['WHL']['zphot']
+					w_ztype = 'p'
+				else:
+					w_z = source['WHL']['zbest']
+					w_ztype = 's' if 'zspec' in source['WHL'] else 'p'
+				datastr = '%s,%s,%i,%.3f,%.5f,%.5f,%.4f,%.4f,%s,%.1f,%.1f,%.1f,%.2f,%s,%.5f,%.5f,%.4f,%s,%.2f,%.2f,%.2f,%.2f,%.1f,%s' % (source['RGZ']['RGZ_name'][3:], source['RGZ']['zooniverse_id'], morph, source['RGZ']['size_arcmin'], source['best']['ra'], source['best']['dec'], source['best']['redshift'], source['best']['redshift_err'], ztype, source['using_peaks']['bending_angle'], source['using_peaks']['bending_corrected'], source['using_peaks']['bending_excess'], source['using_contour']['asymmetry'], source['WHL']['name'], source['WHL']['ra'], source['WHL']['dec'], w_z, w_ztype, source['WHL']['r/r500'], source['WHL']['r500'], source['WHL']['M500'], np.log10(source['WHL']['P']), source['WHL']['orientation_peaks'], align)
 				print >> f1, datastr
-				print >> g1, datastr.replace(',', ' & ') + ' \\\\'
+				print >> g1, to_tex(datastr)
 	
 	with open(filename[:-4] + '_table2' + filename[-4:], 'w') as f2:
 		with open(filename[:-4] + '_sample2' + filename[-4:], 'w') as g2:
@@ -2735,10 +2763,31 @@ def print_supplement(filename):
 			params['RGZ.RGZ_id'] = {'$nin':cids}
 			for source in bent_sources.find(params).sort('RGZ.RGZ_name', 1):
 				morph = 2 if source['RGZ']['morphology'] == 'double' else 3
-				ztype = 0 if 'spec_redshift' in source['SDSS'] else 1
-				datastr = '%s,%s,%i,%.3f,%.5f,%.5f,%.4f,%.4f,%i,%.1f,%.1f,%.1f,%.2f' % (source['RGZ']['RGZ_name'][3:], source['RGZ']['zooniverse_id'], morph, source['RGZ']['size_arcmin'], source['best']['ra'], source['best']['dec'], source['best']['redshift'], source['best']['redshift_err'], ztype, source['using_peaks']['bending_angle'], source['using_peaks']['bending_corrected'], source['using_peaks']['bending_excess'], source['using_contour']['asymmetry'])
+				ztype = 's' if 'spec_redshift' in source['SDSS'] else 'p'
+				datastr = '%s,%s,%i,%.3f,%.5f,%.5f,%.4f,%.4f,%s,%.1f,%.1f,%.1f,%.2f' % (source['RGZ']['RGZ_name'][3:], source['RGZ']['zooniverse_id'], morph, source['RGZ']['size_arcmin'], source['best']['ra'], source['best']['dec'], source['best']['redshift'], source['best']['redshift_err'], ztype, source['using_peaks']['bending_angle'], source['using_peaks']['bending_corrected'], source['using_peaks']['bending_excess'], source['using_contour']['asymmetry'])
 				print >> f2, datastr
-				print >> g2, datastr.replace(',', ' & ') + ' \\\\'
+				print >> g2, to_tex(datastr)
+
+def to_tex(s):
+	keylist = [(',',' & '), ('& s','& $s$'), ('& p','& $p$'), ('& r','& $r$'), ('& t','& $t$'), ('& o','& $o$')]
+	for key in keylist:
+		s = s.replace(*key)
+	return s + ' \\\\'
+
+def make_all_figs():
+	contamination()
+	sep_hist()
+	sdss_density()
+	rmsd()
+	bending_correct(plot=True, methods='using_peaks')
+	plot_running('WHL.r/r500', 'using_peaks.bending_excess', logx=True, pop='separate', title=False)
+	plot_running('WHL.M500', 'using_peaks.bending_excess', pop='inner', title=False)
+	plot_running('WHL.M500', 'using_peaks.bending_excess', pop='BCG', title=False)
+	plot_running('WHL.P', 'using_peaks.bending_excess', logx=True, pop='non-BCG', combined=True, title=False)
+	orientation()
+	orientation_test()
+	fractional_bent()
+	distant_env()
 
 def vienna(data_in=False, data_out=False):
 	infile = '/home/garon/Downloads/vienna.csv'
