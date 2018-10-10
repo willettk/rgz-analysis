@@ -13,7 +13,6 @@ from scipy.integrate import simps
 from scipy import stats
 from skgof import ad_test
 from sklearn.metrics import r2_score
-from processing import SDSS_select
 
 from consensus import rgz_path, data_path, db, version
 from processing import *
@@ -2788,6 +2787,21 @@ def make_all_figs():
 	orientation_test()
 	fractional_bent()
 	distant_env()
+
+def update_SDSS():
+	for entry in catalog.find({'SDSS':{'$exists':False}, 'consensus.ir_ra':{'$exists':True}}).batch_size(100):
+		print entry['catalog_id']
+		sdss_match = getSDSS(entry)
+		if sdss_match is not None:
+			z = sdss_match['spec_redshift'] if 'spec_redshift' in sdss_match else (sdss_match['photo_redshift'] if 'photo_redshift' in sdss_match else 0)
+			if z > 0:
+				radio = entry['radio']
+				radio_nested = {'radio':radio}
+				physical = getPhysical(z, radio_nested)
+				radio.update(physical)
+				catalog.update({'_id':entry['_id']}, {'$set':{'radio':radio, 'SDSS':sdss_match}})
+			else:
+				catalog.update({'_id':entry['_id']}, {'$set':{'SDSS':sdss_match}})
 
 def vienna(data_in=False, data_out=False):
 	infile = '/home/garon/Downloads/vienna.csv'

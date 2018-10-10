@@ -6,6 +6,7 @@ from astroquery.irsa import Irsa
 import numpy as np
 import pandas as pd
 import itertools
+from astropy.cosmology import Planck13 as cosmo
 
 #custom modules for the RGZ catalog
 import catalog_functions as fn #contains miscellaneous helper functions
@@ -62,7 +63,8 @@ def getWISE(entry):
 					dist = match['dist']
 					number_matches += 1
 		if match:
-			wise_match = {'designation':'WISEA'+match['designation'], 'ra':match['ra'], 'dec':match['dec'], 'number_matches':np.int16(number_matches), \
+			wise_match = {'designation':'WISEA'+match['designation'], 'ra':match['ra'], 'dec':match['dec'], \
+						  'number_matches':np.int16(number_matches), \
 						  'w1mpro':match['w1mpro'], 'w1sigmpro':match['w1sigmpro'], 'w1snr':match['w1snr'], \
 						  'w2mpro':match['w2mpro'], 'w2sigmpro':match['w2sigmpro'], 'w2snr':match['w2snr'], \
 						  'w3mpro':match['w3mpro'], 'w3sigmpro':match['w3sigmpro'], 'w3snr':match['w3snr'], \
@@ -242,8 +244,8 @@ def getRadio(data, fits_loc, source):
 		pos2 = coord.SkyCoord(raRange[1], decRange[1], unit=(u.deg, u.deg))
 		extentArcsec = pos1.separation(pos2).arcsecond
 		solidAngleArcsec2 = tree.areaArcsec2
-		components.append({'flux':tree.fluxmJy, 'flux_err':tree.fluxErrmJy, 'angular_extent':extentArcsec, 'solid_angle':solidAngleArcsec2, \
-						   'ra_range':raRange, 'dec_range':decRange})
+		components.append({'flux':tree.fluxmJy, 'flux_err':tree.fluxErrmJy, 'angular_extent':extentArcsec, \
+						   'solid_angle':solidAngleArcsec2, 'ra_range':raRange, 'dec_range':decRange})
 	
 	#adds up total flux of all components
 	totalFluxmJy = 0
@@ -301,9 +303,30 @@ def getRadio(data, fits_loc, source):
 	meanRa = (raMax+raMin)/2.
 	meanDec = (decMax+decMin)/2.
 	
-	radio_data = {'radio':{'total_flux':totalFluxmJy, 'total_flux_err':totalFluxErrmJy, 'outermost_level':data['contours'][0][0]['level']*1000, \
-						   'number_components':len(contourTrees), 'number_peaks':len(peakList), 'max_angular_extent':maxAngularExtentArcsec, \
-						   'total_solid_angle':totalSolidAngleArcsec2, 'peak_flux_err':peakFluxErrmJy, 'peaks':peakList, 'components':components, \
-						   'ra':meanRa, 'dec':meanDec}}
+	radio_data = {'radio':{'total_flux':totalFluxmJy, 'total_flux_err':totalFluxErrmJy, \
+				  'outermost_level':data['contours'][0][0]['level']*1000, 'number_components':len(contourTrees), \
+				  'number_peaks':len(peakList), 'max_angular_extent':maxAngularExtentArcsec, \
+				  'total_solid_angle':totalSolidAngleArcsec2, 'peak_flux_err':peakFluxErrmJy, 'peaks':peakList, \
+				  'components':components, 'ra':meanRa, 'dec':meanDec}}
 	
 	return radio_data
+
+def getPhysical(z, radio_data):
+	DAkpc = float(cosmo.angular_diameter_distance(z)/u.kpc) #angular diameter distance in kpc
+	DLm = float(cosmo.luminosity_distance(z)/u.m) #luminosity distance in m
+	maxPhysicalExtentKpc = DAkpc*radio_data['radio']['max_angular_extent']*np.pi/180/3600 #arcseconds to radians
+	totalCrossSectionKpc2 = np.square(DAkpc)*radio_data['radio']['total_solid_angle']*np.square(np.pi/180/3600) #arcseconds^2 to radians^2
+	totalLuminosityWHz = radio_data['radio']['total_flux']*1e-29*4*np.pi*np.square(DLm) #mJy to W/(m^2 Hz), kpc to m
+	totalLuminosityErrWHz = radio_data['radio']['total_flux_err']*1e-29*4*np.pi*np.square(DLm)
+	peakLuminosityErrWHz = radio_data['radio']['peak_flux_err']*1e-29*4*np.pi*np.square(DLm)
+	for component in radio_data['radio']['components']:
+		component['physical_extent'] = DAkpc*component['angular_extent']*np.pi/180/3600
+		component['cross_section'] = np.square(DAkpc)*component['solid_angle']*np.square(np.pi/180/3600)
+		component['luminosity'] = component['flux']*1e-29*4*np.pi*np.square(DLm)
+		component['luminosity_err'] = component['flux_err']*1e-29*4*np.pi*np.square(DLm)
+	for peak in radio_data['radio']['peaks']:
+		peak['luminosity'] = peak['flux']*1e-29*4*np.pi*np.square(DLm)
+	physical = {'max_physical_extent':maxPhysicalExtentKpc, 'total_cross_section':totalCrossSectionKpc2, \
+				'total_luminosity':totalLuminosityWHz, 'total_luminosity_err':totalLuminosityErrWHz, \
+				'peak_luminosity_err':peakLuminosityErrWHz}
+	return physical

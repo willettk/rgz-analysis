@@ -10,7 +10,6 @@ import numpy as np
 import StringIO, gzip
 from astropy.io import fits
 from astropy import wcs, coordinates as coord, units as u
-from astropy.cosmology import Planck13 as cosmo
 
 #custom modules for the RGZ catalog pipeline
 import catalog_functions as fn #contains miscellaneous helper functions
@@ -239,7 +238,7 @@ def RGZcatalog():
 						dec_s = int((dec - dec_d - dec_m/60.)*3600)
 						entry.update({'rgz_name':'RGZJ{:0=2}{:0=2}{:0=4.1f}{:0=+3}{:0=2}{:0=2}'.format(ra_h, ra_m, ra_s, dec_d, dec_m, dec_s)})
 					
-					#calculate physical data using redshift from SDSS
+					#calculate physical parameters using redshift from SDSS
 					if sdss_match:
 						z = 0
 						if 'spec_redshift' in sdss_match:
@@ -247,23 +246,8 @@ def RGZcatalog():
 						elif 'photo_redshift' in sdss_match:
 							z = sdss_match['photo_redshift']
 						if z>0:
-							DAkpc = float(cosmo.angular_diameter_distance(z)/u.kpc) #angular diameter distance in kpc
-							DLm = float(cosmo.luminosity_distance(z)/u.m) #luminosity distance in m
-							maxPhysicalExtentKpc = DAkpc*radio_data['radio']['max_angular_extent']*np.pi/180/3600 #arcseconds to radians
-							totalCrossSectionKpc2 = np.square(DAkpc)*radio_data['radio']['total_solid_angle']*np.square(np.pi/180/3600) #arcseconds^2 to radians^2
-							totalLuminosityWHz = radio_data['radio']['total_flux']*1e-29*4*np.pi*np.square(DLm) #mJy to W/(m^2 Hz), kpc to m
-							totalLuminosityErrWHz = radio_data['radio']['total_flux_err']*1e-29*4*np.pi*np.square(DLm)
-							peakLuminosityErrWHz = radio_data['radio']['peak_flux_err']*1e-29*4*np.pi*np.square(DLm)
-							for component in radio_data['radio']['components']:
-								component['physical_extent'] = DAkpc*component['angular_extent']*np.pi/180/3600
-								component['cross_section'] = np.square(DAkpc)*component['solid_angle']*np.square(np.pi/180/3600)
-								component['luminosity'] = component['flux']*1e-29*4*np.pi*np.square(DLm)
-								component['luminosity_err'] = component['flux_err']*1e-29*4*np.pi*np.square(DLm)
-							for peak in radio_data['radio']['peaks']:
-								peak['luminosity'] = peak['flux']*1e-29*4*np.pi*np.square(DLm)
-							entry['radio'].update({'max_physical_extent':maxPhysicalExtentKpc, 'total_cross_section':totalCrossSectionKpc2, \
-												   'total_luminosity':totalLuminosityWHz, 'total_luminosity_err':totalLuminosityErrWHz, \
-												   'peak_luminosity_err':peakLuminosityErrWHz})
+							physical = p.getPhysical(z, radio_data)
+							entry['radio'].update(physical)
 					
 					logging.info('Radio data added')
 									   
