@@ -13,7 +13,6 @@ from scipy.integrate import simps
 from scipy import stats
 from skgof import ad_test
 from sklearn.metrics import r2_score
-from processing import SDSS_select
 
 from consensus import rgz_path, data_path, db, version
 from processing import *
@@ -2789,21 +2788,36 @@ def make_all_figs():
 	fractional_bent()
 	distant_env()
 
+def update_SDSS(coll=catalog, start=0):
+	for entry in coll.find({'SDSS':{'$exists':False}, 'consensus.ir_ra':{'$exists':True}, 'catalog_id':{'$gte':start}}).sort('catalog_id', 1).batch_size(20):
+		print entry['catalog_id']
+		sdss_match = getSDSS(entry)
+		if sdss_match is not None:
+			z = sdss_match['spec_redshift'] if 'spec_redshift' in sdss_match else (sdss_match['photo_redshift'] if 'photo_redshift' in sdss_match else 0)
+			if z > 0:
+				radio = entry['radio']
+				radio_nested = {'radio':radio}
+				physical = getPhysical(z, radio_nested)
+				radio.update(physical)
+				print catalog.update({'_id':entry['_id']}, {'$set':{'radio':radio, 'SDSS':sdss_match}})
+			else:
+				print catalog.update({'_id':entry['_id']}, {'$set':{'SDSS':sdss_match}})
+
 def vienna(data_in=False, data_out=False):
 	infile = '/home/garon/Downloads/vienna.csv'
 	outfile = '/home/garon/Downloads/vienna_matches.csv'
 	
 	if data_in:
-		id, ra, dec, z = [], [], [], []
+		ix, ra, dec, z = [], [], [], []
 		with open(infile, 'r') as f:
 			r = csv.reader(f)
 			r.next()
 			for row in r:
-				id.append(row[0])
+				ix.append(row[0])
 				ra.append(row[1])
 				dec.append(row[2])
 				z.append(row[3])
-		id = np.array(id, dtype=int)
+		ix = np.array(ix, dtype=int)
 		ra = np.array(ra, dtype=float)
 		dec = np.array(dec, dtype=float)
 		z = np.array(z, dtype=float)
@@ -2811,7 +2825,7 @@ def vienna(data_in=False, data_out=False):
 	if data_out:
 		with open(outfile, 'w') as f:
 			print >> f, 'source#,radeg,decdeg,z,sep_mpc,sep_r500'
-			for i in range(len(id)):
+			for i in range(len(idd)):
 				loc = coord.SkyCoord(ra[i], dec[i], unit=(u.deg,u.deg))
 				w = get_whl(loc, z[i], 0, 15, 0.04*(1+z[i]))
 				if w is not None:
@@ -2821,7 +2835,7 @@ def vienna(data_in=False, data_out=False):
 					sep_r500 = sep_mpc / w['r500']
 				else:
 					sep_mpc, sep_r500 = 99., 99.
-				print >> f, '%i,%f,%f,%f,%f,%f' % (id[i], ra[i], dec[i], z[i], sep_mpc, sep_r500)
+				print >> f, '%i,%f,%f,%f,%f,%f' % (ix[i], ra[i], dec[i], z[i], sep_mpc, sep_r500)
 
 if __name__ == '__main__':
 	
