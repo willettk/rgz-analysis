@@ -2788,8 +2788,8 @@ def make_all_figs():
 	fractional_bent()
 	distant_env()
 
-def update_SDSS():
-	for entry in catalog.find({'SDSS':{'$exists':False}, 'consensus.ir_ra':{'$exists':True}}).batch_size(100):
+def update_SDSS(coll=catalog, start=0):
+	for entry in coll.find({'SDSS':{'$exists':False}, 'consensus.ir_ra':{'$exists':True}, 'catalog_id':{'$gte':start}}).sort('catalog_id', 1).batch_size(20):
 		print entry['catalog_id']
 		sdss_match = getSDSS(entry)
 		if sdss_match is not None:
@@ -2799,25 +2799,25 @@ def update_SDSS():
 				radio_nested = {'radio':radio}
 				physical = getPhysical(z, radio_nested)
 				radio.update(physical)
-				catalog.update({'_id':entry['_id']}, {'$set':{'radio':radio, 'SDSS':sdss_match}})
+				print catalog.update({'_id':entry['_id']}, {'$set':{'radio':radio, 'SDSS':sdss_match}})
 			else:
-				catalog.update({'_id':entry['_id']}, {'$set':{'SDSS':sdss_match}})
+				print catalog.update({'_id':entry['_id']}, {'$set':{'SDSS':sdss_match}})
 
 def vienna(data_in=False, data_out=False):
 	infile = '/home/garon/Downloads/vienna.csv'
 	outfile = '/home/garon/Downloads/vienna_matches.csv'
 	
 	if data_in:
-		id, ra, dec, z = [], [], [], []
+		ix, ra, dec, z = [], [], [], []
 		with open(infile, 'r') as f:
 			r = csv.reader(f)
 			r.next()
 			for row in r:
-				id.append(row[0])
+				ix.append(row[0])
 				ra.append(row[1])
 				dec.append(row[2])
 				z.append(row[3])
-		id = np.array(id, dtype=int)
+		ix = np.array(ix, dtype=int)
 		ra = np.array(ra, dtype=float)
 		dec = np.array(dec, dtype=float)
 		z = np.array(z, dtype=float)
@@ -2825,7 +2825,7 @@ def vienna(data_in=False, data_out=False):
 	if data_out:
 		with open(outfile, 'w') as f:
 			print >> f, 'source#,radeg,decdeg,z,sep_mpc,sep_r500'
-			for i in range(len(id)):
+			for i in range(len(idd)):
 				loc = coord.SkyCoord(ra[i], dec[i], unit=(u.deg,u.deg))
 				w = get_whl(loc, z[i], 0, 15, 0.04*(1+z[i]))
 				if w is not None:
@@ -2835,7 +2835,7 @@ def vienna(data_in=False, data_out=False):
 					sep_r500 = sep_mpc / w['r500']
 				else:
 					sep_mpc, sep_r500 = 99., 99.
-				print >> f, '%i,%f,%f,%f,%f,%f' % (id[i], ra[i], dec[i], z[i], sep_mpc, sep_r500)
+				print >> f, '%i,%f,%f,%f,%f,%f' % (ix[i], ra[i], dec[i], z[i], sep_mpc, sep_r500)
 
 if __name__ == '__main__':
 	
