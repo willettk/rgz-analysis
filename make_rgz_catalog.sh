@@ -6,11 +6,12 @@
 # Sets where both input and output files are stored. Must be changed if not running on UMN servers.
 
 RGZ_PATH='/data/tabernacle/larry/RGZdata'
+DB_PATH=$RGZ_PATH'/data4.0.9/db'
 
 # Start MongoDB in the background
 
 echo "Starting MongoDB"
-numactl --interleave=all mongod --fork --logpath $RGZ_PATH"/mongodb/log/mongodb.log" --dbpath $RGZ_PATH"/data2/db"
+numactl --interleave=all mongod --fork --logpath $RGZ_PATH"/mongodb/log/mongodb.log" --dbpath $DB_PATH
 
 # Restore the raw files from the mongoexport
 
@@ -78,6 +79,6 @@ module unload python27
 
 echo "Killing MongoDB"
 #kill $(ps aux | grep '[m]ongod --fork' | awk '{print $2}')
-mongod --shutdown --dbpath $RGZ_PATH"/data2/db"
+mongod --shutdown --dbpath $DB_PATH
 
 # Finished!

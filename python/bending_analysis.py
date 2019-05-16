@@ -1,4 +1,4 @@
-import logging, urllib2, time, json, os
+import logging, urllib2, time, json, os, math
 import pymongo, bson
 import numpy as np
 import StringIO, gzip
@@ -710,7 +710,7 @@ def to_file(filename, coll, params={}):
 		
 		output('%i/%i successfully printed to %s' % (success, coll.find(params).count(), filename))
 
-def plot_running(x_param, y_param, coll=bending_15, morph=None, pop=None, bin_by=None, bin_count=0, logx=False, logy=False, square=False, bent_cut=0, align=None, combined=False, title=True):
+def plot_running(x_param, y_param, coll=bending_15, morph=None, pop=None, bin_by=None, bin_count=0, logx=False, logy=False, square=False, bent_cut=0, align=None, combined=False, title=True, dz_cut=None):
 	'''
 	Plot the running 1st, 2nd, and 3rd quartiles averaged over window data points
 	x_param, y_param, and (optional) bin_by need to be 'category.key' to search for coll[category][key]
@@ -758,6 +758,9 @@ def plot_running(x_param, y_param, coll=bending_15, morph=None, pop=None, bin_by
 	
 	params['using_peaks.bending_corrected']['$gte'] = bent_cut
 	
+	if dz_cut is not None:
+		params['WHL.dz'] = {'$gte':-1.*np.abs(dz_cut), '$lte':np.abs(dz_cut)}
+	
 	# Open the plotting window
 	fig, ax = plt.subplots()
 	box = ax.get_position()
@@ -783,6 +786,10 @@ def plot_running(x_param, y_param, coll=bending_15, morph=None, pop=None, bin_by
 				params[bin_by] = {'$gte':samples[i], '$lt':samples[i+1]}
 				window_size, run_x_50, run_y_50 = get_trends(params, x_param, y_param, coll, True, pop!='BCG')
 				windows.add(window_size)
+				if logx:
+					run_x_50 = np.log10(run_x_50)
+				if logy:
+					run_y_50 = np.log10(run_y_50)
 				if needs_labels:
 					ax.plot(run_x_50, run_y_50, label=plot_params[bin_by]['fmt'] % (samples[i], samples[i+1]), color='C%i'%i)
 					ax.set_position([box.x0, box.y0, box.width * plot_params[bin_by]['width'], box.height])
@@ -866,7 +873,7 @@ def get_label(param, log=False):
 	if param == 'WHL.r/r500':
 		label = 'Separation ($r_{500}$)'
 	elif param == 'WHL.M500':
-		label = 'Cluster mass ($10^{14}~$M$_\odot$)'
+		label = 'Cluster mass ($10^{14}~M_\odot$)'
 	elif param == 'WHL.P':
 		label = 'ICM pressure (keV cm$^{-3}$)'
 	elif 'bending_angle' in param:
@@ -883,6 +890,10 @@ def get_label(param, log=False):
 		label = 'Size (kpc)'
 	elif param == 'WHL.grad_P':
 		label = 'Pressure gradient (keV cm$^{-3}$ kpc$^{-1}$)'
+	elif param == 'RGZ.luminosity':
+		label = 'Radio luminosity (W Hz$^{-1}$)'
+	elif param == 'best.redshift':
+		label = '$z$'
 	else:
 		label = param.replace('_', '\_')
 	if log:
@@ -1109,10 +1120,11 @@ def sample_numbers():
 	param_list = [{'RGZ.morphology':'double', 'RGZ.duplicate':0, 'best.redshift':{'$exists':True}}, \
 		{'RGZ.morphology':'double', 'RGZ.duplicate':0, 'best.redshift':{'$exists':True}}, \
 		{'RGZ.morphology':'double', 'RGZ.duplicate':0, 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_angle':{'$lte':135.}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}, \
+		{'RGZ.morphology':'double', 'RGZ.duplicate':0, 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_angle':{'$lte':135.}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}, \
 		{'RGZ.morphology':'double', 'RGZ.duplicate':0, 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_corrected':{'$lte':135.}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}, \
 		{'RGZ.morphology':'double', 'RGZ.duplicate':0, 'RGZ.radio_consensus':{'$gte':.65}, 'RGZ.size_arcmin':{'$lte':1.5}, 'RGZ.overedge':0, 'using_peaks.bending_corrected':{'$lte':135.}, 'best.redshift':{'$gte':0.02, '$lte':0.8}}]
-	coll_list = [bent_sources, bending_15, bending_15, bent_sources, bending_15]
-	label_list = ['No cuts', 'Matched', 'Initial cuts', 'Final (all)', 'Final (matched)']
+	coll_list = [bent_sources, bending_15, bent_sources, bending_15, bent_sources, bending_15]
+	label_list = ['No cuts', 'Matched', 'Initial cuts (all)', 'Initial cuts (matched)', 'Final (all)', 'Final (matched)']
 	
 	for params, coll, label in zip(param_list, coll_list, label_list):
 		double = coll.find(params).count()
@@ -1145,7 +1157,7 @@ def contamination():
 	#ax.plot(0, 0, c='w', label='Completeness: %.3f\nContamination: %.3f' % (comp, cont))
 	ax.legend()
 	ax.set_xlim(-0.1, 0.1)
-	ax.set_xlabel('$\Delta z / (1+z)$')
+	ax.set_xlabel('$\Delta z$')
 	ax.set_ylabel('Count')
 	#plt.title('Full RGZ-WH15 cross-match')
 	plt.tight_layout()
@@ -1295,7 +1307,7 @@ def orientation(bent_cutoff=None, folded=True, r_min=0.01, r_max=10):
 	tangential = np.sin(unfolded*np.pi/180)
 	radial = np.cos(unfolded*np.pi/180)
 	beta = 1 - np.var(tangential) / np.var(radial)
-	print 'beta', beta
+	print 'beta = %.2f +- %.2f' % (beta, beta*np.sqrt(2./(len(unfolded)-1)))
 
 	return None
 	
@@ -1399,6 +1411,7 @@ def orientation_test():
 	plt.legend()
 	plt.ylabel('Normalized count')
 	plt.xlabel('Orientation angle (deg)')
+	plt.tight_layout()
 
 def size_dependence():
 	params0, params1 = total_cuts.copy(), total_cuts.copy()
@@ -2360,8 +2373,8 @@ def distant_env(bin_count=8, inner_cut=0.05, outer_cut=0.35):
 	density_straight = stats.rankdata(dist_straight) / (np.pi*dist_straight**2) / n_straight
 
 	plt.figure()
-	plt.plot(dist_bent, density_bent, label='Bent sources')
-	plt.plot(dist_straight, density_straight, ls='--', label='Straight sources')
+	plt.plot(dist_bent, density_bent, label='Highly bent sources')
+	plt.plot(dist_straight, density_straight, ls='--', label='Less bent sources')
 	plt.legend()
 	plt.xlabel('Projected distance from radio galaxy (Mpc)')
 	plt.ylabel('Companion density (Mpc$^{-2}$)')
@@ -2386,8 +2399,8 @@ def distant_env(bin_count=8, inner_cut=0.05, outer_cut=0.35):
 	frac_err_straight = frac_straight * (1./np.sqrt(per_bin_straight) + 1./np.sqrt(bg_straight))
 	
 	plt.figure()
-	plt.errorbar(bins[1:], frac_bent, frac_err_bent, label='High bending sources')
-	plt.errorbar(bins[1:]-0.01, frac_straight, frac_err_straight, ls='--', label='Low bending sources')
+	plt.errorbar(bins[1:], frac_bent, frac_err_bent, label='Highly bent sources')
+	plt.errorbar(bins[1:]-0.01, frac_straight, frac_err_straight, ls='--', label='Less bent sources')
 	plt.legend(loc='upper right')
 	plt.xlabel('Projected distance from radio galaxy (Mpc)')
 	plt.ylabel('Normalized surface density')
@@ -2443,7 +2456,7 @@ def distant_env(bin_count=8, inner_cut=0.05, outer_cut=0.35):
 	
 	med_sep = np.median(sep)
 	rho_bg = 500. / med_sep**2
-	print '%.1f, %.1f rho_crit around high and low bending, respectively' % (frac_bent*rho_bg, frac_straight*rho_bg)
+	print '%.1f, %.1f rho_crit around highly bent and less bent sources' % (frac_bent*rho_bg, frac_straight*rho_bg)
 	
 	return None
 	
@@ -2836,6 +2849,210 @@ def vienna(data_in=False, data_out=False):
 				else:
 					sep_mpc, sep_r500 = 99., 99.
 				print >> f, '%i,%f,%f,%f,%f,%f' % (ix[i], ra[i], dec[i], z[i], sep_mpc, sep_r500)
+
+def plot_annotations(source, peak_count=None):
+	entry = catalog.find_one({'catalog_id':source['RGZ']['RGZ_id']})
+	subject = subjects.find_one({'zooniverse_id':entry['zooniverse_id']})
+	fid = subject['metadata']['source']
+	fits_loc = pathdict[fid]
+	w = wcs.WCS(fits.getheader(fits_loc, 0))
+	ir = coord.SkyCoord(source['SDSS']['ra'], source['SDSS']['dec'], unit=(u.deg,u.deg), frame='icrs') if 'SDSS' in source else coord.SkyCoord(source['AllWISE']['ra'], source['AllWISE']['dec'], unit=(u.deg,u.deg), frame='icrs')
+	ir_pos = w.wcs_world2pix(np.array([[ir.ra.deg,ir.dec.deg]]), 1)
+	z, z_err = get_z(source)
+	peaks = entry['radio']['peaks']
+	peak_pos = w.wcs_world2pix(np.array([ [peak['ra'],peak['dec']] for peak in peaks ]), 1)
+	data = get_data(subject)
+	if peak_count is None:
+		if len(entry['radio']['peaks'])==2:
+			peak_count = 2
+		elif len(entry['radio']['peaks'])==3 or len(entry['radio']['components'])==3:
+			peak_count = 3
+		else:
+			print 'Not enough info for peak counting'
+			return
+	
+	contour_tree = get_contours(w, ir_pos, peak_pos, data, peak_count)
+	contour_tree.print_contours()
+	plt.scatter(*ir_pos.T, marker='x')
+	x = [peak_pos.T[0][0], ir_pos[0][0], peak_pos.T[0][1]]
+	y = [peak_pos.T[-1][0], ir_pos[0][-1], peak_pos.T[-1][1]]
+	plt.plot(x, y)
+	for i in data['contours']:
+		for j in i:
+			print j['level']
+
+def scale_region_file(infile):
+	scale_factor = 500./132
+	outfile = infile.split('.')
+	outfile[-2] += '_scaled'
+	outfile = '.'.join(outfile)
+	with open(infile, 'r') as f:
+		lines = f.readlines()
+	
+	with open(outfile, 'w') as f:
+		for line in lines:
+			if line[:7]=='polygon':
+				scaled = []
+				for val in line[8:-2].split(','):
+					scaled.append(scale_factor*float(val))
+				print >> f, 'polygon(%s)' % ','.join(np.array(scaled, dtype=str))
+			else:
+				print >> f, line[:-1]
+
+def update_dz():
+	for source in bending_15.find({'best':{'$exists':True}}):
+		z1 = source['best']['redshift']
+		z2 = source['WHL']['zbest']
+		dz = (z1-z2)/(1.+z1)
+		bending_15.update({'_id':source['_id']}, {'$set':{'WHL.dz':dz}})
+
+def correlation(x_param, y_param, pop=None, bin_by=None, bin_count=0):
+	'''Significance of correlation between two parameters'''
+	
+	assert pop in [None, 'BCG', 'inner', 'outer', 'separate'], "pop must be 'BCG', 'inner', 'outer', or 'separate'"
+	if bin_by is not None:
+		assert type(bin_count) is int and bin_count>0, 'bin_count must be positive int'
+	
+	params = total_cuts.copy()
+	if pop is 'separate':
+		for pop2 in ['BCG', 'inner', 'outer']:
+			correlation(x_param, y_param, pop2, bin_by, bin_count)
+		return
+	elif pop in ['BCG', 'inner', 'outer']:
+		params['WHL.population'] = pop
+	
+	if bin_by is not None:
+		bin_by_list = bin_by.split('.')
+		bins = np.arange(bin_count+1) * 100. / bin_count
+		vals = []
+		for i in bending_15.find(params):
+			vals.append(i[bin_by_list[0]][bin_by_list[1]])
+		samples = np.percentile(vals, bins)
+		print 'Pop: %s, binned by %s' % (pop, bin_by)
+		for i in range(len(samples)-1):
+			params[bin_by] = {'$gte':samples[i], '$lt':samples[i+1]}
+			_, x, _, y, _ = get_trends(params, x_param, y_param, bending_15, False, False)
+			rho = stats.spearmanr(x,y)
+			print '   Bin: %f-%f, corr: %f, sigma: %f' % (samples[i], samples[i+1], rho.correlation, z_score(rho.pvalue))
+	
+	else:
+		_, x, _, y, _ = get_trends(params, x_param, y_param, bending_15, False, False)
+		rho = stats.spearmanr(x,y)
+		print 'Pop: %s, corr: %f, sigma: %f' % (pop, rho.correlation, z_score(rho.pvalue))
+
+def size_comp(bin_count=1):
+	pop, z, size = [], [], []
+	for source in bending_15.find(total_cuts):
+		pop.append(source['WHL']['population'])
+		z.append(source['best']['redshift'])
+		size.append(source['RGZ']['size_kpc'])
+	
+	pop = np.array(pop)
+	z = np.array(z)
+	size = np.array(size)
+	
+	bins = np.arange(bin_count+1) * 100. / bin_count
+	samples = np.percentile(z, bins)
+	for i in range(len(samples)-1):
+		mask = np.logical_and(z>=samples[i], z<samples[i+1])
+		inner = np.logical_and(mask, pop=='inner')
+		outer = np.logical_and(mask, pop=='outer')
+		p = stats.anderson_ksamp([size[inner], size[outer]]).significance_level
+		print 'z = %.2f-%.2f' % (samples[i], samples[i+1])
+		print '   Inner: %.0f +- %.0f kpc (n=%i)' % (np.mean(size[inner]), np.std(size[inner]), len(size[inner]))
+		print '   Outer: %.0f +- %.0f kpc (n=%i)' % (np.mean(size[outer]), np.std(size[outer]), len(size[outer]))
+		print '   Same pop: %.2f sigma' % z_score(p)
+
+def get_headtails():
+	params = total_cuts.copy()
+	params['RGZ.morphology'] = 'double'
+	near, far = [], []
+	count = 0
+	tot = bending_15.find(params).count()
+	for source in bending_15.find(params).batch_size(100):
+		count += 1
+		print '%i/%i' % (count, tot)
+		ir = coord.SkyCoord(source['best']['ra'], source['best']['dec'], unit=(u.deg,u.deg), frame='icrs')
+		rad0 = coord.SkyCoord(source['RGZ']['peaks'][0]['ra'], source['RGZ']['peaks'][0]['dec'], unit=(u.deg,u.deg), frame='icrs')
+		rad1 = coord.SkyCoord(source['RGZ']['peaks'][1]['ra'], source['RGZ']['peaks'][1]['dec'], unit=(u.deg,u.deg), frame='icrs')
+		sep0 = ir.separation(rad0).arcsec
+		sep1 = ir.separation(rad1).arcsec
+		near.append(min(sep0, sep1))
+		far.append(max(sep0, sep1))
+
+	near = np.array(near)
+	far = np.array(far)
+	return near, far
+
+def rotation_matrix(axis, theta):
+    """
+    Return the rotation matrix associated with counterclockwise rotation about
+    the given axis by theta radians. https://stackoverflow.com/a/6802723
+    """
+    axis = np.asarray(axis)
+    axis = axis / math.sqrt(np.dot(axis, axis))
+    a = math.cos(theta / 2.0)
+    b, c, d = -axis * math.sin(theta / 2.0)
+    aa, bb, cc, dd = a * a, b * b, c * c, d * d
+    bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+    return np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
+                     [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
+                     [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+
+def projection_effects(theta=None, plot=False):
+	if theta is None:
+		theta = np.random.rand() * 90.
+	
+	M = np.array([[-1, 0, 0], [0, 0, 0], [np.cos(theta*np.pi/180), np.sin(theta*np.pi/180), 0]])
+	proj = []
+	for i in np.arange(0, 360, 2)*np.pi/180:
+		rotx = rotation_matrix([1,0,0], i)
+		for j in np.arange(0, 360, 2)*np.pi/180:
+			roty = rotation_matrix([0,1,0], j)
+			Mprime = np.matmul(np.matmul(M, rotx), roty)
+			thetaprime = math.atan(Mprime[2,1] / Mprime[2,0])
+			proj.append(thetaprime)
+	
+	proj = np.array(proj)
+	
+	if plot:
+		plt.figure()
+		plt.hist(np.abs(proj), 180)
+		plt.axvline(theta*np.pi/180, color='k', label='True $\\theta$')
+		plt.axvline(np.mean(np.abs(proj)), color='r', label='Median observed $\\theta$')
+		plt.legend()
+		plt.xlabel('Observed bending angle (rad)')
+		plt.ylabel('Count')
+		plt.tight_layout()
+	
+	return theta, np.median(np.abs(proj))
+
+def total_projection(plot=True):
+	theta = []
+	true = np.arange(0, 180, 2)
+	for i in true:
+		theta.append(projection_effects(i)[1])
+	
+	observed = np.array(theta)*180/np.pi
+	
+	if plot:
+		plt.figure()
+		plt.plot(true[:45], true[:45], label='True $\\theta$')
+		plt.plot(true, observed, label='Median observed $\\theta$')
+		plt.legend()
+		plt.xlabel('True bending angle (deg)')
+		plt.ylabel('Median observed bending angle (deg)')
+		plt.tight_layout()
+
+		plt.figure()
+		plt.plot(true, observed-true, label='Observed-true')
+		plt.fill_between(true, -1*get_median_bend(), get_median_bend(), alpha=.5, label='Uncertainty')
+		plt.legend(loc='lower left')
+		plt.xlabel('True bending angle (deg)')
+		plt.ylabel('Error (deg)')
+		plt.tight_layout()
+	
+	return true, observed
 
 if __name__ == '__main__':
 	

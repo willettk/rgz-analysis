@@ -142,7 +142,7 @@ def RGZcatalog():
 							wise_match['photo_redshift'] = pz['zPhoto_Corr']
 						entry.update({'AllWISE':wise_match})
 					
-					tryCount = 0
+					'''tryCount = 0
 					while(True):
 						tryCount += 1
 						try:
@@ -159,7 +159,8 @@ def RGZcatalog():
 								logging.exception(e)
 								time.sleep(10)
 							else:
-								raise e
+								raise e'''
+					sdss_match = None
 				
 				#try block attempts to read JSON from web; if it exists, calculate data
 				try:

@@ -1,7 +1,7 @@
 import logging, time
 from astropy import coordinates as coord, units as u
 import mechanize, httplib, StringIO
-from astroquery.exceptions import TimeoutError, TableParseError
+import astroquery, requests
 from astroquery.irsa import Irsa
 import numpy as np
 import pandas as pd
@@ -27,7 +27,7 @@ def getWISE(entry):
 		try:
 			table = Irsa.query_region(ir_pos, catalog='allwise_p3as_psd', radius=3.*u.arcsec)
 			break
-		except (TimeoutError, TableParseError) as e:
+		except (astroquery.exceptions.TimeoutError, astroquery.exceptions.TableParseError) as e:
 			if tryCount>5:
 				message = 'Unable to connect to IRSA; trying again in 10 min'
 				logging.exception(message)
@@ -36,7 +36,7 @@ def getWISE(entry):
 			logging.exception(e)
 			time.sleep(10)
 		except Exception as e:
-			if str(e) == 'Query failed\n':
+			if 'Query failed' in str(e) or 'timed out' in str(e):
 				if tryCount>5:
 					message = 'Unable to connect to IRSA; trying again in 10 min'
 					logging.exception(message)
