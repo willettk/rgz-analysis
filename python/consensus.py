@@ -59,7 +59,7 @@ client = MongoClient('localhost', 27017)
 db = client['radio'] 
 
 # Select which version of the catalog to use
-version = '_2016-08-02'
+version = '_2019-05-06'
 subjects = db['radio_subjects'] # subjects = images
 classifications = db['radio_classifications'] # classifications = classifications of each subject per user
 consensus = db['consensus{}'.format(version)] # consensus = output of this program
@@ -1298,12 +1298,12 @@ def weight_users(unique_users, scheme, min_gs=5, min_agree=0.5, scaling=5):
     
     return None
 
-def print_user_weights(weight=0):
+def print_user_weights():
     
     # Prints the user weights to a CSV
     # Note that user names can include commas
     
-    with open('{0}/csv/user_weights_{1}.csv'.format(rgz_path, weight), 'w') as f:
+    with open('{0}/csv/user_weights{1}.csv'.format(rgz_path, version), 'w') as f:
         print >> f, 'user_name,gs_seen,agreed,weight'
         for user in user_weights.find():
             print >> f, '"{0}",{1},{2},{3}'.format(user['user_name'].encode('utf8'), user['gs_seen'], user['agreed'], user['weight'])
@@ -1352,7 +1352,7 @@ if __name__ == "__main__":
             #   on the gold standard subjects. If weights = 0 or weights = 1, each user's vote
             #   is counted equally in the consensus. If weights > 1, then their impact is
             #   increased by replicating the classifications. Must be a nonnegative integer.
-            weights = 0
+            weights = 5
             assert (type(weights) == int) and weights >= 0, 'Weight must be a nonnegative integer'
             scheme = 'scaling'
             assert scheme in ['threshold', 'scaling'], 'Weighting scheme must be threshold or sliding, not {}'.format(scheme)

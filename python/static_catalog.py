@@ -15,7 +15,6 @@ is included as an output parameter.
 '''
 
 from consensus import rgz_path, version
-version = '_bending'
 consensus_level = 0.0
 
 # Define a suffix that will be appended to the filename of the new catalog output.
